@@ -29,20 +29,24 @@ impl Style {
     // assumes we start from [0m
     pub fn enact(&self) -> String {
         let mut color = 0;
-        let mut background = 0;
         if let Some(num) = self.color.to_num() {
             color = num;
             if self.intense {
                 color += 60;
             }
         }
-        if let Some(num) = self.background.to_num() {
-            if self.intense_background {
-                background += 60
+        match self.background.to_num() {
+            Some(mut background) => {
+                if self.intense_background {
+                    background += 60
+                }
+                background += 10;
+                format!("\x1b[0;{};{}m", color, background)
             }
-            background += num+10;
+            None => {
+                format!("\x1b[0;{}m", color)
+            }
         }
-        format!("\x1b[0;{};{}m", color, background)
     }
     pub const fn intense(&mut self, intense: bool) -> &mut Self {
         self.intense = intense;

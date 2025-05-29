@@ -1,7 +1,7 @@
 #[derive(Clone, Copy)]
 pub struct Enemy {
     pub health: usize,
-    variant: Variant,
+    pub variant: Variant,
     stun: usize,
     windup: usize,
 }
@@ -69,11 +69,9 @@ impl Enemy {
             }
             self.windup -= 1;
             if self.windup == 0 {
-                if player.blocking {
+                if let Err(_) = player.attacked(5) {
                     self.stun = self.variant.parry_stun();
-                    return
                 }
-                player.health -= 5;
             }
         }
         else {
@@ -82,7 +80,7 @@ impl Enemy {
     }
 }
 #[derive(Clone, Copy)]
-enum Variant {
+pub enum Variant {
     Basic
 }
 impl Variant {
@@ -99,6 +97,13 @@ impl Variant {
     fn dash_stun(&self) -> usize {
         match self {
             Variant::Basic => 1
+        }
+    }
+    // returns kill reward in energy, then health
+    // per energy
+    pub fn kill_value(&self) -> (usize, usize) {
+        match self {
+            Variant::Basic => (1, 5)
         }
     }
 }

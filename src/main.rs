@@ -40,9 +40,6 @@ fn main() {
     state.player.draw(&state.board);
     state.player.reposition_cursor();
     loop {
-        if state.player.blocking {
-            state.player.blocking = false;
-        }
         match Input::get() {
             Input::WASD(direction, sprint) => {
                 match sprint {
@@ -118,14 +115,20 @@ fn main() {
                 if let Some(Piece::Enemy(_)) = state.board[state.player.selector] {
                     state.attack_enemy(state.player.selector, true);
                     state.think();
+                    state.render();
                 }
             }
             Input::E => { // block
                 if state.player.energy != 0 {
+                    state.player.was_hit = false;
                     state.player.blocking = true;
+                    state.think();
+                    if state.player.was_hit {
+                        state.player.energy -= 1;
+                    }
+                    state.player.blocking = false;
+                    state.render();
                 }
-                state.think();
-                state.render();
             }
             Input::Enter => break,
         }
@@ -141,7 +144,9 @@ impl State {
         match &mut self.board[pos] {
             Some(Piece::Enemy(enemy)) => {
                 if enemy.attacked() {
+                    let variant = enemy.variant;
                     self.board[pos] = None;
+                    self.player.on_kill(variant);
                     if redrawable {
                         self.render();
                     }

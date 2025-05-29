@@ -6,8 +6,11 @@ pub struct Player {
     pub pos: Vector,
     pub selector: Vector,
     pub health: usize,
+    max_health: usize,
     pub energy: usize,
-    pub blocking: bool
+    max_energy: usize,
+    pub blocking: bool,
+    pub was_hit: bool
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -15,8 +18,11 @@ impl Player {
             pos,
             selector: pos,
             health: 20,
+            max_health: 50,
             energy: 3,
-            blocking: false
+            max_energy: 3,
+            blocking: false,
+            was_hit: false
         }
     }
     pub fn draw(&self, board: &Board) {
@@ -41,7 +47,7 @@ impl Player {
         write!(lock,
             "[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
             "#".repeat(self.health),
-            "-".repeat(50-self.health),
+            "-".repeat(self.max_health-self.health),
             self.health,
         ).unwrap();
     }
@@ -52,7 +58,7 @@ impl Player {
         write!(lock,
             "[\x1b[96m{}\x1b[0m{}] {}/3",
             "#".repeat(self.energy*5),
-            "-".repeat((3-self.energy)*5),
+            "-".repeat((self.max_energy-self.energy)*5),
             self.energy
         ).unwrap();
     }
@@ -72,9 +78,24 @@ impl Player {
     // true: died
     // false: alive
     pub fn attacked(&mut self, damage: usize) -> Result<bool,()> {
+        self.was_hit = true;
         if self.blocking { return Err(()) }
         if self.health <= damage { return Ok(true) }
         self.health -= damage;
         Ok(false)
+    }
+    pub fn on_kill(&mut self, variant: crate::pieces::enemy::Variant) {
+        let (energy, health) = variant.kill_value();
+        for _ in 0..energy {
+            if self.energy != self.max_energy {
+                self.energy += 1;
+            }
+            else if self.health != self.max_health {
+                self.health += health;
+            }
+            else {
+                break
+            }
+        }
     }
 }

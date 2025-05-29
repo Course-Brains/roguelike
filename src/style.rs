@@ -2,7 +2,8 @@
 pub struct Style {
     color: Color,
     intense: bool,
-    background: Color
+    background: Color,
+    intense_background: bool
 }
 macro_rules! color {
     ($background: ident, $name:ident, $variant:ident) => {
@@ -21,23 +22,34 @@ impl Style {
         Style {
             color: Color::Default,
             intense: false,
-            background: Color::Default
+            background: Color::Default,
+            intense_background: false
         }
     }
     // assumes we start from [0m
     pub fn enact(&self) -> String {
-        match self.color.to_num() {
-            Some(mut num) => {
-                if self.intense {
-                    num += 60;
-                }
-                std::fmt::format(format_args!("\x1b[0;{}m", num))
-            },
-            None => "".to_string()
+        let mut color = 0;
+        let mut background = 0;
+        if let Some(num) = self.color.to_num() {
+            color = num;
+            if self.intense {
+                color += 60;
+            }
         }
+        if let Some(num) = self.background.to_num() {
+            if self.intense_background {
+                background += 60
+            }
+            background += num+10;
+        }
+        format!("\x1b[0;{};{}m", color, background)
     }
-    pub const fn intense(mut self, intense: bool) -> Self {
+    pub const fn intense(&mut self, intense: bool) -> &mut Self {
         self.intense = intense;
+        self
+    }
+    pub const fn intense_background(&mut self, intense: bool) -> &mut Self {
+        self.intense_background = intense;
         self
     }
     color!(background_black, black, Black);

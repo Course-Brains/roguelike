@@ -20,12 +20,12 @@ impl Enemy {
                 Variant::Basic => '1'
             },
             Some({
-                let mut out = crate::Style::new();
+                let mut out = *crate::Style::new().yellow();
                 if self.stun > 0 {
-                    
+                    out.background_blue().intense_background(true);
                 }
                 else if self.windup > 0 {
-                    out.background_red();
+                    out.background_red().intense_background(true);
                 }
                 out
             })
@@ -33,6 +33,11 @@ impl Enemy {
     }
     pub fn apply_dashstun(&mut self) {
         self.stun += self.variant.dash_stun();
+    }
+    // returns whether or not it was killed
+    pub fn attacked(&mut self) -> bool {
+        self.health -= 1;
+        self.health == 0
     }
     pub fn think(&mut self, pos: crate::Vector, board_size: crate::Vector, player: &mut crate::Player) {
         if self.stun != 0 {

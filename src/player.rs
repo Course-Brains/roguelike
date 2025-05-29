@@ -1,12 +1,12 @@
 use crate::{Vector, Style, Direction, Board};
 use std::io::Write;
 const SYMBOL: char = '@';
-const STYLE: Style = Style::new().cyan().intense(true); 
+const STYLE: Style = *Style::new().cyan().intense(true); 
 pub struct Player {
     pub pos: Vector,
     pub selector: Vector,
     pub health: usize,
-    pub stamina: usize,
+    pub energy: usize,
     pub blocking: bool
 }
 impl Player {
@@ -15,7 +15,7 @@ impl Player {
             pos,
             selector: pos,
             health: 20,
-            stamina: 3,
+            energy: 3,
             blocking: false
         }
     }
@@ -23,10 +23,10 @@ impl Player {
         let mut lock = std::io::stdout().lock();
         self.draw_player(&mut lock);
         self.draw_health(board, &mut lock);
-        self.draw_stamina(board, &mut lock)
+        self.draw_energy(board, &mut lock)
     }
     fn draw_player(&self, lock: &mut impl std::io::Write) {
-        crossterm::execute!(lock,
+        crossterm::queue!(lock,
             crossterm::cursor::MoveTo(
                 self.pos.x as u16,
                 self.pos.y as u16
@@ -35,7 +35,7 @@ impl Player {
         write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
-        crossterm::execute!(lock,
+        crossterm::queue!(lock,
             crossterm::cursor::MoveTo(1, board.y as u16 + 1)
         ).unwrap();
         write!(lock,
@@ -45,15 +45,15 @@ impl Player {
             self.health,
         ).unwrap();
     }
-    fn draw_stamina(&self, board: &Board, lock: &mut impl std::io::Write) {
-        crossterm::execute!(lock,
+    fn draw_energy(&self, board: &Board, lock: &mut impl std::io::Write) {
+        crossterm::queue!(lock,
             crossterm::cursor::MoveTo(1, board.y as u16 + 2)
         ).unwrap();
         write!(lock,
             "[\x1b[96m{}\x1b[0m{}] {}/3",
-            "#".repeat(self.stamina*5),
-            "-".repeat((3-self.stamina)*5),
-            self.stamina
+            "#".repeat(self.energy*5),
+            "-".repeat((3-self.energy)*5),
+            self.energy
         ).unwrap();
     }
     pub fn reposition_cursor(&self) {
@@ -67,5 +67,14 @@ impl Player {
     }
     pub fn do_move(&mut self, direction: Direction) {
         self.pos += direction;
+    }
+    // Returns whether the attack was successful(Ok) and whether the player died
+    // true: died
+    // false: alive
+    pub fn attacked(&mut self, damage: usize) -> Result<bool,()> {
+        if self.blocking { return Err(()) }
+        if self.health <= damage { return Ok(true) }
+        self.health -= damage;
+        Ok(false)
     }
 }

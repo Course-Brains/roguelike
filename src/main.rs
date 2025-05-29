@@ -8,7 +8,26 @@ mod input;
 use input::{Input, Direction};
 mod pieces;
 
+use std::sync::Mutex;
+use std::mem::MaybeUninit;
+use std::fs::File;
+use std::io::Write;
+static LOG: Mutex<MaybeUninit<File>> = Mutex::new(MaybeUninit::uninit());
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {
+        crate::log(format!($($arg)*))
+    }
+}
+fn log(string: String) {
+    unsafe {
+        write!(LOG.lock().unwrap().assume_init_mut(), "{string}\n").unwrap()
+    }
+}
+
 fn main() {
+    LOG.lock().unwrap().write(File::create("log").unwrap());
+
     let _weirdifier = Weirdifier::new();
     let mut state = State {
         player: Player::new(Vector::new(3, 3)),
@@ -42,7 +61,7 @@ fn main() {
                                 if state.player.pos.x > state.board.x-2 { continue }
                             }
                         }
-                        if state.player.stamina == 0 { continue }
+                        if state.player.energy == 0 { continue }
                         let mut checking = state.player.pos+direction;
                         if let Some(piece) = &state.board[checking] {
                             if !piece.dashable() { continue }
@@ -55,23 +74,9 @@ fn main() {
                         if let Some(piece) = &state.board[checking] {
                             if piece.has_collision() { continue }
                         }
-
-                        if let Some(Piece::Enemy(enemy)) = &mut state.board[state.player.pos+direction] {
-                            
-                            enemy.health -= 1;
-                            enemy.apply_dashstun();
-                            if enemy.health == 0 {
-                                state.board[state.player.pos+direction] = None;
-                            }
-                        }
-                        if let Some(Piece::Enemy(enemy)) = &mut state.board[checking-direction] {
-                            enemy.health -= 1;
-                            enemy.apply_dashstun();
-                            if enemy.health == 0 {
-                                state.board[checking-direction] = None;
-                            }
-                        }
-                        state.player.stamina -= 1;
+                        state.attack_enemy(state.player.pos+direction, false);
+                        state.attack_enemy(checking-direction, false);
+                        state.player.energy -= 1;
                         state.player.do_move(direction);
                         state.player.do_move(direction);
                         state.player.do_move(direction);
@@ -110,25 +115,17 @@ fn main() {
                 else {
                     if state.player.pos.y-1 > state.player.selector.y { continue }
                 }
-                if let Some(Piece::Enemy(enemy)) = &mut state.board[state.player.selector] {
-                    enemy.health -= 1;
-                    if enemy.health == 0 {
-                        state.board[state.player.selector] = None;
-                        state.board.render();
-                        state.player.draw(&state.board);
-                        state.player.reposition_cursor();
-                    }
+                if let Some(Piece::Enemy(_)) = state.board[state.player.selector] {
+                    state.attack_enemy(state.player.selector, true);
                     state.think();
                 }
             }
             Input::E => { // block
-                if state.player.stamina != 0 {
+                if state.player.energy != 0 {
                     state.player.blocking = true;
                 }
                 state.think();
-                state.board.render();
-                state.player.draw(&state.board);
-                state.player.reposition_cursor();
+                state.render();
             }
             Input::Enter => break,
         }
@@ -139,6 +136,21 @@ struct State {
     board: Board
 }
 impl State {
+    // returns if an enemy was hit
+    fn attack_enemy(&mut self, pos: Vector, redrawable: bool) -> bool {
+        match &mut self.board[pos] {
+            Some(Piece::Enemy(enemy)) => {
+                if enemy.attacked() {
+                    self.board[pos] = None;
+                    if redrawable {
+                        self.render();
+                    }
+                }
+                true
+            }
+            _ => false
+        }
+    }
     fn is_on_board(&self, start: Vector, direction: Direction) -> bool {
         match direction {
             Direction::Up => {
@@ -174,6 +186,11 @@ impl State {
                 }
             }
         }
+    }
+    fn render(&self) {
+        self.board.render();
+        self.player.draw(&self.board);
+        self.player.reposition_cursor();
     }
 }
 #[derive(Clone, Copy)]

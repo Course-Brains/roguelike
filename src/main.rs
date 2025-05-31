@@ -7,6 +7,8 @@ use style::Style;
 mod input;
 use input::{Input, Direction};
 mod pieces;
+mod random;
+use random::random;
 
 use std::sync::Mutex;
 use std::mem::MaybeUninit;
@@ -16,9 +18,11 @@ static LOG: Mutex<MaybeUninit<File>> = Mutex::new(MaybeUninit::uninit());
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
+        #[cfg(any(debug_assertions, feature = "force_log"))]
         crate::log(format!($($arg)*))
     }
 }
+#[cfg(any(debug_assertions, feature = "force_log"))]
 fn log(string: String) {
     unsafe {
         write!(LOG.lock().unwrap().assume_init_mut(), "{string}\n").unwrap()
@@ -26,7 +30,9 @@ fn log(string: String) {
 }
 
 fn main() {
+    #[cfg(any(debug_assertions, feature = "force_log"))]
     LOG.lock().unwrap().write(File::create("log").unwrap());
+    random::initialize();
 
     let _weirdifier = Weirdifier::new();
     let mut state = State {
@@ -71,8 +77,8 @@ fn main() {
                         if let Some(piece) = &state.board[checking] {
                             if piece.has_collision() { continue }
                         }
-                        state.attack_enemy(state.player.pos+direction, false);
-                        state.attack_enemy(checking-direction, false);
+                        state.attack_enemy(state.player.pos+direction, false, true);
+                        state.attack_enemy(checking-direction, false, true);
                         state.player.energy -= 1;
                         state.player.do_move(direction);
                         state.player.do_move(direction);
@@ -113,7 +119,7 @@ fn main() {
                     if state.player.pos.y-1 > state.player.selector.y { continue }
                 }
                 if let Some(Piece::Enemy(_)) = state.board[state.player.selector] {
-                    state.attack_enemy(state.player.selector, true);
+                    state.attack_enemy(state.player.selector, true, false);
                     state.think();
                     state.render();
                 }
@@ -129,6 +135,10 @@ fn main() {
                     state.player.blocking = false;
                     state.render();
                 }
+            },
+            Input::R => {
+                state.player.selector = state.player.pos;
+                state.player.reposition_cursor();
             }
             Input::Enter => break,
         }
@@ -140,9 +150,10 @@ struct State {
 }
 impl State {
     // returns if an enemy was hit
-    fn attack_enemy(&mut self, pos: Vector, redrawable: bool) -> bool {
+    fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
         match &mut self.board[pos] {
             Some(Piece::Enemy(enemy)) => {
+                enemy.apply_dashstun();
                 if enemy.attacked() {
                     let variant = enemy.variant;
                     self.board[pos] = None;
@@ -233,11 +244,17 @@ struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
         std::process::Command::new("stty").arg("-icanon").arg("-echo").status().unwrap();
+        crossterm::execute!(std::io::stdout(),
+            crossterm::cursor::SetCursorStyle::SteadyUnderScore
+        ).unwrap();
         Weirdifier
     }
 }
 impl Drop for Weirdifier {
     fn drop(&mut self) {
         std::process::Command::new("stty").arg("icanon").arg("echo").status().unwrap();
+        crossterm::execute!(std::io::stdout(),
+            crossterm::cursor::SetCursorStyle::DefaultUserShape
+        ).unwrap();
     }
 }

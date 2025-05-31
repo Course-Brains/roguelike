@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 albatrice = { git = "https://github.com/albatrice/albatrice.git", branch = "course-brains" }
 crossterm = "0.29.0"
+
+[features]
+force_log = []

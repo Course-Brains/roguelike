@@ -1,10 +1,11 @@
 use std::io::Read;
 pub enum Input {
-    Arrow(Direction),
-    WASD(Direction, bool),
-    Enter,
-    Q,
-    E
+    Arrow(Direction), // move cursor
+    WASD(Direction, bool), // move character
+    Enter, // exit
+    Q, // attack
+    E, // block
+    R, // return cursor
 }
 impl Input {
     pub fn get() -> Input {
@@ -34,6 +35,7 @@ impl Input {
                 b'D' => return Input::WASD(Direction::Right, true),
                 b'q' => return Input::Q,
                 b'e' => return Input::E,
+                b'r' => return Input::R,
                 b'\n' => return Input::Enter,
                 _ => {}
             }

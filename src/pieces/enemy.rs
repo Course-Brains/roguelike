@@ -21,12 +21,8 @@ impl Enemy {
             },
             Some({
                 let mut out = *crate::Style::new().yellow();
-                if self.stun > 0 {
-                    out.background_blue().intense_background(true);
-                }
-                else if self.windup > 0 {
-                    out.background_red().intense_background(true);
-                }
+                if self.stun > 0 { out.background_blue(); }
+                else if self.windup > 0 { out.background_red().intense_background(true); }
                 out
             })
         )

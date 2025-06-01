@@ -48,6 +48,12 @@ impl Style {
             }
         }
     }
+    pub const fn has_background(&self) -> bool {
+        if let Color::Default = self.background {
+            return false
+        }
+        true
+    }
     pub const fn intense(&mut self, intense: bool) -> &mut Self {
         self.intense = intense;
         self

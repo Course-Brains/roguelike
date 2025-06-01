@@ -27,6 +27,12 @@ impl Enemy {
             })
         )
     }
+    pub fn is_stunned(&self) -> bool {
+        self.stun > 0
+    }
+    pub fn is_windup(&self) -> bool {
+        self.windup > 0
+    }
     pub fn apply_dashstun(&mut self) {
         self.stun += self.variant.dash_stun();
     }

@@ -42,9 +42,7 @@ fn main() {
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
     state.board[Vector::new(10, 15)] = Some(Piece::Enemy(pieces::enemy::Enemy::new()));
-    state.board.render();
-    state.player.draw(&state.board);
-    state.player.reposition_cursor();
+    state.render();
     loop {
         match Input::get() {
             Input::WASD(direction, sprint) => {
@@ -84,17 +82,13 @@ fn main() {
                         state.player.do_move(direction);
                         state.player.do_move(direction);
                         state.think();
-                        state.board.render();
-                        state.player.draw(&state.board);
-                        state.player.reposition_cursor();
+                        state.render()
                     }
                     false => {
                         if state.is_valid_move(direction) {
                             state.player.do_move(direction);
                             state.think();
-                            state.board.render();
-                            state.player.draw(&state.board);
-                            state.player.reposition_cursor();
+                            state.render()
                         }
                     }
                 }
@@ -102,7 +96,9 @@ fn main() {
             Input::Arrow(direction) => {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
-                    state.player.reposition_cursor();
+                    state.player.reposition_cursor(
+                        state.board.has_background(state.player.selector)
+                    );
                 }
             }
             Input::Q => { // attack
@@ -138,7 +134,7 @@ fn main() {
             },
             Input::R => {
                 state.player.selector = state.player.pos;
-                state.player.reposition_cursor();
+                state.player.reposition_cursor(false);
             }
             Input::Enter => break,
         }
@@ -194,6 +190,8 @@ impl State {
         false
     }
     fn think(&mut self) {
+        self.board.generate_nav_data(self.player.pos);
+        self.board.move_enemies(self.player.pos);
         let size = Vector::new(self.board.x, self.board.y);
         for x in 0..self.board.x {
             for y in 0..self.board.y {
@@ -206,10 +204,10 @@ impl State {
     fn render(&self) {
         self.board.render();
         self.player.draw(&self.board);
-        self.player.reposition_cursor();
+        self.player.reposition_cursor(self.board.has_background(self.player.selector));
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 struct Vector {
     x: usize,
     y: usize
@@ -240,21 +238,20 @@ impl std::ops::Add for Vector {
         }
     }
 }
+impl std::fmt::Display for Vector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({},{})", self.x, self.y)
+    }
+}
 struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
         std::process::Command::new("stty").arg("-icanon").arg("-echo").status().unwrap();
-        crossterm::execute!(std::io::stdout(),
-            crossterm::cursor::SetCursorStyle::SteadyUnderScore
-        ).unwrap();
         Weirdifier
     }
 }
 impl Drop for Weirdifier {
     fn drop(&mut self) {
         std::process::Command::new("stty").arg("icanon").arg("echo").status().unwrap();
-        crossterm::execute!(std::io::stdout(),
-            crossterm::cursor::SetCursorStyle::DefaultUserShape
-        ).unwrap();
     }
 }

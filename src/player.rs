@@ -62,13 +62,23 @@ impl Player {
             self.energy
         ).unwrap();
     }
-    pub fn reposition_cursor(&self) {
+    pub fn reposition_cursor(&self, underscore: bool) {
         crossterm::execute!(std::io::stdout(),
             crossterm::cursor::MoveTo(
                 self.selector.x as u16,
                 self.selector.y as u16
             )
         ).unwrap();
+        if underscore {
+            crossterm::execute!(std::io::stdout(),
+                crossterm::cursor::SetCursorStyle::SteadyUnderScore
+            ).unwrap()
+        }
+        else {
+            crossterm::execute!(std::io::stdout(),
+                crossterm::cursor::SetCursorStyle::DefaultUserShape
+            ).unwrap()
+        }
         std::io::stdout().flush().unwrap();
     }
     pub fn do_move(&mut self, direction: Direction) {

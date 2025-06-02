@@ -1,17 +1,20 @@
+use crate::Vector;
 #[derive(Clone, Copy)]
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
     stun: usize,
     windup: usize,
+    pub pos: Vector
 }
 impl Enemy {
-    pub fn new() -> Enemy {
+    pub fn new(pos: Vector) -> Enemy {
         Enemy {
             health: 3,
             variant: Variant::Basic,
             stun: 0,
-            windup: 0
+            windup: 0,
+            pos
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -41,26 +44,26 @@ impl Enemy {
         self.health -= 1;
         self.health == 0
     }
-    pub fn think(&mut self, pos: crate::Vector, board_size: crate::Vector, player: &mut crate::Player) {
+    pub fn think(&mut self, board_size: crate::Vector, player: &mut crate::Player) {
         if self.stun != 0 {
             self.stun -= 1;
             return
         }
-        let mut x_range = pos.x as isize-1..=pos.x as isize+1;
-        let mut y_range = pos.y as isize-1..=pos.y as isize+1;
-        if pos.x == 0 {
+        let mut x_range = self.pos.x as isize-1..=self.pos.x as isize+1;
+        let mut y_range = self.pos.y as isize-1..=self.pos.y as isize+1;
+        if self.pos.x == 0 {
             let (low, high) = x_range.into_inner();
             x_range = std::ops::RangeInclusive::new(low+1, high)
         }
-        if pos.x == board_size.x-2 {
+        if self.pos.x == board_size.x-2 {
             let (low, high) = x_range.into_inner();
             x_range = std::ops::RangeInclusive::new(low, high-1);
         }
-        if pos.y == 0 {
+        if self.pos.y == 0 {
             let (low, high) = y_range.into_inner();
             y_range = std::ops::RangeInclusive::new(low+1, high)
         }
-        if pos.y == board_size.y-2 {
+        if self.pos.y == board_size.y-2 {
             let (low, high) = y_range.into_inner();
             y_range = std::ops::RangeInclusive::new(low, high-1)
         }

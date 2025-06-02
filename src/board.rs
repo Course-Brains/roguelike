@@ -1,14 +1,16 @@
 use crate::{Vector,
     Style,
-    pieces::{wall::Wall, door::Door, enemy::Enemy},
-    input::Direction
+    pieces::{wall::Wall, door::Door},
+    input::Direction,
+    Enemy
 };
 use std::io::Write;
 use std::collections::VecDeque;
 pub struct Board {
     pub x: usize,
     pub y: usize,
-    inner: Vec<(Option<Piece>, BackTrace)>
+    inner: Vec<(Option<Piece>, BackTrace)>,
+    pub enemies: Vec<Enemy>
 }
 impl Board {
     pub fn new(x: usize, y: usize) -> Board {
@@ -17,7 +19,8 @@ impl Board {
         Board {
             x,
             y,
-            inner
+            inner,
+            enemies: Vec::new()
         }
     }
     // returns whether or not the cursor has a background behind it
@@ -42,9 +45,21 @@ impl Board {
                 }
             }
         }
+        self.draw_enemies(&mut lock);
         // It may seem inefficient to have an intermediary buffer when stdout already
         // has one, but without this, there is a vsync type visual artifact
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
+    }
+    fn draw_enemies(&self, lock: &mut impl Write) {
+        for enemy in self.enemies.iter() {
+            crossterm::queue!(lock,
+                crossterm::cursor::MoveTo(enemy.pos.x as u16, enemy.pos.y as u16)
+            ).unwrap();
+            match enemy.render() {
+                (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),
+                (ch, None) => write!(lock, "{ch}").unwrap()
+            }
+        }
     }
     pub fn has_background(&self, pos: Vector) -> bool {
         if let Some(piece) = self[pos] {
@@ -125,19 +140,13 @@ impl Board {
         pos.y*self.x + pos.x
     }
     pub fn move_enemies(&mut self, player: Vector) {
-        for x in 0..self.x {
-            for y in 0..self.y {
-                if let Some(Piece::Enemy(enemy)) = self[Vector::new(x,y)] {
-                    if enemy.is_stunned() || enemy.is_windup() { continue }
-                    let new_pos = Vector::new(x,y)+self.inner[
-                        self.to_index(Vector::new(x,y))
-                    ].1.from;
-                    if new_pos == player { continue }
-                    if self[new_pos].is_some() { continue }
-                    self[new_pos] = self[Vector::new(x,y)];
-                    self[Vector::new(x,y)] = None;
-                }
-            }
+        for index in 0..self.enemies.len() {
+            let enemy = &self.enemies[index];
+            if enemy.is_stunned() || enemy.is_windup() { continue }
+            let new_pos = enemy.pos+self.inner[self.to_index(enemy.pos)].1.from;
+            if new_pos == player { continue }
+            if self.has_collision(new_pos) { continue }
+            self.enemies[index].pos = new_pos;
         }
     }
     pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
@@ -149,6 +158,21 @@ impl Board {
             self[Vector::new(point_1.x, y)] = Some(Piece::Wall(Wall {}));
             self[Vector::new(point_2.x-1, y)] = Some(Piece::Wall(Wall {}));
         }
+    }
+    pub fn has_collision(&self, pos: Vector) -> bool {
+        if let Some(piece) = self[pos] {
+            if piece.has_collision() { return true }
+        }
+        for enemy in self.enemies.iter() {
+            if enemy.pos == pos { return true }
+        }
+        false
+    }
+    pub fn dashable(&self, pos: Vector) -> bool {
+        if let Some(piece) = self[pos] {
+            if !piece.dashable() { return false }
+        }
+        true
     }
 }
 impl std::ops::Index<Vector> for Board {
@@ -178,35 +202,30 @@ impl BackTrace {
 pub enum Piece {
     Wall(Wall),
     Door(Door),
-    Enemy(Enemy),
 }
 impl Piece {
-    pub fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
+    fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
         match self {
             Piece::Wall(_) => (Wall::render(pos, board), None),
             Piece::Door(door) => door.render(pos, board),
-            Piece::Enemy(enemy) => enemy.render()
         }
     }
-    pub fn has_collision(&self) -> bool {
+    fn has_collision(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
-            Piece::Enemy(_) => true,
         }
     }
     pub fn wall_connectable(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(_) => true,
-            Piece::Enemy(_) => false,
         }
     }
-    pub fn dashable(&self) -> bool {
+    fn dashable(&self) -> bool {
         match self {
             Piece::Wall(_) => false,
             Piece::Door(door) => !door.has_collision(),
-            Piece::Enemy(_) => true
         }
     }
 }

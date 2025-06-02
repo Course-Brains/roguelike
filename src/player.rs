@@ -94,7 +94,7 @@ impl Player {
         self.health -= damage;
         Ok(false)
     }
-    pub fn on_kill(&mut self, variant: crate::pieces::enemy::Variant) {
+    pub fn on_kill(&mut self, variant: crate::enemy::Variant) {
         let (energy, health) = variant.kill_value();
         for _ in 0..energy {
             if self.energy != self.max_energy {

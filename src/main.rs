@@ -7,6 +7,8 @@ use style::Style;
 mod input;
 use input::{Input, Direction};
 mod pieces;
+mod enemy;
+use enemy::Enemy;
 mod random;
 use random::random;
 
@@ -41,7 +43,7 @@ fn main() {
     };
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
-    state.board[Vector::new(10, 15)] = Some(Piece::Enemy(pieces::enemy::Enemy::new()));
+    state.board.enemies.push(Enemy::new(Vector::new(10, 15)));
     state.render();
     loop {
         match Input::get() {
@@ -64,17 +66,11 @@ fn main() {
                         }
                         if state.player.energy == 0 { continue }
                         let mut checking = state.player.pos+direction;
-                        if let Some(piece) = &state.board[checking] {
-                            if !piece.dashable() { continue }
-                        }
+                        if !state.board.dashable(checking) { continue }
                         checking += direction;
-                        if let Some(piece) = &state.board[checking] {
-                            if !piece.dashable() { continue }
-                        }
+                        if !state.board.dashable(checking) { continue }
                         checking += direction;
-                        if let Some(piece) = &state.board[checking] {
-                            if piece.has_collision() { continue }
-                        }
+                        if state.board.has_collision(checking) { continue }
                         state.attack_enemy(state.player.pos+direction, false, true);
                         state.attack_enemy(checking-direction, false, true);
                         state.player.energy -= 1;
@@ -102,22 +98,14 @@ fn main() {
                 }
             }
             Input::Q => { // attack
-                if state.player.selector.x > state.player.pos.x {
-                    if state.player.selector.x-1 > state.player.pos.x { continue }
-                }
-                else {
-                    if state.player.pos.x-1 > state.player.selector.x { continue }
-                }
-                if state.player.selector.y > state.player.pos.y {
-                    if state.player.selector.y-1 > state.player.pos.y { continue }
-                }
-                else {
-                    if state.player.pos.y-1 > state.player.selector.y { continue }
-                }
-                if let Some(Piece::Enemy(_)) = state.board[state.player.selector] {
-                    state.attack_enemy(state.player.selector, true, false);
-                    state.think();
-                    state.render();
+                for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
+                    if enemy.pos == state.player.selector {
+                        if enemy.attacked() {
+                            state.player.on_kill(state.board.enemies.swap_remove(index).variant)
+                        }
+                        state.render();
+                        break
+                    }
                 }
             }
             Input::E => { // block
@@ -147,21 +135,19 @@ struct State {
 impl State {
     // returns if an enemy was hit
     fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
-        match &mut self.board[pos] {
-            Some(Piece::Enemy(enemy)) => {
-                enemy.apply_dashstun();
+        for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
+            if enemy.pos == pos {
+                if dashstun { enemy.apply_dashstun() }
                 if enemy.attacked() {
-                    let variant = enemy.variant;
-                    self.board[pos] = None;
-                    self.player.on_kill(variant);
-                    if redrawable {
-                        self.render();
-                    }
+                    self.player.on_kill(
+                        self.board.enemies.swap_remove(index).variant
+                    );
+                    if redrawable { self.render() }
                 }
-                true
+                return true
             }
-            _ => false
         }
+        false
     }
     fn is_on_board(&self, start: Vector, direction: Direction) -> bool {
         match direction {
@@ -182,23 +168,15 @@ impl State {
     }
     fn is_valid_move(&self, direction: Direction) -> bool {
         if self.is_on_board(self.player.pos, direction) {
-            if let Some(piece) = &self.board[self.player.pos+direction] {
-                return !piece.has_collision()
-            }
-            return true
+            return !self.board.has_collision(self.player.pos+direction)
         }
         false
     }
     fn think(&mut self) {
         self.board.generate_nav_data(self.player.pos);
         self.board.move_enemies(self.player.pos);
-        let size = Vector::new(self.board.x, self.board.y);
-        for x in 0..self.board.x {
-            for y in 0..self.board.y {
-                if let Some(Piece::Enemy(enemy)) = &mut self.board[Vector::new(x, y)] {
-                    enemy.think(Vector::new(x, y), size, &mut self.player)
-                }
-            }
+        for enemy in self.board.enemies.iter_mut() {
+            enemy.think(Vector::new(self.board.x, self.board.y), &mut self.player)
         }
     }
     fn render(&self) {

@@ -2,6 +2,15 @@
 name = "roguelike"
 version = "0.1.0"
 edition = "2024"
+default-run = "main"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[[bin]]
+name = "console"
+path = "src/bin/console.rs"
 
 [dependencies]
 albatrice = { git = "https://github.com/albatrice/albatrice.git", branch = "course-brains" }

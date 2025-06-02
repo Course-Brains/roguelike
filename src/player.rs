@@ -2,6 +2,7 @@ use crate::{Vector, Style, Direction, Board};
 use std::io::Write;
 const SYMBOL: char = '@';
 const STYLE: Style = *Style::new().cyan().intense(true); 
+#[derive(Debug)]
 pub struct Player {
     pub pos: Vector,
     pub selector: Vector,

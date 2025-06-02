@@ -11,6 +11,7 @@ mod enemy;
 use enemy::Enemy;
 mod random;
 use random::random;
+mod commands;
 
 use std::sync::Mutex;
 use std::mem::MaybeUninit;
@@ -41,11 +42,13 @@ fn main() {
         player: Player::new(Vector::new(3, 3)),
         board: Board::new(90,30)
     };
+    let mut command_handler = commands::CommandHandler::new();
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
     state.board.enemies.push(Enemy::new(Vector::new(10, 15)));
     state.render();
     loop {
+        command_handler.handle(&mut state);
         match Input::get() {
             Input::WASD(direction, sprint) => {
                 match sprint {
@@ -185,7 +188,7 @@ impl State {
         self.player.reposition_cursor(self.board.has_background(self.player.selector));
     }
 }
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 struct Vector {
     x: usize,
     y: usize

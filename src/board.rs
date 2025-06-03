@@ -2,25 +2,28 @@ use crate::{Vector,
     Style,
     pieces::{wall::Wall, door::Door},
     input::Direction,
-    Enemy
+    Enemy,
 };
 use std::io::Write;
 use std::collections::VecDeque;
 pub struct Board {
     pub x: usize,
     pub y: usize,
-    inner: Vec<(Option<Piece>, BackTrace)>,
+    inner: Vec<Option<Piece>>,
+    pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Enemy>
 }
 impl Board {
     pub fn new(x: usize, y: usize) -> Board {
         let mut inner = Vec::with_capacity(x*y);
-        inner.resize_with(x*y, || (None, BackTrace::new()));
+        inner.resize_with(x*y, || None);
+        let backtraces = vec![BackTrace::new(); x*y];
         Board {
             x,
             y,
             inner,
-            enemies: Vec::new()
+            enemies: Vec::new(),
+            backtraces
         }
     }
     // returns whether or not the cursor has a background behind it
@@ -70,42 +73,42 @@ impl Board {
     pub fn generate_nav_data(&mut self, player: Vector) {
         let mut to_visit = VecDeque::new();
         to_visit.push_front(player);
-        for item in self.inner.iter_mut() {
-            item.1.cost = None;
+        for item in self.backtraces.iter_mut() {
+            item.cost = None;
         }
         let index = self.to_index(player);
-        self.inner[index].1.cost = Some(0);
+        self.backtraces[index].cost = Some(0);
         while let Some(pos) = to_visit.pop_back() {
             let adj = self.get_adjacent(pos);
             if adj & 0b0000_0001 == 0b0000_0001 {
                 let index = self.to_index(pos+Direction::Up);
-                if self.inner[index].1.cost.is_none() {
-                    self.inner[index].1.cost = Some(self.inner[self.to_index(pos)].1.cost.unwrap()+1);
-                    self.inner[index].1.from = Direction::Down;
+                if self.backtraces[index].cost.is_none() {
+                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
+                    self.backtraces[index].from = Direction::Down;
                     to_visit.push_front(pos + Direction::Up)
                 }
             }
             if adj & 0b0000_0010 == 0b0000_0010 {
                 let index = self.to_index(pos+Direction::Down);
-                if self.inner[index].1.cost.is_none() {
-                    self.inner[index].1.cost = Some(self.inner[self.to_index(pos)].1.cost.unwrap()+1);
-                    self.inner[index].1.from = Direction::Up;
+                if self.backtraces[index].cost.is_none() {
+                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
+                    self.backtraces[index].from = Direction::Up;
                     to_visit.push_front(pos + Direction::Down)
                 }
             }
             if adj & 0b0000_0100 == 0b0000_0100 {
                 let index = self.to_index(pos+Direction::Left);
-                if self.inner[index].1.cost.is_none() {
-                    self.inner[index].1.cost = Some(self.inner[self.to_index(pos)].1.cost.unwrap()+1);
-                    self.inner[index].1.from = Direction::Right;
+                if self.backtraces[index].cost.is_none() {
+                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
+                    self.backtraces[index].from = Direction::Right;
                     to_visit.push_front(pos + Direction::Left)
                 }
             }
             if adj & 0b0000_1000 == 0b0000_1000 {
                 let index = self.to_index(pos+Direction::Right);
-                if self.inner[index].1.cost.is_none() {
-                    self.inner[index].1.cost = Some(self.inner[self.to_index(pos)].1.cost.unwrap()+1);
-                    self.inner[index].1.from = Direction::Left;
+                if self.backtraces[index].cost.is_none() {
+                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
+                    self.backtraces[index].from = Direction::Left;
                     to_visit.push_front(pos + Direction::Right)
                 }
             }
@@ -142,8 +145,9 @@ impl Board {
     pub fn move_enemies(&mut self, player: Vector) {
         for index in 0..self.enemies.len() {
             let enemy = &self.enemies[index];
+            if !enemy.active { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }
-            let new_pos = enemy.pos+self.inner[self.to_index(enemy.pos)].1.from;
+            let new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
             if new_pos == player { continue }
             if self.has_collision(new_pos) { continue }
             self.enemies[index].pos = new_pos;
@@ -178,17 +182,18 @@ impl Board {
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;
     fn index(&self, index: Vector) -> &Self::Output {
-        &self.inner[self.to_index(index)].0
+        &self.inner[self.to_index(index)]
     }
 }
 impl std::ops::IndexMut<Vector> for Board {
     fn index_mut(&mut self, index: Vector) -> &mut Self::Output {
-        &mut self.inner[index.y*self.x + index.x].0
+        &mut self.inner[index.y*self.x + index.x]
     }
 }
-struct BackTrace {
+#[derive(Copy, Clone)]
+pub struct BackTrace {
     from: crate::Direction,
-    cost: Option<usize>
+    pub cost: Option<usize>
 }
 impl BackTrace {
     const fn new() -> BackTrace {

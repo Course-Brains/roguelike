@@ -1,11 +1,12 @@
-use crate::Vector;
+use crate::{Vector, Player, board::BackTrace};
 #[derive(Clone, Copy)]
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
     stun: usize,
     windup: usize,
-    pub pos: Vector
+    pub pos: Vector,
+    pub active: bool
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -14,7 +15,8 @@ impl Enemy {
             variant,
             stun: 0,
             windup: 0,
-            pos
+            pos,
+            active: false
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -23,7 +25,8 @@ impl Enemy {
                 Variant::Basic => '1'
             },
             Some({
-                let mut out = *crate::Style::new().yellow();
+                let mut out = crate::Style::new();
+                if self.active { out.yellow(); }
                 if self.stun > 0 { out.background_blue(); }
                 else if self.windup > 0 { out.background_red().intense_background(true); }
                 out
@@ -44,7 +47,16 @@ impl Enemy {
         self.health -= 1;
         self.health == 0
     }
-    pub fn think(&mut self, board_size: crate::Vector, player: &mut crate::Player) {
+    pub fn think(&mut self, board_size: Vector, backtraces: &Vec<BackTrace>, player: &mut Player) {
+        if !self.active {
+            match backtraces[board_size.x*self.pos.y + self.pos.x].cost {
+                Some(cost) => {
+                    if cost > (crate::random() & 0b0000_0111) as usize { return }
+                    self.active = true;
+                }
+                None => return
+            }
+        }
         if self.stun != 0 {
             self.stun -= 1;
             return
@@ -89,24 +101,24 @@ pub enum Variant {
     Basic
 }
 impl Variant {
-    fn windup(&self) -> usize {
+    fn windup(self) -> usize {
         match self {
             Variant::Basic => 1
         }
     }
-    fn parry_stun(&self) -> usize {
+    fn parry_stun(self) -> usize {
         match self {
             Variant::Basic => 3
         }
     }
-    fn dash_stun(&self) -> usize {
+    fn dash_stun(self) -> usize {
         match self {
             Variant::Basic => 1
         }
     }
     // returns kill reward in energy, then health
     // per energy
-    pub fn kill_value(&self) -> (usize, usize) {
+    pub fn kill_value(self) -> (usize, usize) {
         match self {
             Variant::Basic => (1, 5)
         }

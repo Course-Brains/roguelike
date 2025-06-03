@@ -1,7 +1,7 @@
 mod player;
 use player::Player;
 mod board;
-use board::{Board, Piece};
+use board::Board;
 mod style;
 use style::Style;
 mod input;
@@ -179,7 +179,11 @@ impl State {
         self.board.generate_nav_data(self.player.pos);
         self.board.move_enemies(self.player.pos);
         for enemy in self.board.enemies.iter_mut() {
-            enemy.think(Vector::new(self.board.x, self.board.y), &mut self.player)
+            enemy.think(
+                Vector::new(self.board.x, self.board.y),
+                &self.board.backtraces,
+                &mut self.player
+            )
         }
     }
     fn render(&self) {

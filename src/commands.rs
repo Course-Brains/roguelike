@@ -1,11 +1,16 @@
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::net::TcpListener;
-use crate::State;
-use albatrice::{ToBinary, FromBinary};
+use crate::{State, Vector};
+use albatrice::{ToBinary, FromBinary, Split};
 enum Command {
     GetPlayerData,
     SetHealth(usize),
     SetEnergy(usize),
+    SetPos(Vector),
+    Redraw,
+    ListEnemies,
+    Kill(Vector),
+    Spawn(crate::enemy::Variant, Vector)
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -14,6 +19,14 @@ impl Command {
             "get_player_data" => Ok(Command::GetPlayerData),
             "set_health" => Ok(Command::SetHealth(parse(iter.next())?)),
             "set_energy" => Ok(Command::SetEnergy(parse(iter.next())?)),
+            "set_pos" => Ok(Command::SetPos(parse_vector(iter.next(), iter.next())?)),
+            "redraw" => Ok(Command::Redraw),
+            "list_enemies" => Ok(Command::ListEnemies),
+            "kill" => Ok(Command::Kill(parse_vector(iter.next(), iter.next())?)),
+            "spawn" => Ok(Command::Spawn(
+                parse(iter.next())?,
+                parse_vector(iter.next(), iter.next())?
+            )),
             _ => Err("unknown command".to_string())
         }
     }
@@ -22,8 +35,44 @@ impl Command {
             Command::GetPlayerData => {
                 out.send(format!("{:#?}", state.player)).unwrap()
             }
-            Command::SetHealth(health) => state.player.health = health,
-            Command::SetEnergy(energy) => state.player.energy = energy,
+            Command::SetHealth(health) => {
+                let prev = state.player.health;
+                state.player.health = health;
+                out.send(format!("{prev} -> {health}")).unwrap();
+            }
+            Command::SetEnergy(energy) => {
+                let prev = state.player.energy;
+                state.player.energy = energy;
+                out.send(format!("{prev} -> {energy}")).unwrap();
+            }
+            Command::SetPos(new_pos) => {
+                let prev = state.player.pos;
+                state.player.pos = new_pos;
+                out.send(format!("{prev} -> {new_pos}")).unwrap();
+            }
+            Command::Redraw => {
+                state.render();
+            }
+            Command::ListEnemies => {
+                let mut result = String::new();
+                for enemy in state.board.enemies.iter() {
+                    result += &format!("{} at {}\n", enemy.variant, enemy.pos);
+                }
+                out.send(result).unwrap();
+            }
+            Command::Kill(vector) => {
+                for (index, enemy) in state.board.enemies.iter().enumerate() {
+                    if enemy.pos == vector {
+                        state.board.enemies.swap_remove(index);
+                        out.send("killed enemy".to_string()).unwrap();
+                        break;
+                    }
+                }
+                out.send("could not find enemy at given pos".to_string()).unwrap()
+            }
+            Command::Spawn(variant, pos) => {
+                state.board.enemies.push(crate::enemy::Enemy::new(pos, variant));
+            }
         }
     }
 }
@@ -48,15 +97,22 @@ impl CommandHandler {
 fn listen() -> (Receiver<Command>, Sender<String>) {
     let (tx, rx) = channel();
     let (tx_out, rx_out) = channel::<String>();
-    std::thread::spawn(move || {
-        let mut stream = TcpListener::bind("127.0.0.1:5287").unwrap().accept().unwrap().0;
-        loop {
-            match Command::new(String::from_binary(&mut stream).unwrap()) {
-                Ok(command) => tx.send(command).unwrap(),
-                Err(error) => error.to_binary(&mut stream).unwrap()
+    let error_tx = tx_out.clone();
+    std::thread::spawn(|| {
+        let (mut read, mut write) = TcpListener::bind("127.0.0.1:5287").unwrap().accept().unwrap().0.split().unwrap();
+        std::thread::spawn(move || {
+            loop {
+                match Command::new(String::from_binary(&mut read).unwrap()) {
+                    Ok(command) => tx.send(command).unwrap(),
+                    Err(error) => error_tx.send(error).unwrap()
+                }
             }
-            rx_out.recv().unwrap().to_binary(&mut stream).unwrap();
-        }
+        });
+        std::thread::spawn(move || {
+            loop {
+                rx_out.recv().unwrap().to_binary(&mut write).unwrap();
+            }
+        });
     });
     (rx, tx_out)
 }
@@ -69,4 +125,7 @@ where
         Some(Err(error)) => Err(error.to_string()),
         None => Err("Expected argument".to_string())
     }
+}
+fn parse_vector(x: Option<&str>, y: Option<&str>) -> Result<Vector, String> {
+    Ok(Vector::new(parse(x)?, parse(y)?))
 }

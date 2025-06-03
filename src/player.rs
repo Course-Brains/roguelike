@@ -7,9 +7,9 @@ pub struct Player {
     pub pos: Vector,
     pub selector: Vector,
     pub health: usize,
-    max_health: usize,
+    pub max_health: usize,
     pub energy: usize,
-    max_energy: usize,
+    pub max_energy: usize,
     pub blocking: bool,
     pub was_hit: bool
 }

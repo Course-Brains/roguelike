@@ -8,10 +8,10 @@ pub struct Enemy {
     pub pos: Vector
 }
 impl Enemy {
-    pub fn new(pos: Vector) -> Enemy {
+    pub fn new(pos: Vector, variant: Variant) -> Enemy {
         Enemy {
             health: 3,
-            variant: Variant::Basic,
+            variant,
             stun: 0,
             windup: 0,
             pos
@@ -109,6 +109,22 @@ impl Variant {
     pub fn kill_value(&self) -> (usize, usize) {
         match self {
             Variant::Basic => (1, 5)
+        }
+    }
+}
+impl std::fmt::Display for Variant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Variant::Basic => write!(f, "basic")
+        }
+    }
+}
+impl std::str::FromStr for Variant {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "basic" => Ok(Variant::Basic),
+            _ => Err("invalid variant".to_string())
         }
     }
 }

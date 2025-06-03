@@ -45,7 +45,7 @@ fn main() {
     let mut command_handler = commands::CommandHandler::new();
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
-    state.board.enemies.push(Enemy::new(Vector::new(10, 15)));
+    state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
     state.render();
     loop {
         command_handler.handle(&mut state);

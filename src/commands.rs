@@ -38,17 +38,17 @@ impl Command {
             Command::SetHealth(health) => {
                 let prev = state.player.health;
                 state.player.health = health;
-                out.send(format!("{prev} -> {health}")).unwrap();
+                out.send(format!("health: {prev} -> {health}")).unwrap();
             }
             Command::SetEnergy(energy) => {
                 let prev = state.player.energy;
                 state.player.energy = energy;
-                out.send(format!("{prev} -> {energy}")).unwrap();
+                out.send(format!("energy: {prev} -> {energy}")).unwrap();
             }
             Command::SetPos(new_pos) => {
                 let prev = state.player.pos;
                 state.player.pos = new_pos;
-                out.send(format!("{prev} -> {new_pos}")).unwrap();
+                out.send(format!("pos: {prev} -> {new_pos}")).unwrap();
             }
             Command::Redraw => {
                 state.render();
@@ -65,7 +65,7 @@ impl Command {
                     if enemy.pos == vector {
                         state.board.enemies.swap_remove(index);
                         out.send("killed enemy".to_string()).unwrap();
-                        break;
+                        return;
                     }
                 }
                 out.send("could not find enemy at given pos".to_string()).unwrap()
@@ -89,7 +89,7 @@ impl CommandHandler {
         }
     }
     pub fn handle(&mut self, state: &mut State) {
-        if let Ok(command) = self.rx.try_recv() {
+        while let Ok(command) = self.rx.try_recv() {
             command.enact(state, &mut self.tx)
         }
     }

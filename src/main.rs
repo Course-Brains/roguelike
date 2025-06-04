@@ -12,6 +12,8 @@ use enemy::Enemy;
 mod random;
 use random::random;
 mod commands;
+mod events;
+use events::EventHandler;
 
 use std::sync::Mutex;
 use std::mem::MaybeUninit;
@@ -40,14 +42,17 @@ fn main() {
     let _weirdifier = Weirdifier::new();
     let mut state = State {
         player: Player::new(Vector::new(3, 3)),
-        board: Board::new(90,30)
+        board: Board::new(90,30),
+        turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
+    let mut event_handler = EventHandler::new();
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
     state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
     state.render();
     loop {
+        event_handler.handle(&mut state);
         command_handler.handle(&mut state);
         match Input::get() {
             Input::WASD(direction, sprint) => {
@@ -81,12 +86,14 @@ fn main() {
                         state.player.do_move(direction);
                         state.player.do_move(direction);
                         state.think();
+                        state.turn += 1;
                         state.render()
                     }
                     false => {
                         if state.is_valid_move(direction) {
                             state.player.do_move(direction);
                             state.think();
+                            state.turn += 1;
                             state.render()
                         }
                     }
@@ -106,6 +113,7 @@ fn main() {
                         if enemy.attacked() {
                             state.player.on_kill(state.board.enemies.swap_remove(index).variant)
                         }
+                        state.turn += 1;
                         state.render();
                         break
                     }
@@ -120,6 +128,7 @@ fn main() {
                         state.player.energy -= 1;
                     }
                     state.player.blocking = false;
+                    state.turn += 1;
                     state.render();
                 }
             },
@@ -133,7 +142,8 @@ fn main() {
 }
 struct State {
     player: Player,
-    board: Board
+    board: Board,
+    turn: usize,
 }
 impl State {
     // returns if an enemy was hit
@@ -189,7 +199,14 @@ impl State {
     fn render(&self) {
         self.board.render();
         self.player.draw(&self.board);
+        self.draw_turn();
         self.player.reposition_cursor(self.board.has_background(self.player.selector));
+    }
+    fn draw_turn(&self) {
+        crossterm::execute!(std::io::stdout(),
+            crossterm::cursor::MoveTo(2, self.board.y as u16 + 3)
+        ).unwrap();
+        print!("turn: {}", self.turn);
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

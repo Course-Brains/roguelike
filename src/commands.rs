@@ -9,7 +9,7 @@ enum Command {
     SetPos(Vector),
     Redraw,
     ListEnemies,
-    Kill(Vector),
+    Kill(usize),
     Spawn(crate::enemy::Variant, Vector)
 }
 impl Command {
@@ -22,7 +22,7 @@ impl Command {
             "set_pos" => Ok(Command::SetPos(parse_vector(iter.next(), iter.next())?)),
             "redraw" => Ok(Command::Redraw),
             "list_enemies" => Ok(Command::ListEnemies),
-            "kill" => Ok(Command::Kill(parse_vector(iter.next(), iter.next())?)),
+            "kill" => Ok(Command::Kill(parse(iter.next())?)),
             "spawn" => Ok(Command::Spawn(
                 parse(iter.next())?,
                 parse_vector(iter.next(), iter.next())?
@@ -55,20 +55,13 @@ impl Command {
             }
             Command::ListEnemies => {
                 let mut result = String::new();
-                for enemy in state.board.enemies.iter() {
-                    result += &format!("{} at {}\n", enemy.variant, enemy.pos);
+                for (index, enemy) in state.board.enemies.iter().enumerate() {
+                    result += &format!("{index}: {} at {}\n", enemy.variant, enemy.pos);
                 }
                 out.send(result).unwrap();
             }
-            Command::Kill(vector) => {
-                for (index, enemy) in state.board.enemies.iter().enumerate() {
-                    if enemy.pos == vector {
-                        state.board.enemies.swap_remove(index);
-                        out.send("killed enemy".to_string()).unwrap();
-                        return;
-                    }
-                }
-                out.send("could not find enemy at given pos".to_string()).unwrap()
+            Command::Kill(index) => {
+                out.send(format!("Removed enemy at {}", state.board.enemies.swap_remove(index).pos)).unwrap();
             }
             Command::Spawn(variant, pos) => {
                 state.board.enemies.push(crate::enemy::Enemy::new(pos, variant));

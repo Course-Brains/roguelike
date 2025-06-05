@@ -107,7 +107,7 @@ fn main() {
                     );
                 }
             }
-            Input::Q => { // attack
+            Input::Attack => {
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
                     if enemy.pos == state.player.selector {
                         if enemy.attacked() {
@@ -119,7 +119,7 @@ fn main() {
                     }
                 }
             }
-            Input::E => { // block
+            Input::Block => {
                 if state.player.energy != 0 {
                     state.player.was_hit = false;
                     state.player.blocking = true;
@@ -132,9 +132,14 @@ fn main() {
                     state.render();
                 }
             },
-            Input::R => {
+            Input::Return => {
                 state.player.selector = state.player.pos;
                 state.player.reposition_cursor(false);
+            },
+            Input::Wait => {
+                state.think();
+                state.turn += 1;
+                state.render()
             }
             Input::Enter => break,
         }

@@ -3,9 +3,10 @@ pub enum Input {
     Arrow(Direction), // move cursor
     WASD(Direction, bool), // move character
     Enter, // exit
-    Q, // attack
-    E, // block
-    R, // return cursor
+    Attack, // attack
+    Block, // block
+    Return, // return cursor
+    Wait, // do nothing
 }
 impl Input {
     pub fn get() -> Input {
@@ -33,9 +34,10 @@ impl Input {
                 b'S' => return Input::WASD(Direction::Down, true),
                 b'A' => return Input::WASD(Direction::Left, true),
                 b'D' => return Input::WASD(Direction::Right, true),
-                b'q' => return Input::Q,
-                b'e' => return Input::E,
-                b'r' => return Input::R,
+                b'q' => return Input::Attack,
+                b'e' => return Input::Block,
+                b'r' => return Input::Return,
+                b'o' => return Input::Wait,
                 b'\n' => return Input::Enter,
                 _ => {}
             }

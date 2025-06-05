@@ -66,7 +66,15 @@ impl Board {
     }
     pub fn has_background(&self, pos: Vector) -> bool {
         if let Some(piece) = self[pos] {
-            return piece.render(pos, self).1.is_some_and(|x| x.has_background() )
+            if piece.render(pos, self).1.is_some_and(|x| x.has_background() ) { return true }
+        }
+        for enemy in self.enemies.iter() {
+            if enemy.pos == pos {
+                if let Some(style) = enemy.render().1 {
+                    if style.has_background() { return true }
+                }
+                break
+            }
         }
         false
     }

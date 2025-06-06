@@ -42,7 +42,7 @@ fn main() {
     let _weirdifier = Weirdifier::new();
     let mut state = State {
         player: Player::new(Vector::new(3, 3)),
-        board: Board::new(90,30),
+        board: Board::new(1000, 1000, 45, 15),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
@@ -103,7 +103,8 @@ fn main() {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
                     state.player.reposition_cursor(
-                        state.board.has_background(state.player.selector)
+                        state.board.has_background(state.player.selector),
+                        state.player.pos
                     );
                 }
             }
@@ -134,7 +135,7 @@ fn main() {
             },
             Input::Return => {
                 state.player.selector = state.player.pos;
-                state.player.reposition_cursor(false);
+                state.player.reposition_cursor(false, state.player.pos);
             },
             Input::Wait => {
                 state.think();
@@ -201,11 +202,34 @@ impl State {
             )
         }
     }
-    fn render(&self) {
-        self.board.render();
-        self.player.draw(&self.board);
+    fn render(&mut self) {
+        let base = self.get_render_base(self.player.pos);
+        self.board.render(base);
+        self.player.draw(&self.board, base);
         self.draw_turn();
-        self.player.reposition_cursor(self.board.has_background(self.player.selector));
+        self.player.reposition_cursor(self.board.has_background(self.player.selector), base);
+    }
+    fn get_render_base(&self, center: Vector) -> Vector {
+        let mut out = center;
+        if center.x < self.board.render_x {
+            out.x = 0;
+        }
+        else if self.board.x-center.x < self.board.render_x {
+            out.x = self.board.x-(self.board.render_x*2);
+        }
+        else {
+            out.x = center.x-self.board.render_x;
+        }
+        if center.y < self.board.render_y {
+            out.y = 0;
+        }
+        else if self.board.y-center.y < self.board.render_y {
+            out.y = self.board.y-(self.board.render_y*2);
+        }
+        else {
+            out.y = center.y-self.board.render_y;
+        }
+        out
     }
     fn draw_turn(&self) {
         crossterm::execute!(std::io::stdout(),

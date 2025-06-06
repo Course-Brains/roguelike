@@ -26,17 +26,17 @@ impl Player {
             was_hit: false
         }
     }
-    pub fn draw(&self, board: &Board) {
+    pub fn draw(&self, board: &Board, base: Vector) {
         let mut lock = std::io::stdout().lock();
-        self.draw_player(&mut lock);
+        self.draw_player(&mut lock, base);
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock)
     }
-    fn draw_player(&self, lock: &mut impl std::io::Write) {
+    fn draw_player(&self, lock: &mut impl std::io::Write, base: Vector) {
         crossterm::queue!(lock,
             crossterm::cursor::MoveTo(
-                self.pos.x as u16,
-                self.pos.y as u16
+                (self.pos.x-base.x) as u16,
+                (self.pos.y-base.y) as u16
             )
         ).unwrap();
         write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
@@ -63,11 +63,13 @@ impl Player {
             self.energy
         ).unwrap();
     }
-    pub fn reposition_cursor(&self, underscore: bool) {
+    pub fn reposition_cursor(&mut self, underscore: bool, base: Vector) {
+        if self.selector.x < base.x { self.selector.x = base.x }
+        if self.selector.y < base.y { self.selector.y = base.y }
         crossterm::execute!(std::io::stdout(),
             crossterm::cursor::MoveTo(
-                self.selector.x as u16,
-                self.selector.y as u16
+                (self.selector.x-base.x) as u16,
+                (self.selector.y-base.y) as u16
             )
         ).unwrap();
         if underscore {

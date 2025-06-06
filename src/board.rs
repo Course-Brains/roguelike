@@ -6,38 +6,48 @@ use crate::{Vector,
 };
 use std::io::Write;
 use std::collections::VecDeque;
+use std::ops::Range;
 pub struct Board {
     pub x: usize,
     pub y: usize,
+    pub render_x: usize, // the offset from the player to the edge of the screen(think radius)
+    pub render_y: usize,
     inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Enemy>
 }
 impl Board {
-    pub fn new(x: usize, y: usize) -> Board {
+    pub fn new(x: usize, y: usize, render_x: usize, render_y: usize) -> Board {
         let mut inner = Vec::with_capacity(x*y);
         inner.resize_with(x*y, || None);
         let backtraces = vec![BackTrace::new(); x*y];
         Board {
             x,
             y,
+            render_x,
+            render_y,
             inner,
             enemies: Vec::new(),
             backtraces
         }
     }
     // returns whether or not the cursor has a background behind it
-    pub fn render(&self) {
+    pub fn render(&self, base: Vector) {
         let mut lock = std::collections::VecDeque::new();
         crossterm::queue!(lock,
             crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
         ).unwrap();
-        for x in 0..self.x {
-            for y in 0..self.y {
+        let x_bound = base.x..base.x+(self.render_x*2);
+        let y_bound = base.y..base.y+(self.render_y*2);
+        for x in x_bound.clone() {
+            for y in y_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
                     let (ch, style) = piece.render(Vector::new(x,y), self);
                     crossterm::queue!(lock,
-                        crossterm::cursor::MoveTo(x as u16, y as u16)
+                        crossterm::cursor::MoveTo(
+                            (x-x_bound.start) as u16,
+                            (y-y_bound.start) as u16
+                        )
                     ).unwrap();
                     if let Some(style) = style {
                         lock.write_fmt(format_args!("{}{}\x1b[0m", style.enact(), ch)).unwrap()
@@ -48,15 +58,20 @@ impl Board {
                 }
             }
         }
-        self.draw_enemies(&mut lock);
+        self.draw_enemies(&mut lock, x_bound, y_bound);
         // It may seem inefficient to have an intermediary buffer when stdout already
         // has one, but without this, there is a vsync type visual artifact
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
     }
-    fn draw_enemies(&self, lock: &mut impl Write) {
+    fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {
+            if !x_bound.contains(&enemy.pos.x) { continue }
+            if !y_bound.contains(&enemy.pos.y) { continue }
             crossterm::queue!(lock,
-                crossterm::cursor::MoveTo(enemy.pos.x as u16, enemy.pos.y as u16)
+                crossterm::cursor::MoveTo(
+                    (enemy.pos.x-x_bound.start) as u16,
+                    (enemy.pos.y-y_bound.start) as u16
+                )
             ).unwrap();
             match enemy.render() {
                 (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),

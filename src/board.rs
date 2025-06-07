@@ -5,7 +5,7 @@ use crate::{Vector,
     Enemy,
 };
 use std::io::Write;
-use std::collections::VecDeque;
+use std::collections::{BinaryHeap, HashSet};
 use std::ops::Range;
 pub struct Board {
     pub x: usize,
@@ -94,45 +94,54 @@ impl Board {
         false
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
-        let mut to_visit = VecDeque::new();
-        to_visit.push_front(player);
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
-        let index = self.to_index(player);
-        self.backtraces[index].cost = Some(0);
-        while let Some(pos) = to_visit.pop_back() {
-            let adj = self.get_adjacent(pos);
-            if adj & 0b0000_0001 == 0b0000_0001 {
-                let index = self.to_index(pos+Direction::Up);
-                if self.backtraces[index].cost.is_none() {
-                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
-                    self.backtraces[index].from = Direction::Down;
-                    to_visit.push_front(pos + Direction::Up)
+        for enemy in self.enemies.iter() {
+            let mut to_visit = BinaryHeap::new();
+            let mut visited = HashSet::new();
+            to_visit.push(PathData::new(Direction::Up, player, enemy.pos, 0));
+            while let Some(path_data) = to_visit.pop() {
+                let index = self.to_index(path_data.pos);
+                if self.backtraces[index].cost.is_none_or(|cost| cost > path_data.cost) {
+                    self.backtraces[index].cost = Some(path_data.cost);
+                    self.backtraces[index].from = path_data.from;
                 }
-            }
-            if adj & 0b0000_0010 == 0b0000_0010 {
-                let index = self.to_index(pos+Direction::Down);
-                if self.backtraces[index].cost.is_none() {
-                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
-                    self.backtraces[index].from = Direction::Up;
-                    to_visit.push_front(pos + Direction::Down)
+                if path_data.pos == enemy.pos { break }
+                if visited.contains(&path_data.pos) { continue }
+                visited.insert(path_data.pos);
+                let adj = self.get_adjacent(path_data.pos);
+                if adj&0b0000_0001 != 0 {
+                    to_visit.push(PathData::new(
+                        Direction::Down,
+                        path_data.pos+Direction::Up,
+                        enemy.pos,
+                        path_data.cost+1
+                    ));
                 }
-            }
-            if adj & 0b0000_0100 == 0b0000_0100 {
-                let index = self.to_index(pos+Direction::Left);
-                if self.backtraces[index].cost.is_none() {
-                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
-                    self.backtraces[index].from = Direction::Right;
-                    to_visit.push_front(pos + Direction::Left)
+                if adj&0b0000_0010 != 0 {
+                    to_visit.push(PathData::new(
+                        Direction::Up,
+                        path_data.pos+Direction::Down,
+                        enemy.pos,
+                        path_data.cost+1
+                    ))
                 }
-            }
-            if adj & 0b0000_1000 == 0b0000_1000 {
-                let index = self.to_index(pos+Direction::Right);
-                if self.backtraces[index].cost.is_none() {
-                    self.backtraces[index].cost = Some(self.backtraces[self.to_index(pos)].cost.unwrap()+1);
-                    self.backtraces[index].from = Direction::Left;
-                    to_visit.push_front(pos + Direction::Right)
+                if adj&0b0000_0100 != 0 {
+                    to_visit.push(PathData::new(
+                        Direction::Right,
+                        path_data.pos+Direction::Left,
+                        enemy.pos,
+                        path_data.cost+1
+                    ))
+                }
+                if adj&0b0000_1000 != 0 {
+                    to_visit.push(PathData::new(
+                        Direction::Left,
+                        path_data.pos+Direction::Right,
+                        enemy.pos,
+                        path_data.cost+1
+                    ))
                 }
             }
         }
@@ -170,6 +179,7 @@ impl Board {
             let enemy = &self.enemies[index];
             if !enemy.active { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }
+            if self.backtraces[self.to_index(enemy.pos)].cost.is_none() { continue }
             let new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
             if new_pos == player { continue }
             if self.has_collision(new_pos) { continue }
@@ -255,5 +265,72 @@ impl Piece {
             Piece::Wall(_) => false,
             Piece::Door(door) => !door.has_collision(),
         }
+    }
+}
+struct PathData {
+    from: Direction,
+    cost: usize,
+    heur: usize,
+    pos: Vector
+}
+impl PathData {
+    fn new(from: Direction, pos: Vector, target: Vector, cost: usize) -> PathData {
+        PathData {
+            from,
+            cost,
+            heur: cost + pos.x.abs_diff(target.x) + pos.y.abs_diff(target.y),
+            pos
+        }
+    }
+}
+impl PartialEq for PathData {
+    fn eq(&self, other: &Self) -> bool {
+        self.heur == other.heur
+    }
+    fn ne(&self, other: &Self) -> bool {
+        self.heur != other.heur
+    }
+}
+impl Eq for PathData {}
+impl PartialOrd for PathData {
+    fn lt(&self, other: &Self) -> bool {
+        self.heur.gt(&other.heur)
+    }
+    fn le(&self, other: &Self) -> bool {
+        self.heur.ge(&other.heur)
+    }
+    fn gt(&self, other: &Self) -> bool {
+        self.heur.lt(&other.heur)
+    }
+    fn ge(&self, other: &Self) -> bool {
+        self.heur.le(&other.heur)
+    }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self < other { Some(std::cmp::Ordering::Less) }
+        else if self > other { Some(std::cmp::Ordering::Greater) }
+        else if self == other { Some(std::cmp::Ordering::Equal) }
+        else { None }
+    }
+}
+impl Ord for PathData {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+    fn max(self, other: Self) -> Self
+        where
+            Self: Sized, {
+        if self > other { self }
+        else { other }
+    }
+    fn min(self, other: Self) -> Self
+        where
+            Self: Sized, {
+        if self < other { self }
+        else { other }
+    }
+    fn clamp(self, _min: Self, _max: Self) -> Self
+        where
+            Self: Sized, {
+        unimplemented!("don't")
     }
 }

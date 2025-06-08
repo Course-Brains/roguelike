@@ -14,6 +14,7 @@ enum Command {
     GetEnemyData(usize),
     ForceFlood,
     WakeAll,
+    OpenAllDoors,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -33,6 +34,7 @@ impl Command {
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
             "wake_all" => Ok(Command::WakeAll),
+            "open_all_doors" => Ok(Command::OpenAllDoors),
             _ => Err("unknown command".to_string())
         }
     }
@@ -75,6 +77,13 @@ impl Command {
             Command::WakeAll => {
                 for enemy in state.board.enemies.iter_mut() {
                     enemy.active = true;
+                }
+            }
+            Command::OpenAllDoors => {
+                for piece in state.board.inner.iter_mut() {
+                    if let Some(crate::board::Piece::Door(door)) = piece {
+                        door.open = true;
+                    }
                 }
             }
         }

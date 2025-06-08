@@ -1,7 +1,7 @@
 mod player;
 use player::Player;
 mod board;
-use board::Board;
+use board::{Board, Piece};
 mod style;
 use style::Style;
 mod input;
@@ -44,15 +44,30 @@ fn main() {
 
     let _weirdifier = Weirdifier::new();
     let mut state = State {
-        player: Player::new(Vector::new(3, 3)),
+        player: Player::new(Vector::new(11, 11)),
         board: Board::new(1000, 1000, 45, 15),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
     let mut event_handler = EventHandler::new();
-    state.board.make_room(Vector::new(1,1), Vector::new(30,30));
-    state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: false }));
-    state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
+    //state.board.make_room(Vector::new(1,1), Vector::new(30,30));
+    //state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: false }));
+    //state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
+    for x in 1..=10 {
+        for y in 1..=10 {
+            state.board.make_room(
+                Vector::new(x*10,y*10),
+                Vector::new(x*10+11, y*10+11)
+            );
+            state.board.enemies.push(Enemy::new(Vector::new(x*10+5, y*10+5), enemy::Variant::Basic));
+            if x != 1 {
+            state.board[Vector::new(x*10,y*10+5)]=Some(board::Piece::Door(pieces::door::Door{open:false}));
+            }
+            if y != 1 {
+            state.board[Vector::new(x*10+5,y*10)]=Some(board::Piece::Door(pieces::door::Door{open:false}));
+            }
+        }
+    }
     state.board.flood(state.player.pos);
     state.render();
     loop {
@@ -120,6 +135,7 @@ fn main() {
                         if enemy.attacked() {
                             state.player.on_kill(state.board.enemies.swap_remove(index).variant)
                         }
+                        state.think();
                         state.turn += 1;
                         state.render();
                         break
@@ -152,9 +168,17 @@ fn main() {
                 state.turn += 1;
                 state.render()
             }
-            Input::Enter => break,
+            Input::Enter => {
+                if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
+                    door.open = !door.open;
+                    state.think();
+                    state.turn += 1;
+                    state.render();
+                    RE_FLOOD.store(true, Ordering::Relaxed)
+                }
+            },
         }
-        if RE_FLOOD.swap(false, Ordering::SeqCst) {
+        if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
         }
     }

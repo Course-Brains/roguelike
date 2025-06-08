@@ -12,7 +12,7 @@ pub struct Board {
     pub y: usize,
     pub render_x: usize, // the offset from the player to the edge of the screen(think radius)
     pub render_y: usize,
-    inner: Vec<Option<Piece>>,
+    pub inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Enemy>
 }

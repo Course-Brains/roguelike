@@ -106,9 +106,11 @@ fn main() {
             Input::Arrow(direction) => {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
+                    let base = state.get_render_base(state.player.pos);
                     state.player.reposition_cursor(
                         state.board.has_background(state.player.selector),
-                        state.player.pos
+                        base.x..base.x+state.board.render_x*2,
+                        base.y..base.y+state.board.render_y*2
                     );
                 }
             }
@@ -139,7 +141,11 @@ fn main() {
             },
             Input::Return => {
                 state.player.selector = state.player.pos;
-                state.player.reposition_cursor(false, state.player.pos);
+                let base = state.get_render_base(state.player.pos);
+                state.player.reposition_cursor(false,
+                    base.x..base.x+state.board.render_x*2,
+                    base.y..base.y+state.board.render_y*2
+                );
             },
             Input::Wait => {
                 state.think();
@@ -214,7 +220,11 @@ impl State {
         self.board.render(base);
         self.player.draw(&self.board, base);
         self.draw_turn();
-        self.player.reposition_cursor(self.board.has_background(self.player.selector), base);
+        self.player.reposition_cursor(
+            self.board.has_background(self.player.selector),
+            base.x..base.x+self.board.render_x*2,
+            base.y..base.y+self.board.render_y*2
+        );
     }
     fn get_render_base(&self, center: Vector) -> Vector {
         let mut out = center;

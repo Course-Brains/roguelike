@@ -1,5 +1,6 @@
 use crate::{Vector, Style, Direction, Board};
 use std::io::Write;
+use std::ops::Range;
 const SYMBOL: char = '@';
 const STYLE: Style = *Style::new().cyan().intense(true); 
 #[derive(Debug)]
@@ -63,13 +64,15 @@ impl Player {
             self.energy
         ).unwrap();
     }
-    pub fn reposition_cursor(&mut self, underscore: bool, base: Vector) {
-        if self.selector.x < base.x { self.selector.x = base.x }
-        if self.selector.y < base.y { self.selector.y = base.y }
+    pub fn reposition_cursor(&mut self, underscore: bool, x_range: Range<usize>, y_range: Range<usize>) {
+        if self.selector.x < x_range.start { self.selector.x = x_range.start }
+        else if self.selector.x > x_range.end { self.selector.x = x_range.end-1 }
+        if self.selector.y < y_range.start { self.selector.y = y_range.start }
+        else if self.selector.y > y_range.end { self.selector.y = y_range.end-1 }
         crossterm::execute!(std::io::stdout(),
             crossterm::cursor::MoveTo(
-                (self.selector.x-base.x) as u16,
-                (self.selector.y-base.y) as u16
+                (self.selector.x-x_range.start) as u16,
+                (self.selector.y-y_range.start) as u16
             )
         ).unwrap();
         if underscore {

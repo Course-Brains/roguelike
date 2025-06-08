@@ -5,7 +5,7 @@ use crate::{Vector,
     Enemy,
 };
 use std::io::Write;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashSet, HashMap, VecDeque};
 use std::ops::Range;
 pub struct Board {
     pub x: usize,
@@ -94,12 +94,28 @@ impl Board {
         false
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
+        let start = std::time::Instant::now();
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
+        let elapsed = start.elapsed();
+        crate::log!("calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
+        let start = std::time::Instant::now();
+        let mut to_visit: BinaryHeap<PathData> = BinaryHeap::new();
+        let mut visited = HashSet::new();
         for enemy in self.enemies.iter() {
-            let mut to_visit = BinaryHeap::new();
-            let mut visited = HashSet::new();
+            if !enemy.reachable { continue }
+            if self.backtraces[self.to_index(enemy.pos)].cost.is_some() { continue }
+            let mut new_to_visit = BinaryHeap::new();
+            for path_data in to_visit.iter() {
+                new_to_visit.push(PathData::new(
+                    path_data.from,
+                    path_data.pos,
+                    enemy.pos,
+                    path_data.cost
+                ));
+            }
+            (to_visit, new_to_visit) = (new_to_visit, to_visit);
             to_visit.push(PathData::new(Direction::Up, player, enemy.pos, 0));
             while let Some(path_data) = to_visit.pop() {
                 let index = self.to_index(path_data.pos);
@@ -111,7 +127,7 @@ impl Board {
                 if visited.contains(&path_data.pos) { continue }
                 visited.insert(path_data.pos);
                 let adj = self.get_adjacent(path_data.pos);
-                if adj&0b0000_0001 != 0 {
+                if adj.up {
                     to_visit.push(PathData::new(
                         Direction::Down,
                         path_data.pos+Direction::Up,
@@ -119,7 +135,7 @@ impl Board {
                         path_data.cost+1
                     ));
                 }
-                if adj&0b0000_0010 != 0 {
+                if adj.down {
                     to_visit.push(PathData::new(
                         Direction::Up,
                         path_data.pos+Direction::Down,
@@ -127,7 +143,7 @@ impl Board {
                         path_data.cost+1
                     ))
                 }
-                if adj&0b0000_0100 != 0 {
+                if adj.left {
                     to_visit.push(PathData::new(
                         Direction::Right,
                         path_data.pos+Direction::Left,
@@ -135,7 +151,7 @@ impl Board {
                         path_data.cost+1
                     ))
                 }
-                if adj&0b0000_1000 != 0 {
+                if adj.right {
                     to_visit.push(PathData::new(
                         Direction::Left,
                         path_data.pos+Direction::Right,
@@ -145,31 +161,73 @@ impl Board {
                 }
             }
         }
+        let elapsed = start.elapsed();
+        crate::log!("calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
     }
-    fn get_adjacent(&self, pos: Vector) -> u8 {
-        // 8th: up
-        // 7th: down
-        // 6th: left
-        // 5th: right
-        let mut out = 0b0000_1111;
-        
-        if pos.y == 0 { out &= 0b0000_1110 }
+    fn get_adjacent(&self, pos: Vector) -> Adj {
+        let mut out = Adj::new(true);
+        if pos.y == 0 { out.up = false }
         else if let Some(piece) = self[pos+Direction::Up] {
-           if piece.has_collision() { out &= 0b0000_1110 }
+           if piece.has_collision() { out.up = false }
         }
-        if pos.y == self.y-1 { out &= 0b0000_1101 }
+        if pos.y >= self.y-1 { out.down = false }
         else if let Some(piece) = self[pos+Direction::Down] {
-            if piece.has_collision() { out &= 0b0000_1101 }
+            if piece.has_collision() { out.down = false }
         }
-        if pos.x == 0 { out &= 0b0000_1011 }
+        if pos.x == 0 { out.left = false }
         else if let Some(piece) = self[pos+Direction::Left] {
-            if piece.has_collision() { out &= 0b0000_1011 }
+            if piece.has_collision() { out.left = false }
         }
-        if pos.x == self.x-1 { out &= 0b0000_0111 }
+        if pos.x >= self.x-1 { out.right = false }
         else if let Some(piece) = self[pos+Direction::Right] {
-            if piece.has_collision() { out &= 0b0000_0111 }
+            if piece.has_collision() { out.right = false }
         }
         out
+    }
+    pub fn flood(&mut self, player: Vector) {
+        let mut lookup = HashMap::new();
+        for (index, enemy) in self.enemies.iter_mut().enumerate() {
+            enemy.reachable = false;
+            lookup.insert(enemy.pos, index);
+        }
+        let mut to_visit = VecDeque::new();
+        let mut seen = HashSet::new();
+        to_visit.push_front(player);
+        seen.insert(player);
+        while let Some(pos) = to_visit.pop_back() {
+            if let Some(index) = lookup.get(&pos) {
+                self.enemies[*index].reachable = true;
+            }
+            let adj = self.get_adjacent(pos);
+            if adj.up {
+                if pos.y == 0 { crate::log!("up at {pos}") }
+                if !seen.contains(&(pos+Direction::Up)) {
+                    to_visit.push_front(pos+Direction::Up);
+                    seen.insert(pos+Direction::Up);
+                }
+            }
+            if adj.down {
+                if pos.y >= self.y-1 { crate::log!("down at {pos}") }
+                if !seen.contains(&(pos+Direction::Down)) {
+                    to_visit.push_front(pos+Direction::Down);
+                    seen.insert(pos+Direction::Down);
+                }
+            }
+            if adj.left {
+                if pos.x == 0 { crate::log!("left at {pos}") }
+                if !seen.contains(&(pos+Direction::Left)) {
+                    to_visit.push_front(pos+Direction::Left);
+                    seen.insert(pos+Direction::Left);
+                }
+            }
+            if adj.right {
+                if pos.x >= self.x-1 { crate::log!("right at {pos}") }
+                if !seen.contains(&(pos+Direction::Right)) {
+                    to_visit.push_front(pos+Direction::Right);
+                    seen.insert(pos+Direction::Right);
+                }
+            }
+        }
     }
     fn to_index(&self, pos: Vector) -> usize {
         pos.y*self.x + pos.x
@@ -178,8 +236,8 @@ impl Board {
         for index in 0..self.enemies.len() {
             let enemy = &self.enemies[index];
             if !enemy.active { continue }
+            if !enemy.reachable { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }
-            if self.backtraces[self.to_index(enemy.pos)].cost.is_none() { continue }
             let new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
             if new_pos == player { continue }
             if self.has_collision(new_pos) { continue }
@@ -332,5 +390,21 @@ impl Ord for PathData {
         where
             Self: Sized, {
         unimplemented!("don't")
+    }
+}
+struct Adj {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+impl Adj {
+    fn new(state: bool) -> Adj {
+        Adj {
+            up: state,
+            down: state,
+            left: state,
+            right: state
+        }
     }
 }

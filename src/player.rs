@@ -43,7 +43,7 @@ impl Player {
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
         crossterm::queue!(lock,
-            crossterm::cursor::MoveTo(1, board.y as u16 + 1)
+            crossterm::cursor::MoveTo(1, (board.render_y*2) as u16 + 1)
         ).unwrap();
         write!(lock,
             "[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
@@ -54,7 +54,7 @@ impl Player {
     }
     fn draw_energy(&self, board: &Board, lock: &mut impl std::io::Write) {
         crossterm::queue!(lock,
-            crossterm::cursor::MoveTo(1, board.y as u16 + 2)
+            crossterm::cursor::MoveTo(1, (board.render_y*2) as u16 + 2)
         ).unwrap();
         write!(lock,
             "[\x1b[96m{}\x1b[0m{}] {}/3",

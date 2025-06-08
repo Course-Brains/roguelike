@@ -34,6 +34,9 @@ fn log(string: String) {
     }
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+static RE_FLOOD: AtomicBool = AtomicBool::new(false);
+
 fn main() {
     #[cfg(any(debug_assertions, feature = "force_log"))]
     LOG.lock().unwrap().write(File::create("log").unwrap());
@@ -41,7 +44,7 @@ fn main() {
 
     let _weirdifier = Weirdifier::new();
     let mut state = State {
-        player: Player::new(Vector::new(3, 3)),
+        player: Player::new(Vector::new(40, 3)),
         board: Board::new(1000, 1000, 45, 15),
         turn: 0,
     };
@@ -50,6 +53,7 @@ fn main() {
     state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: true }));
     state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
+    state.board.flood(state.player.pos);
     state.render();
     loop {
         event_handler.handle(&mut state);
@@ -143,6 +147,9 @@ fn main() {
                 state.render()
             }
             Input::Enter => break,
+        }
+        if RE_FLOOD.swap(false, Ordering::SeqCst) {
+            state.board.flood(state.player.pos);
         }
     }
 }

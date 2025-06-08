@@ -10,7 +10,9 @@ enum Command {
     Redraw,
     ListEnemies,
     Kill(usize),
-    Spawn(crate::enemy::Variant, Vector)
+    Spawn(crate::enemy::Variant, Vector),
+    GetEnemyData(usize),
+    ForceFlood,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -27,6 +29,8 @@ impl Command {
                 parse(iter.next())?,
                 parse_vector(iter.next(), iter.next())?
             )),
+            "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
+            "force_flood" => Ok(Command::ForceFlood),
             _ => Err("unknown command".to_string())
         }
     }
@@ -36,19 +40,13 @@ impl Command {
                 out.send(format!("{:#?}", state.player)).unwrap()
             }
             Command::SetHealth(health) => {
-                let prev = state.player.health;
                 state.player.health = health;
-                out.send(format!("health: {prev} -> {health}")).unwrap();
             }
             Command::SetEnergy(energy) => {
-                let prev = state.player.energy;
                 state.player.energy = energy;
-                out.send(format!("energy: {prev} -> {energy}")).unwrap();
             }
             Command::SetPos(new_pos) => {
-                let prev = state.player.pos;
                 state.player.pos = new_pos;
-                out.send(format!("pos: {prev} -> {new_pos}")).unwrap();
             }
             Command::Redraw => {
                 state.render();
@@ -61,10 +59,16 @@ impl Command {
                 out.send(result).unwrap();
             }
             Command::Kill(index) => {
-                out.send(format!("Removed enemy at {}", state.board.enemies.swap_remove(index).pos)).unwrap();
+                state.board.enemies.swap_remove(index);
             }
             Command::Spawn(variant, pos) => {
                 state.board.enemies.push(crate::enemy::Enemy::new(pos, variant));
+            }
+            Command::GetEnemyData(index) => {
+                out.send(format!("{:#?}", state.board.enemies[index])).unwrap();
+            }
+            Command::ForceFlood => {
+                crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::SeqCst);
             }
         }
     }

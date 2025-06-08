@@ -1,12 +1,13 @@
 use crate::{Vector, Player, board::BackTrace};
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
     stun: usize,
     windup: usize,
     pub pos: Vector,
-    pub active: bool
+    pub active: bool,
+    pub reachable: bool
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -16,7 +17,8 @@ impl Enemy {
             stun: 0,
             windup: 0,
             pos,
-            active: false
+            active: false,
+            reachable: false
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -96,7 +98,7 @@ impl Enemy {
         }
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Variant {
     Basic
 }

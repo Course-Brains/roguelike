@@ -13,6 +13,7 @@ enum Command {
     Spawn(crate::enemy::Variant, Vector),
     GetEnemyData(usize),
     ForceFlood,
+    WakeAll,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -31,6 +32,7 @@ impl Command {
             )),
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
+            "wake_all" => Ok(Command::WakeAll),
             _ => Err("unknown command".to_string())
         }
     }
@@ -69,6 +71,11 @@ impl Command {
             }
             Command::ForceFlood => {
                 crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            Command::WakeAll => {
+                for enemy in state.board.enemies.iter_mut() {
+                    enemy.active = true;
+                }
             }
         }
     }

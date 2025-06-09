@@ -133,6 +133,8 @@ fn main() {
                 }
             }
             Input::Attack => {
+                if state.player.pos.x.abs_diff(state.player.selector.x) > 1 { continue }
+                if state.player.pos.y.abs_diff(state.player.selector.y) > 1 { continue }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
                     if enemy.pos == state.player.selector {
                         if enemy.attacked() {
@@ -328,17 +330,11 @@ struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
         std::process::Command::new("stty").arg("-icanon").arg("-echo").status().unwrap();
-        crossterm::execute!(std::io::stdout(),
-            crossterm::terminal::EnterAlternateScreen
-        ).unwrap();
         Weirdifier
     }
 }
 impl Drop for Weirdifier {
     fn drop(&mut self) {
         std::process::Command::new("stty").arg("icanon").arg("echo").status().unwrap();
-        crossterm::execute!(std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen
-        ).unwrap();
     }
 }

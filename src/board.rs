@@ -59,6 +59,7 @@ impl Board {
                 }
             }
         }
+        write!(lock, "\x1b[B\x1b[2K").unwrap();
         self.draw_enemies(&mut lock, x_bound, y_bound);
         // It may seem inefficient to have an intermediary buffer when stdout already
         // has one, but without this, there is a vsync type visual artifact

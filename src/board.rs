@@ -97,7 +97,6 @@ impl Board {
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
         let start = std::time::Instant::now();
-        //self.backtraces = vec![BackTrace::new(); self.x*self.y];
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
@@ -128,7 +127,7 @@ impl Board {
                 if path_data.pos == enemy.pos { break }
                 if visited.contains(&path_data.pos) { continue }
                 visited.insert(path_data.pos);
-                let adj = self.get_adjacent(path_data.pos);
+                let adj = self.get_adjacent(path_data.pos, Some(player));
                 if adj.up {
                     to_visit.push(PathData::new(
                         Direction::Down,
@@ -166,7 +165,7 @@ impl Board {
         let elapsed = start.elapsed();
         crate::log!("path calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
     }
-    fn get_adjacent(&self, pos: Vector) -> Adj {
+    fn get_adjacent(&self, pos: Vector, player: Option<Vector>) -> Adj {
         let mut out = Adj::new(true);
 
         if pos.y == 0 { out.up = false }
@@ -189,6 +188,17 @@ impl Board {
             if piece.has_collision() { out.right = false }
         }
 
+        if let Some(player) = player {
+            if pos.x.abs_diff(player.x) < 2 && pos.y.abs_diff(player.y) < 2 {
+                for enemy in self.enemies.iter() {
+                    if enemy.pos == pos+Direction::Up { out.up = false }
+                    else if enemy.pos == pos+Direction::Down { out.down = false }
+                    else if enemy.pos == pos+Direction::Left { out.left = false }
+                    else if enemy.pos == pos+Direction::Right { out.right = false }
+                }
+            }
+        }
+
         out
     }
     pub fn flood(&mut self, player: Vector) {
@@ -206,7 +216,7 @@ impl Board {
             if let Some(index) = lookup.get(&pos) {
                 self.enemies[*index].reachable = true;
             }
-            let adj = self.get_adjacent(pos);
+            let adj = self.get_adjacent(pos, None);
             if adj.up {
                 if pos.y == 0 { crate::log!("up at {pos}") }
                 if !seen.contains(&(pos+Direction::Up)) {

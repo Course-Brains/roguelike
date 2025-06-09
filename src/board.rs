@@ -106,20 +106,19 @@ impl Board {
         let start = std::time::Instant::now();
         let mut to_visit: BinaryHeap<PathData> = BinaryHeap::new();
         let mut visited = HashSet::new();
+        to_visit.push(PathData::new(
+            Direction::Up,
+            player,
+            self.enemies[0].pos,
+            0
+        ));
         for enemy in self.enemies.iter() {
             if !enemy.reachable { continue }
             if self.backtraces[self.to_index(enemy.pos)].cost.is_some() { continue }
-            let mut new_to_visit = BinaryHeap::new();
-            for path_data in to_visit.iter() {
-                new_to_visit.push(PathData::new(
-                    path_data.from,
-                    path_data.pos,
-                    enemy.pos,
-                    path_data.cost
-                ));
-            }
-            (to_visit, new_to_visit) = (new_to_visit, to_visit);
-            to_visit.push(PathData::new(Direction::Up, player, enemy.pos, 0));
+            to_visit = to_visit.iter().map(|item| 
+                PathData::new(item.from, item.pos, enemy.pos, item.cost)
+            ).collect();
+            
             while let Some(path_data) = to_visit.pop() {
                 let index = self.to_index(path_data.pos);
                 if self.backtraces[index].cost.is_none_or(|cost| cost > path_data.cost) {
@@ -169,22 +168,27 @@ impl Board {
     }
     fn get_adjacent(&self, pos: Vector) -> Adj {
         let mut out = Adj::new(true);
+
         if pos.y == 0 { out.up = false }
         else if let Some(piece) = self[pos+Direction::Up] {
            if piece.has_collision() { out.up = false }
         }
+
         if pos.y >= self.y-1 { out.down = false }
         else if let Some(piece) = self[pos+Direction::Down] {
             if piece.has_collision() { out.down = false }
         }
+
         if pos.x == 0 { out.left = false }
         else if let Some(piece) = self[pos+Direction::Left] {
             if piece.has_collision() { out.left = false }
         }
+
         if pos.x >= self.x-1 { out.right = false }
         else if let Some(piece) = self[pos+Direction::Right] {
             if piece.has_collision() { out.right = false }
         }
+
         out
     }
     pub fn flood(&mut self, player: Vector) {

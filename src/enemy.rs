@@ -47,6 +47,7 @@ impl Enemy {
     // returns whether or not it was killed
     pub fn attacked(&mut self) -> bool {
         self.health -= 1;
+        self.active = true;
         self.health == 0
     }
     pub fn think(&mut self, board_size: Vector, backtraces: &Vec<BackTrace>, player: &mut Player) {
@@ -63,25 +64,7 @@ impl Enemy {
             self.stun -= 1;
             return
         }
-        let mut x_range = self.pos.x as isize-1..=self.pos.x as isize+1;
-        let mut y_range = self.pos.y as isize-1..=self.pos.y as isize+1;
-        if self.pos.x == 0 {
-            let (low, high) = x_range.into_inner();
-            x_range = std::ops::RangeInclusive::new(low+1, high)
-        }
-        if self.pos.x == board_size.x-2 {
-            let (low, high) = x_range.into_inner();
-            x_range = std::ops::RangeInclusive::new(low, high-1);
-        }
-        if self.pos.y == 0 {
-            let (low, high) = y_range.into_inner();
-            y_range = std::ops::RangeInclusive::new(low+1, high)
-        }
-        if self.pos.y == board_size.y-2 {
-            let (low, high) = y_range.into_inner();
-            y_range = std::ops::RangeInclusive::new(low, high-1)
-        }
-        if x_range.contains(&(player.pos.x as isize)) && y_range.contains(&(player.pos.y as isize)) {
+        if player.pos.x.abs_diff(self.pos.x) < 2 && player.pos.y.abs_diff(self.pos.y) < 2 {
             if self.windup == 0 {
                 self.windup = self.variant.windup();
                 return

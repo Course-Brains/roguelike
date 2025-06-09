@@ -172,29 +172,46 @@ impl Board {
         else if let Some(piece) = self[pos+Direction::Up] {
            if piece.has_collision() { out.up = false }
         }
+        else if let Some(player) = player {
+            if player.x.abs_diff((pos+Direction::Up).x) < 2 {
+                if player.y.abs_diff((pos+Direction::Up).y) < 2 {
+                    if self.contains_enemy(pos+Direction::Up) { out.up = false }
+                }
+            }
+        }
 
         if pos.y >= self.y-1 { out.down = false }
         else if let Some(piece) = self[pos+Direction::Down] {
             if piece.has_collision() { out.down = false }
+        }
+        else if let Some(player) = player {
+            if player.x.abs_diff((pos+Direction::Down).x) < 2 {
+                if player.y.abs_diff((pos+Direction::Down).y) < 2 {
+                    if self.contains_enemy(pos+Direction::Down) { out.down = false }
+                }
+            }
         }
 
         if pos.x == 0 { out.left = false }
         else if let Some(piece) = self[pos+Direction::Left] {
             if piece.has_collision() { out.left = false }
         }
+        else if let Some(player) = player {
+            if player.x.abs_diff((pos+Direction::Left).x) < 2 {
+                if player.y.abs_diff((pos+Direction::Left).y) < 2 {
+                    if self.contains_enemy(pos+Direction::Left) { out.left = false }
+                }
+            }
+        }
 
         if pos.x >= self.x-1 { out.right = false }
         else if let Some(piece) = self[pos+Direction::Right] {
             if piece.has_collision() { out.right = false }
         }
-
-        if let Some(player) = player {
-            if pos.x.abs_diff(player.x) < 2 && pos.y.abs_diff(player.y) < 2 {
-                for enemy in self.enemies.iter() {
-                    if enemy.pos == pos+Direction::Up { out.up = false }
-                    else if enemy.pos == pos+Direction::Down { out.down = false }
-                    else if enemy.pos == pos+Direction::Left { out.left = false }
-                    else if enemy.pos == pos+Direction::Right { out.right = false }
+        else if let Some(player) = player {
+            if player.x.abs_diff((pos+Direction::Right).x) < 2 {
+                if player.y.abs_diff((pos+Direction::Right).y) < 2 {
+                    if self.contains_enemy(pos+Direction::Right) { out.right = false }
                 }
             }
         }
@@ -278,6 +295,12 @@ impl Board {
         if let Some(piece) = self[pos] {
             if piece.has_collision() { return true }
         }
+        for enemy in self.enemies.iter() {
+            if enemy.pos == pos { return true }
+        }
+        false
+    }
+    pub fn contains_enemy(&self, pos: Vector) -> bool {
         for enemy in self.enemies.iter() {
             if enemy.pos == pos { return true }
         }

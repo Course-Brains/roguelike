@@ -29,17 +29,18 @@ impl Player {
             focus: Focus::Player
         }
     }
-    pub fn draw(&self, board: &Board, base: Vector) {
+    pub fn draw(&self, board: &Board, x_range: Range<usize>, y_range: Range<usize>) {
         let mut lock = std::io::stdout().lock();
-        self.draw_player(&mut lock, base);
+        self.draw_player(&mut lock, x_range, y_range);
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock)
     }
-    fn draw_player(&self, lock: &mut impl std::io::Write, base: Vector) {
+    fn draw_player(&self, lock: &mut impl std::io::Write, x_range: Range<usize>, y_range: Range<usize>) {
+        if !(x_range.contains(&self.pos.x) && y_range.contains(&self.pos.y)) { return }
         crossterm::queue!(lock,
             crossterm::cursor::MoveTo(
-                (self.pos.x-base.x) as u16,
-                (self.pos.y-base.y) as u16
+                (self.pos.x-x_range.start) as u16,
+                (self.pos.y-y_range.start) as u16
             )
         ).unwrap();
         write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();

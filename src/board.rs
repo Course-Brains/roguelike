@@ -34,13 +34,14 @@ impl Board {
     // returns whether or not the cursor has a background behind it
     pub fn render(&self, base: Vector) {
         let mut lock = std::collections::VecDeque::new();
-        crossterm::queue!(lock,
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
-        ).unwrap();
         let x_bound = base.x..base.x+(self.render_x*2);
         let y_bound = base.y..base.y+(self.render_y*2);
-        for x in x_bound.clone() {
-            for y in y_bound.clone() {
+        for y in y_bound.clone() {
+            crossterm::queue!(lock,
+                crossterm::cursor::MoveTo(0, (y-y_bound.start) as u16)
+            ).unwrap();
+            write!(lock, "\x1b[2K").unwrap();
+            for x in x_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
                     let (ch, style) = piece.render(Vector::new(x,y), self);
                     crossterm::queue!(lock,
@@ -94,10 +95,13 @@ impl Board {
         false
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
+        let start = std::time::Instant::now();
         //self.backtraces = vec![BackTrace::new(); self.x*self.y];
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
+        let elapsed = start.elapsed();
+        crate::log!("clear path time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
         let start = std::time::Instant::now();
         let mut to_visit: BinaryHeap<PathData> = BinaryHeap::new();
         let mut visited = HashSet::new();

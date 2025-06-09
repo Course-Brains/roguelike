@@ -248,13 +248,15 @@ impl State {
     }
     fn render(&mut self) {
         let base = self.get_render_base(self.player.get_focus());
+        let x_range = base.x..base.x+self.board.render_x*2;
+        let y_range = base.y..base.y+self.board.render_y*2;
         self.board.render(base);
-        self.player.draw(&self.board, base);
+        self.player.draw(&self.board, x_range.clone(), y_range.clone());
         self.draw_turn();
         self.player.reposition_cursor(
             self.board.has_background(self.player.selector),
-            base.x..base.x+self.board.render_x*2,
-            base.y..base.y+self.board.render_y*2
+            x_range,
+            y_range
         );
     }
     fn get_render_base(&self, center: Vector) -> Vector {
@@ -326,11 +328,17 @@ struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
         std::process::Command::new("stty").arg("-icanon").arg("-echo").status().unwrap();
+        crossterm::execute!(std::io::stdout(),
+            crossterm::terminal::EnterAlternateScreen
+        ).unwrap();
         Weirdifier
     }
 }
 impl Drop for Weirdifier {
     fn drop(&mut self) {
         std::process::Command::new("stty").arg("icanon").arg("echo").status().unwrap();
+        crossterm::execute!(std::io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen
+        ).unwrap();
     }
 }

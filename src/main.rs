@@ -121,12 +121,15 @@ fn main() {
             Input::Arrow(direction) => {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
-                    let base = state.get_render_base(state.player.pos);
+                    let base = state.get_render_base(state.player.get_focus());
                     state.player.reposition_cursor(
                         state.board.has_background(state.player.selector),
                         base.x..base.x+state.board.render_x*2,
                         base.y..base.y+state.board.render_y*2
                     );
+                    if let player::Focus::Selector = state.player.focus {
+                        state.render();
+                    }
                 }
             }
             Input::Attack => {
@@ -167,6 +170,10 @@ fn main() {
                 state.think();
                 state.turn += 1;
                 state.render()
+            }
+            Input::SwapFocus => {
+                state.player.focus.cycle();
+                state.render();
             }
             Input::Enter => {
                 if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
@@ -240,7 +247,7 @@ impl State {
         }
     }
     fn render(&mut self) {
-        let base = self.get_render_base(self.player.pos);
+        let base = self.get_render_base(self.player.get_focus());
         self.board.render(base);
         self.player.draw(&self.board, base);
         self.draw_turn();

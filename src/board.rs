@@ -94,12 +94,10 @@ impl Board {
         false
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
-        let start = std::time::Instant::now();
+        //self.backtraces = vec![BackTrace::new(); self.x*self.y];
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
-        let elapsed = start.elapsed();
-        crate::log!("calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
         let start = std::time::Instant::now();
         let mut to_visit: BinaryHeap<PathData> = BinaryHeap::new();
         let mut visited = HashSet::new();
@@ -162,7 +160,7 @@ impl Board {
             }
         }
         let elapsed = start.elapsed();
-        crate::log!("calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
+        crate::log!("path calc time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
     }
     fn get_adjacent(&self, pos: Vector) -> Adj {
         let mut out = Adj::new(true);
@@ -185,6 +183,7 @@ impl Board {
         out
     }
     pub fn flood(&mut self, player: Vector) {
+        let start = std::time::Instant::now();
         let mut lookup = HashMap::new();
         for (index, enemy) in self.enemies.iter_mut().enumerate() {
             enemy.reachable = false;
@@ -228,6 +227,8 @@ impl Board {
                 }
             }
         }
+        let elapsed = start.elapsed();
+        crate::log!("flood time: {}({})", elapsed.as_millis(), elapsed.as_nanos())
     }
     fn to_index(&self, pos: Vector) -> usize {
         pos.y*self.x + pos.x

@@ -7,6 +7,7 @@ pub enum Input {
     Block, // block
     Return, // return cursor
     Wait, // do nothing
+    SwapFocus,
 }
 impl Input {
     pub fn get() -> Input {
@@ -37,6 +38,7 @@ impl Input {
                 b'q' => return Input::Attack,
                 b'e' => return Input::Block,
                 b'r' => return Input::Return,
+                b't' => return Input::SwapFocus,
                 b'\t' => return Input::Wait,
                 b'\n' => return Input::Enter,
                 _ => {}

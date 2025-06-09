@@ -12,7 +12,8 @@ pub struct Player {
     pub energy: usize,
     pub max_energy: usize,
     pub blocking: bool,
-    pub was_hit: bool
+    pub was_hit: bool,
+    pub focus: Focus
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -24,7 +25,8 @@ impl Player {
             energy: 3,
             max_energy: 3,
             blocking: false,
-            was_hit: false
+            was_hit: false,
+            focus: Focus::Player
         }
     }
     pub fn draw(&self, board: &Board, base: Vector) {
@@ -112,6 +114,25 @@ impl Player {
             else {
                 break
             }
+        }
+    }
+    pub fn get_focus(&self) -> Vector {
+        match self.focus {
+            Focus::Player => self.pos,
+            Focus::Selector => self.selector
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub enum Focus {
+    Player,
+    Selector
+}
+impl Focus {
+    pub fn cycle(&mut self) {
+        match self {
+            Focus::Player => *self = Focus::Selector,
+            Focus::Selector => *self = Focus::Player,
         }
     }
 }

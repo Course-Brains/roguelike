@@ -7,7 +7,8 @@ pub struct Enemy {
     windup: usize,
     pub pos: Vector,
     pub active: bool,
-    pub reachable: bool
+    pub reachable: bool,
+    pub attacking: bool,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -18,7 +19,8 @@ impl Enemy {
             windup: 0,
             pos,
             active: false,
-            reachable: false
+            reachable: false,
+            attacking: false
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -65,6 +67,7 @@ impl Enemy {
             return
         }
         if player.pos.x.abs_diff(self.pos.x) < 2 && player.pos.y.abs_diff(self.pos.y) < 2 {
+            self.attacking = true;
             if self.windup == 0 {
                 self.windup = self.variant.windup();
                 return
@@ -77,6 +80,7 @@ impl Enemy {
             }
         }
         else {
+            self.attacking = false;
             self.windup = 0;
         }
     }

@@ -276,6 +276,7 @@ impl Board {
             let enemy = &self.enemies[index];
             if !enemy.active { continue }
             if !enemy.reachable { continue }
+            if enemy.attacking { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }
             let mut new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
             if self.has_collision(new_pos) || crate::random()&0b0001_1111 == 0 {

@@ -273,8 +273,15 @@ impl Board {
     }
     pub fn move_enemies(&mut self, player: Vector) {
         for index in 0..self.enemies.len() {
+            if !self.enemies[index].active { continue }
+            for index_again in 0..self.enemies.len() {
+                if index_again == index { continue }
+                let pos = self.enemies[index_again].pos;
+                if self.enemies[index].is_near(pos, (crate::random()&7) as usize) {
+                    self.enemies[index_again].active = true;
+                }
+            }
             let enemy = &self.enemies[index];
-            if !enemy.active { continue }
             if !enemy.reachable { continue }
             if enemy.attacking { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }

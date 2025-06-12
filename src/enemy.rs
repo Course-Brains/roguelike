@@ -84,6 +84,9 @@ impl Enemy {
             self.windup = 0;
         }
     }
+    pub fn is_near(&self, pos: Vector, range: usize) -> bool {
+        self.pos.x.abs_diff(pos.x) < range && self.pos.y.abs_diff(pos.y) < range
+    }
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Variant {

@@ -50,7 +50,7 @@ impl Player {
             crossterm::cursor::MoveTo(1, (board.render_y*2) as u16 + 1)
         ).unwrap();
         write!(lock,
-            "[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
+            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
             "#".repeat(self.health),
             "-".repeat(self.max_health-self.health),
             self.health,
@@ -61,7 +61,7 @@ impl Player {
             crossterm::cursor::MoveTo(1, (board.render_y*2) as u16 + 2)
         ).unwrap();
         write!(lock,
-            "[\x1b[96m{}\x1b[0m{}] {}/3",
+            "\x1b2K[\x1b[96m{}\x1b[0m{}] {}/3",
             "#".repeat(self.energy*5),
             "-".repeat((self.max_energy-self.energy)*5),
             self.energy

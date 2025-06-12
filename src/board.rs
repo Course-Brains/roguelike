@@ -3,6 +3,7 @@ use crate::{Vector,
     pieces::{wall::Wall, door::Door},
     input::Direction,
     Enemy,
+    Random,
 };
 use std::io::Write;
 use std::collections::{BinaryHeap, HashSet, HashMap, VecDeque};
@@ -96,6 +97,7 @@ impl Board {
         false
     }
     pub fn generate_nav_data(&mut self, player: Vector) {
+        if self.enemies.len() == 0 { return }
         let start = std::time::Instant::now();
         for item in self.backtraces.iter_mut() {
             item.cost = None;
@@ -275,7 +277,40 @@ impl Board {
             if !enemy.active { continue }
             if !enemy.reachable { continue }
             if enemy.is_stunned() || enemy.is_windup() { continue }
-            let new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
+            let mut new_pos = enemy.pos+self.backtraces[self.to_index(enemy.pos)].from;
+            if self.has_collision(new_pos) || crate::random()&0b0001_1111 == 0 {
+                let mut new_dir = match self.backtraces[self.to_index(enemy.pos)].from {
+                    Direction::Up | Direction::Down => {
+                        if bool::random() { Direction::Left }
+                        else { Direction::Right }
+                    }
+                    Direction::Left | Direction::Right => {
+                        if bool::random() { Direction::Up }
+                        else { Direction::Down }
+                    }
+                };
+                if match new_dir {
+                    Direction::Up => {
+                        if enemy.pos.y == 0 { true }
+                        else { false }
+                    }
+                    Direction::Down => {
+                        if enemy.pos.y == self.y-1 { true }
+                        else { false }
+                    }
+                    Direction::Left => {
+                        if enemy.pos.x == 0 { true }
+                        else { false }
+                    }
+                    Direction::Right => {
+                        if enemy.pos.x == self.x-1 { true }
+                        else { false }
+                    }
+                } {
+                    new_dir = self.backtraces[self.to_index(enemy.pos)].from;
+                }
+                new_pos = enemy.pos+new_dir;
+            }
             if new_pos == player { continue }
             if self.has_collision(new_pos) { continue }
             self.enemies[index].pos = new_pos;

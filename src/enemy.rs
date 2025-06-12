@@ -71,7 +71,7 @@ impl Enemy {
             }
             self.windup -= 1;
             if self.windup == 0 {
-                if let Err(_) = player.attacked((crate::random()&0b0000_0011) as usize + 3) {
+                if let Err(_) = player.attacked((crate::random() & 0b0000_0011) as usize + 3) {
                     self.stun = self.variant.parry_stun();
                 }
             }

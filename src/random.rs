@@ -30,3 +30,11 @@ pub fn initialize() {
         Ordering::SeqCst
     )
 }
+pub trait Random {
+    fn random() -> Self;
+}
+impl Random for bool {
+    fn random() -> Self {
+        random()&0b0000_0001 == 1
+    }
+}

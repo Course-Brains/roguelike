@@ -10,7 +10,7 @@ mod pieces;
 mod enemy;
 use enemy::Enemy;
 mod random;
-use random::random;
+use random::{random, Random};
 mod commands;
 mod events;
 use events::EventHandler;
@@ -43,6 +43,9 @@ fn main() {
     random::initialize();
 
     let _weirdifier = Weirdifier::new();
+    crossterm::execute!(std::io::stdout(),
+        crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+    ).unwrap();
     let mut state = State {
         player: Player::new(Vector::new(11, 11)),
         board: Board::new(1000, 1000, 45, 15),

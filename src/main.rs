@@ -14,6 +14,8 @@ use random::{random, Random};
 mod commands;
 mod events;
 use events::EventHandler;
+mod generator;
+use generator::generate;
 
 use std::sync::Mutex;
 use std::mem::MaybeUninit;
@@ -48,7 +50,7 @@ fn main() {
     ).unwrap();
     let mut state = State {
         player: Player::new(Vector::new(11, 11)),
-        board: Board::new(1000, 1000, 45, 15),
+        board: generate(501, 501, 45, 15).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
@@ -56,7 +58,7 @@ fn main() {
     //state.board.make_room(Vector::new(1,1), Vector::new(30,30));
     //state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: false }));
     //state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
-    for x in 1..=10 {
+    /*for x in 1..=10 {
         for y in 1..=10 {
             state.board.make_room(
                 Vector::new(x*10,y*10),
@@ -70,7 +72,7 @@ fn main() {
             state.board[Vector::new(x*10+5,y*10)]=Some(board::Piece::Door(pieces::door::Door{open:false}));
             }
         }
-    }
+    }*/
     state.board.flood(state.player.pos);
     state.render();
     loop {
@@ -170,6 +172,7 @@ fn main() {
                     base.x..base.x+state.board.render_x*2,
                     base.y..base.y+state.board.render_y*2
                 );
+                state.render();
             },
             Input::Wait => {
                 state.think();

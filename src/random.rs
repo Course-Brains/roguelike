@@ -30,6 +30,9 @@ pub fn initialize() {
         Ordering::SeqCst
     )
 }
+pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
+    random()%(range.end-range.start) + range.start
+}
 pub trait Random {
     fn random() -> Self;
 }

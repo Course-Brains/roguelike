@@ -2,14 +2,14 @@ use std::ops::Range;
 use std::thread::JoinHandle;
 use std::rc::Rc;
 use std::cell::UnsafeCell;
-use crate::{Board, random, Vector, pieces::door::Door, board::Piece, pieces::wall::Wall};
+use crate::{Board, random, Vector, pieces::door::Door, board::Piece, pieces::wall::Wall, random_in_range, Enemy};
 use albatrice::debug;
 const INTERVAL: usize = 5;
 const MINIMUM: usize = 10;
-pub fn generate(x: usize, y: usize, render_x: usize, render_y: usize) -> JoinHandle<Board> {
+pub fn generate(x: usize, y: usize, render_x: usize, render_y: usize, budget: usize) -> JoinHandle<Board> {
     std::thread::spawn(move || {
         let start = std::time::Instant::now();
-        let mut room = Room::new(0..(x-1), 0..(y-1));
+        let mut room = Room::new(0..(x-1), 0..(y-1), budget);
         room.subdivide();
         room.fill_leaf_adjacents(&room.get_all_leafs());
         room.remove_extra_adjacents();
@@ -17,6 +17,7 @@ pub fn generate(x: usize, y: usize, render_x: usize, render_y: usize) -> JoinHan
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
         remove_edge_doors(&mut board);
+        room.place_enemies(&mut board);
         let elapsed = start.elapsed();
         crate::log!("Map gen time: {}({})", elapsed.as_millis(), elapsed.as_nanos());
         board
@@ -51,11 +52,12 @@ struct Room {
     up: Adjacent,
     down: Adjacent,
     left: Adjacent,
-    right: Adjacent
+    right: Adjacent,
+    budget: usize
     
 }
 impl Room {
-    fn new(x_bounds: Range<usize>, y_bounds: Range<usize>) -> Room {
+    fn new(x_bounds: Range<usize>, y_bounds: Range<usize>, budget: usize) -> Room {
         Room {
             x_bounds,
             y_bounds,
@@ -65,6 +67,7 @@ impl Room {
             down: Vec::new(),
             left: Vec::new(),
             right: Vec::new(),
+            budget
         }
     }
     fn subdivide(&mut self) {
@@ -103,29 +106,35 @@ impl Room {
         });
         if split_point - axis_bounds.start < MINIMUM { return }
         if axis_bounds.end - split_point < MINIMUM { return }
+        let ratio = (split_point-axis_bounds.start) as f32/axis_len as f32;
+        let split_budget = (self.budget as f32*ratio) as usize;
         match axis {
             Axis::Vertical => { // |
                 // left
                 self.sub_room1 = Some(Rc::new(UnsafeCell::new(Room::new(
                     self.x_bounds.start..split_point,
-                    self.y_bounds.clone()
+                    self.y_bounds.clone(),
+                    split_budget
                 ))));
                 // right
                 self.sub_room2 = Some(Rc::new(UnsafeCell::new(Room::new(
                     split_point..self.x_bounds.end,
-                    self.y_bounds.clone()
+                    self.y_bounds.clone(),
+                    self.budget-split_budget
                 ))));
             }
             Axis::Horizontal => { // -
                 // down
                 self.sub_room1 = Some(Rc::new(UnsafeCell::new(Room::new(
                     self.x_bounds.clone(),
-                    self.y_bounds.start..split_point
+                    self.y_bounds.start..split_point,
+                    split_budget
                 ))));
                 // up
                 self.sub_room2 = Some(Rc::new(UnsafeCell::new(Room::new(
                     self.x_bounds.clone(),
-                    split_point..self.y_bounds.end
+                    split_point..self.y_bounds.end,
+                    self.budget-split_budget
                 ))));
             }
         }
@@ -178,7 +187,6 @@ impl Room {
         else {
             out.push(this.unwrap());
         }
-
     }
     fn remove_extra_adjacents(&mut self) {
         if self.sub_room1.is_some() {
@@ -268,6 +276,25 @@ impl Room {
                     Vector::new(self.x_bounds.start, low.midpoint(high))
                 ] = Some(Piece::Door(Door { open: false }));
             }
+        }
+    }
+    fn place_enemies(&self, board: &mut Board) {
+        if self.sub_room1.is_some() {
+            unsafe {
+                self.sub_room1.as_ref().unwrap().get().as_ref().unwrap().place_enemies(board);
+                self.sub_room2.as_ref().unwrap().get().as_ref().unwrap().place_enemies(board);
+            }
+            return
+        }
+        'outer: for _ in 0..self.budget {
+            let pos = Vector::new(
+                random_in_range(0..(self.x_bounds.end-self.x_bounds.start-2) as u8) as usize + self.x_bounds.start + 1,
+                random_in_range(0..(self.y_bounds.end-self.y_bounds.start-2) as u8) as usize + self.y_bounds.start + 1
+            );
+            for enemy in board.enemies.iter() {
+                if enemy.pos == pos { continue 'outer }
+            }
+            board.enemies.push(Enemy::new(pos, crate::enemy::Variant::Basic));
         }
     }
 }

@@ -10,7 +10,7 @@ mod pieces;
 mod enemy;
 use enemy::Enemy;
 mod random;
-use random::{random, Random};
+use random::{random, Random, random_in_range};
 mod commands;
 mod events;
 use events::EventHandler;
@@ -50,7 +50,7 @@ fn main() {
     ).unwrap();
     let mut state = State {
         player: Player::new(Vector::new(11, 11)),
-        board: generate(501, 501, 45, 15).join().unwrap(),
+        board: generate(501, 501, 45, 15, 500).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();

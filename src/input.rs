@@ -1,12 +1,12 @@
 use std::io::Read;
 pub enum Input {
-    Arrow(Direction), // move cursor
+    Arrow(Direction),      // move cursor
     WASD(Direction, bool), // move character
-    Enter, // exit
-    Attack, // attack
-    Block, // block
-    Return, // return cursor
-    Wait, // do nothing
+    Enter,                 // exit
+    Attack,                // attack
+    Block,                 // block
+    Return,                // return cursor
+    Wait,                  // do nothing
     SwapFocus,
 }
 impl Input {
@@ -16,7 +16,8 @@ impl Input {
         loop {
             lock.read(&mut buf).unwrap();
             match buf[0] {
-                27 => { // escape byte
+                27 => {
+                    // escape byte
                     lock.read(&mut buf).unwrap();
                     lock.read(&mut buf).unwrap(); // actual data
                     match buf[0] {
@@ -51,16 +52,16 @@ pub enum Direction {
     Up,
     Down,
     Left,
-    Right
+    Right,
 }
 impl std::ops::Add<Direction> for crate::Vector {
     type Output = crate::Vector;
     fn add(self, rhs: Direction) -> Self::Output {
         match rhs {
-            Direction::Up => crate::Vector::new(self.x, self.y-1),
-            Direction::Down => crate::Vector::new(self.x, self.y+1),
-            Direction::Left => crate::Vector::new(self.x-1, self.y),
-            Direction::Right => crate::Vector::new(self.x+1, self.y)
+            Direction::Up => crate::Vector::new(self.x, self.y - 1),
+            Direction::Down => crate::Vector::new(self.x, self.y + 1),
+            Direction::Left => crate::Vector::new(self.x - 1, self.y),
+            Direction::Right => crate::Vector::new(self.x + 1, self.y),
         }
     }
 }
@@ -70,7 +71,7 @@ impl std::ops::AddAssign<Direction> for crate::Vector {
             Direction::Up => self.y -= 1,
             Direction::Down => self.y += 1,
             Direction::Left => self.x -= 1,
-            Direction::Right => self.x += 1
+            Direction::Right => self.x += 1,
         }
     }
 }
@@ -78,10 +79,10 @@ impl std::ops::Sub<Direction> for crate::Vector {
     type Output = crate::Vector;
     fn sub(self, rhs: Direction) -> Self::Output {
         match rhs {
-            Direction::Up => crate::Vector::new(self.x, self.y+1),
-            Direction::Down => crate::Vector::new(self.x, self.y-1),
-            Direction::Left => crate::Vector::new(self.x+1, self.y),
-            Direction::Right => crate::Vector::new(self.x-1, self.y)
+            Direction::Up => crate::Vector::new(self.x, self.y + 1),
+            Direction::Down => crate::Vector::new(self.x, self.y - 1),
+            Direction::Left => crate::Vector::new(self.x + 1, self.y),
+            Direction::Right => crate::Vector::new(self.x - 1, self.y),
         }
     }
 }
@@ -91,7 +92,7 @@ impl std::fmt::Display for Direction {
             Direction::Up => write!(f, "up"),
             Direction::Down => write!(f, "down"),
             Direction::Left => write!(f, "left"),
-            Direction::Right => write!(f, "right")
+            Direction::Right => write!(f, "right"),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{Vector, Player, board::BackTrace};
+use crate::{Player, Vector, board::BackTrace};
 #[derive(Clone, Copy, Debug)]
 pub struct Enemy {
     pub health: usize,
@@ -20,21 +20,26 @@ impl Enemy {
             pos,
             active: false,
             reachable: false,
-            attacking: false
+            attacking: false,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
         (
             match self.variant {
-                Variant::Basic => '1'
+                Variant::Basic => '1',
             },
             Some({
                 let mut out = crate::Style::new();
-                if self.active { out.yellow(); }
-                if self.stun > 0 { out.background_blue(); }
-                else if self.windup > 0 { out.background_red().intense_background(true); }
+                if self.active {
+                    out.yellow();
+                }
+                if self.stun > 0 {
+                    out.background_blue();
+                } else if self.windup > 0 {
+                    out.background_red().intense_background(true);
+                }
                 out
-            })
+            }),
         )
     }
     pub fn is_stunned(&self) -> bool {
@@ -54,23 +59,25 @@ impl Enemy {
     }
     pub fn think(&mut self, board_size: Vector, backtraces: &Vec<BackTrace>, player: &mut Player) {
         if !self.active {
-            match backtraces[board_size.x*self.pos.y + self.pos.x].cost {
+            match backtraces[board_size.x * self.pos.y + self.pos.x].cost {
                 Some(cost) => {
-                    if cost > (crate::random() & 0b0000_0111) as usize { return }
+                    if cost > (crate::random() & 0b0000_0111) as usize {
+                        return;
+                    }
                     self.active = true;
                 }
-                None => return
+                None => return,
             }
         }
         if self.stun != 0 {
             self.stun -= 1;
-            return
+            return;
         }
         if player.pos.x.abs_diff(self.pos.x) < 2 && player.pos.y.abs_diff(self.pos.y) < 2 {
             self.attacking = true;
             if self.windup == 0 {
                 self.windup = self.variant.windup();
-                return
+                return;
             }
             self.windup -= 1;
             if self.windup == 0 {
@@ -78,8 +85,7 @@ impl Enemy {
                     self.stun = self.variant.parry_stun();
                 }
             }
-        }
-        else {
+        } else {
             self.attacking = false;
             self.windup = 0;
         }
@@ -90,36 +96,36 @@ impl Enemy {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Variant {
-    Basic
+    Basic,
 }
 impl Variant {
     fn windup(self) -> usize {
         match self {
-            Variant::Basic => 1
+            Variant::Basic => 1,
         }
     }
     fn parry_stun(self) -> usize {
         match self {
-            Variant::Basic => 3
+            Variant::Basic => 3,
         }
     }
     fn dash_stun(self) -> usize {
         match self {
-            Variant::Basic => 1
+            Variant::Basic => 1,
         }
     }
     // returns kill reward in energy, then health
     // per energy
     pub fn kill_value(self) -> (usize, usize) {
         match self {
-            Variant::Basic => (1, 5)
+            Variant::Basic => (1, 5),
         }
     }
 }
 impl std::fmt::Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Variant::Basic => write!(f, "basic")
+            Variant::Basic => write!(f, "basic"),
         }
     }
 }
@@ -128,7 +134,7 @@ impl std::str::FromStr for Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "basic" => Ok(Variant::Basic),
-            _ => Err("invalid variant".to_string())
+            _ => Err("invalid variant".to_string()),
         }
     }
 }

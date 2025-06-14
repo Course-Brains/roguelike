@@ -3,7 +3,7 @@ pub struct Style {
     color: Color,
     intense: bool,
     background: Color,
-    intense_background: bool
+    intense_background: bool,
 }
 macro_rules! color {
     ($background: ident, $name:ident, $variant:ident) => {
@@ -15,7 +15,7 @@ macro_rules! color {
             self.background = Color::$variant;
             self
         }
-    }
+    };
 }
 impl Style {
     pub const fn new() -> Style {
@@ -23,7 +23,7 @@ impl Style {
             color: Color::Default,
             intense: false,
             background: Color::Default,
-            intense_background: false
+            intense_background: false,
         }
     }
     // assumes we start from [0m
@@ -50,7 +50,7 @@ impl Style {
     }
     pub const fn has_background(&self) -> bool {
         if let Color::Default = self.background {
-            return false
+            return false;
         }
         true
     }
@@ -82,10 +82,10 @@ pub enum Color {
     Purple,
     Cyan,
     White,
-    Default
+    Default,
 }
 impl Color {
-    fn to_num(self) -> Option<u8>{
+    fn to_num(self) -> Option<u8> {
         match self {
             Color::Black => Some(30),
             Color::Red => Some(31),

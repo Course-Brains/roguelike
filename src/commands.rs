@@ -1,7 +1,7 @@
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::net::TcpListener;
 use crate::{State, Vector};
-use albatrice::{ToBinary, FromBinary, Split};
+use albatrice::{FromBinary, Split, ToBinary};
+use std::net::TcpListener;
+use std::sync::mpsc::{Receiver, Sender, channel};
 enum Command {
     GetPlayerData,
     SetHealth(usize),
@@ -29,20 +29,18 @@ impl Command {
             "kill" => Ok(Command::Kill(parse(iter.next())?)),
             "spawn" => Ok(Command::Spawn(
                 parse(iter.next())?,
-                parse_vector(iter.next(), iter.next())?
+                parse_vector(iter.next(), iter.next())?,
             )),
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
             "wake_all" => Ok(Command::WakeAll),
             "open_all_doors" => Ok(Command::OpenAllDoors),
-            _ => Err("unknown command".to_string())
+            _ => Err("unknown command".to_string()),
         }
     }
     fn enact(self, state: &mut State, out: &mut Sender<String>) {
         match self {
-            Command::GetPlayerData => {
-                out.send(format!("{:#?}", state.player)).unwrap()
-            }
+            Command::GetPlayerData => out.send(format!("{:#?}", state.player)).unwrap(),
             Command::SetHealth(health) => {
                 state.player.health = health;
             }
@@ -66,10 +64,14 @@ impl Command {
                 state.board.enemies.swap_remove(index);
             }
             Command::Spawn(variant, pos) => {
-                state.board.enemies.push(crate::enemy::Enemy::new(pos, variant));
+                state
+                    .board
+                    .enemies
+                    .push(crate::enemy::Enemy::new(pos, variant));
             }
             Command::GetEnemyData(index) => {
-                out.send(format!("{:#?}", state.board.enemies[index])).unwrap();
+                out.send(format!("{:#?}", state.board.enemies[index]))
+                    .unwrap();
             }
             Command::ForceFlood => {
                 crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -91,15 +93,12 @@ impl Command {
 }
 pub struct CommandHandler {
     rx: Receiver<Command>,
-    tx: Sender<String>
+    tx: Sender<String>,
 }
 impl CommandHandler {
     pub fn new() -> CommandHandler {
         let (rx, tx) = listen();
-        CommandHandler {
-            rx,
-            tx
-        }
+        CommandHandler { rx, tx }
     }
     pub fn handle(&mut self, state: &mut State) {
         while let Ok(command) = self.rx.try_recv() {
@@ -112,12 +111,18 @@ fn listen() -> (Receiver<Command>, Sender<String>) {
     let (tx_out, rx_out) = channel::<String>();
     let error_tx = tx_out.clone();
     std::thread::spawn(|| {
-        let (mut read, mut write) = TcpListener::bind("127.0.0.1:5287").unwrap().accept().unwrap().0.split().unwrap();
+        let (mut read, mut write) = TcpListener::bind("127.0.0.1:5287")
+            .unwrap()
+            .accept()
+            .unwrap()
+            .0
+            .split()
+            .unwrap();
         std::thread::spawn(move || {
             loop {
                 match Command::new(String::from_binary(&mut read).unwrap()) {
                     Ok(command) => tx.send(command).unwrap(),
-                    Err(error) => error_tx.send(error).unwrap()
+                    Err(error) => error_tx.send(error).unwrap(),
                 }
             }
         });
@@ -131,12 +136,12 @@ fn listen() -> (Receiver<Command>, Sender<String>) {
 }
 fn parse<T: std::str::FromStr>(option: Option<&str>) -> Result<T, String>
 where
-    <T as std::str::FromStr>::Err: ToString
+    <T as std::str::FromStr>::Err: ToString,
 {
     match option.map(|x| x.parse()) {
         Some(Ok(t)) => Ok(t),
         Some(Err(error)) => Err(error.to_string()),
-        None => Err("Expected argument".to_string())
+        None => Err("Expected argument".to_string()),
     }
 }
 fn parse_vector(x: Option<&str>, y: Option<&str>) -> Result<Vector, String> {

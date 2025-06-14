@@ -1,20 +1,24 @@
-use std::collections::BinaryHeap;
 use crate::{State, log};
+use std::collections::BinaryHeap;
 
 pub struct EventHandler {
-    inner: BinaryHeap<Event>
+    inner: BinaryHeap<Event>,
 }
 impl EventHandler {
     pub const fn new() -> EventHandler {
         EventHandler {
-            inner: BinaryHeap::new()
+            inner: BinaryHeap::new(),
         }
     }
     pub fn handle(&mut self, state: &mut State) {
         loop {
             match self.inner.peek() {
-                Some(event) => if event.trigger > state.turn { return },
-                None => return
+                Some(event) => {
+                    if event.trigger > state.turn {
+                        return;
+                    }
+                }
+                None => return,
             }
             (self.inner.pop().unwrap().action)(state)
         }
@@ -22,7 +26,7 @@ impl EventHandler {
     pub fn push(&mut self, trigger: usize, action: impl Fn(&mut State) + 'static) {
         self.inner.push(Event {
             trigger,
-            action: Box::new(action)
+            action: Box::new(action),
         })
     }
 }
@@ -53,10 +57,15 @@ impl PartialOrd for Event {
         self.trigger.le(&other.trigger)
     }
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self == other { Some(std::cmp::Ordering::Equal) }
-        else if self < other { Some(std::cmp::Ordering::Less) }
-        else if self > other { Some(std::cmp::Ordering::Greater) }
-        else { None }
+        if self == other {
+            Some(std::cmp::Ordering::Equal)
+        } else if self < other {
+            Some(std::cmp::Ordering::Less)
+        } else if self > other {
+            Some(std::cmp::Ordering::Greater)
+        } else {
+            None
+        }
     }
 }
 impl Ord for Event {
@@ -64,23 +73,28 @@ impl Ord for Event {
         self.partial_cmp(other).unwrap()
     }
     fn max(self, other: Self) -> Self
-        where
-            Self: Sized, {
-        if self > other { self }
-        else { other }
+    where
+        Self: Sized,
+    {
+        if self > other { self } else { other }
     }
     fn min(self, other: Self) -> Self
-        where
-            Self: Sized, {
-        if self < other { self }
-        else { other }
+    where
+        Self: Sized,
+    {
+        if self < other { self } else { other }
     }
     fn clamp(self, min: Self, max: Self) -> Self
-        where
-            Self: Sized, {
-        if self > max { max }
-        else if self < min { min }
-        else { self }
+    where
+        Self: Sized,
+    {
+        if self > max {
+            max
+        } else if self < min {
+            min
+        } else {
+            self
+        }
     }
 }
 impl Eq for Event {}

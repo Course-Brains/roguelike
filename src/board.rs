@@ -32,16 +32,11 @@ impl Board {
     }
     // returns whether or not the cursor has a background behind it
     pub fn render(&self, base: Vector) {
-        let mut lock = std::collections::VecDeque::new();
+        let mut lock = std::io::stdout().lock();
+        crossterm::queue!(lock, crossterm::terminal::BeginSynchronizedUpdate, crossterm::terminal::Clear(crossterm::terminal::ClearType::All)).unwrap();
         let x_bound = base.x..base.x + (self.render_x * 2);
         let y_bound = base.y..base.y + (self.render_y * 2);
         for y in y_bound.clone() {
-            crossterm::queue!(
-                lock,
-                crossterm::cursor::MoveTo(0, (y - y_bound.start) as u16)
-            )
-            .unwrap();
-            write!(lock, "\x1b[2K").unwrap();
             for x in x_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
                     let (ch, style) = piece.render(Vector::new(x, y), self);
@@ -64,9 +59,8 @@ impl Board {
         }
         write!(lock, "\x1b[B\x1b[2K").unwrap();
         self.draw_enemies(&mut lock, x_bound, y_bound);
-        // It may seem inefficient to have an intermediary buffer when stdout already
-        // has one, but without this, there is a vsync type visual artifact
-        std::io::stdout().write_all(lock.make_contiguous()).unwrap();
+        crossterm::queue!(lock, crossterm::terminal::EndSynchronizedUpdate).unwrap();
+        lock.flush().unwrap();
     }
     fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {

@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 const INTERVAL: usize = 5;
 const MINIMUM: usize = 10;
+const MAXIMUM: usize = 100;
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
 pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
@@ -35,9 +36,9 @@ pub fn generate(
         room.place_enemies(&mut board);
         let elapsed = start.elapsed();
         crate::log!(
-            "Map gen time: {}({})",
-            elapsed.as_millis(),
-            elapsed.as_nanos()
+            "Map gen time: {}s({}ms)",
+            elapsed.as_secs(),
+            elapsed.as_millis()
         );
         board
     })
@@ -96,6 +97,7 @@ impl Room {
     fn subdivide(&mut self) {
         let x_len = self.x_bounds.end - self.x_bounds.start;
         let y_len = self.y_bounds.end - self.y_bounds.start;
+        let max = x_len > MAXIMUM || y_len > MAXIMUM;
         debug!({
             assert_eq!(x_len % INTERVAL, 0, "x_len = {x_len}");
             assert_eq!(y_len % INTERVAL, 0, "y_len = {y_len}");
@@ -110,9 +112,11 @@ impl Room {
             axis = Axis::Horizontal;
         }
         delay();
-        if random() & 0b0011_1111 == 0 {
-            // 1 in 64 to do the other axis instead
-            axis = !axis;
+        if max {
+            if random() & 0b0011_1111 == 0 {
+                // 1 in 64 to do the other axis instead
+                axis = !axis;
+            }
         }
         let axis_len = match axis {
             Axis::Vertical => x_len,
@@ -126,17 +130,23 @@ impl Room {
         if num_splits == 0 {
             return;
         }
-        delay();
-        let split_point = (random() % num_splits as u8 + 1) as usize * INTERVAL + axis_bounds.start;
-        debug!({
-            assert!(split_point > axis_bounds.start);
-            assert!(split_point < axis_bounds.end);
-        });
-        if split_point - axis_bounds.start < MINIMUM {
-            return;
-        }
-        if axis_bounds.end - split_point < MINIMUM {
-            return;
+        let mut split_point;
+        loop {
+            delay();
+            split_point = (random() % num_splits as u8 + 1) as usize * INTERVAL + axis_bounds.start;
+            debug!({
+                assert!(split_point > axis_bounds.start);
+                assert!(split_point < axis_bounds.end);
+            });
+            if split_point - axis_bounds.start < MINIMUM {
+                if max { continue }
+                return;
+            }
+            if axis_bounds.end - split_point < MINIMUM {
+                if max { continue }
+                return;
+            }
+            break
         }
         let ratio = (split_point - axis_bounds.start) as f32 / axis_len as f32;
         let split_budget = (self.budget as f32 * ratio) as usize;
@@ -324,29 +334,33 @@ impl Room {
             let low = self.x_bounds.start.max(up.borrow().x_bounds.start);
             let high = self.x_bounds.end.min(up.borrow().x_bounds.end);
             debug!(assert!(low < high));
+            delay();
             board[Vector::new(low.midpoint(high), self.y_bounds.end)] =
-                Some(Piece::Door(Door { open: false }));
+                Some(Piece::Door(Door { open: (random()&3) == 0 }));
         }
         for down in self.down.borrow().iter() {
             let low = self.x_bounds.start.max(down.borrow().x_bounds.start);
             let high = self.x_bounds.end.min(down.borrow().x_bounds.end);
             debug!(assert!(low < high));
+            delay();
             board[Vector::new(low.midpoint(high), self.y_bounds.start)] =
-                Some(Piece::Door(Door { open: false }));
+                Some(Piece::Door(Door { open: (random()&3) == 0 }));
         }
         for left in self.left.borrow().iter() {
             let low = self.y_bounds.start.max(left.borrow().y_bounds.start);
             let high = self.y_bounds.end.min(left.borrow().y_bounds.end);
             debug!(assert!(low < high));
+            delay();
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
-                Some(Piece::Door(Door { open: false }));
+                Some(Piece::Door(Door { open: (random()&3) == 0 }));
         }
         for right in self.right.borrow().iter() {
             let low = self.y_bounds.start.max(right.borrow().y_bounds.start);
             let high = self.y_bounds.end.min(right.borrow().y_bounds.end);
             debug!(assert!(low < high));
+            delay();
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
-                Some(Piece::Door(Door { open: false }));
+                Some(Piece::Door(Door { open: (random()&3) == 0 }));
         }
     }
     fn place_enemies(&self, board: &mut Board) {

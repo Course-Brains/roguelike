@@ -62,7 +62,7 @@ impl Player {
         .unwrap();
         write!(
             lock,
-            "[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
+            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
             "#".repeat(self.health),
             "-".repeat(self.max_health - self.health),
             self.health,
@@ -77,7 +77,7 @@ impl Player {
         .unwrap();
         write!(
             lock,
-            "[\x1b[96m{}\x1b[0m{}] {}/3",
+            "\x1b[2K[\x1b[96m{}\x1b[0m{}] {}/3",
             "#".repeat(self.energy * 5),
             "-".repeat((self.max_energy - self.energy) * 5),
             self.energy

@@ -50,30 +50,12 @@ fn main() {
     )
     .unwrap();
     let mut state = State {
-        player: Player::new(Vector::new(11, 11)),
-        board: generate(501, 501, 45, 15, 500).join().unwrap(),
+        player: Player::new(Vector::new(1, 1)),
+        board: generate(501, 501, 45, 15, 1000).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
     let mut event_handler = EventHandler::new();
-    //state.board.make_room(Vector::new(1,1), Vector::new(30,30));
-    //state.board[Vector::new(29, 15)] = Some(board::Piece::Door(pieces::door::Door{ open: false }));
-    //state.board.enemies.push(Enemy::new(Vector::new(10, 15), enemy::Variant::Basic));
-    /*for x in 1..=10 {
-        for y in 1..=10 {
-            state.board.make_room(
-                Vector::new(x*10,y*10),
-                Vector::new(x*10+11, y*10+11)
-            );
-            state.board.enemies.push(Enemy::new(Vector::new(x*10+5, y*10+5), enemy::Variant::Basic));
-            if x != 1 {
-            state.board[Vector::new(x*10,y*10+5)]=Some(board::Piece::Door(pieces::door::Door{open:false}));
-            }
-            if y != 1 {
-            state.board[Vector::new(x*10+5,y*10)]=Some(board::Piece::Door(pieces::door::Door{open:false}));
-            }
-        }
-    }*/
     state.board.flood(state.player.pos);
     state.render();
     loop {

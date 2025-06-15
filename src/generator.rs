@@ -7,9 +7,12 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use std::thread::JoinHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const INTERVAL: usize = 5;
 const MINIMUM: usize = 10;
+const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
 pub fn generate(
     x: usize,
@@ -17,6 +20,7 @@ pub fn generate(
     render_x: usize,
     render_y: usize,
     budget: usize,
+
 ) -> JoinHandle<Board> {
     std::thread::spawn(move || {
         let start = std::time::Instant::now();
@@ -56,6 +60,11 @@ fn remove_edge_doors(board: &mut Board) {
         if let Some(Piece::Door(_)) = board[Vector::new(0, y)] {
             board[Vector::new(0, y)] = Some(Piece::Wall(Wall {}));
         }
+    }
+}
+fn delay() {
+    if DO_DELAY.load(Ordering::SeqCst) {
+        std::thread::sleep(DELAY)
     }
 }
 type Adjacent = Vec<Rc<RefCell<Room>>>;
@@ -100,6 +109,7 @@ impl Room {
         } else {
             axis = Axis::Horizontal;
         }
+        delay();
         if random() & 0b0011_1111 == 0 {
             // 1 in 64 to do the other axis instead
             axis = !axis;
@@ -116,6 +126,7 @@ impl Room {
         if num_splits == 0 {
             return;
         }
+        delay();
         let split_point = (random() % num_splits as u8 + 1) as usize * INTERVAL + axis_bounds.start;
         debug!({
             assert!(split_point > axis_bounds.start);
@@ -353,6 +364,7 @@ impl Room {
             return;
         }
         'outer: for _ in 0..self.budget {
+            delay();
             let pos = Vector::new(
                 random_in_range(0..(self.x_bounds.end - self.x_bounds.start - 2) as u8) as usize
                     + self.x_bounds.start

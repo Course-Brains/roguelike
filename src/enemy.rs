@@ -1,4 +1,7 @@
-use crate::{Player, Vector, board::BackTrace};
+use crate::{Board, Player, Vector, board::BackTrace, style::Color};
+use std::cell::{RefCell, RefMut};
+use std::rc::Rc;
+const MAGE_RANGE: usize = 30;
 #[derive(Clone, Copy, Debug)]
 pub struct Enemy {
     pub health: usize,
@@ -13,7 +16,7 @@ pub struct Enemy {
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
         Enemy {
-            health: 3,
+            health: variant.max_health(),
             variant,
             stun: 0,
             windup: 0,
@@ -27,6 +30,7 @@ impl Enemy {
         (
             match self.variant {
                 Variant::Basic => '1',
+                Variant::Mage(_) => '2',
             },
             Some({
                 let mut out = crate::Style::new();
@@ -36,7 +40,8 @@ impl Enemy {
                 if self.stun > 0 {
                     out.background_blue();
                 } else if self.windup > 0 {
-                    out.background_red().intense_background(true);
+                    out.set_background(self.variant.windup_color())
+                        .intense_background(true);
                 }
                 out
             }),
@@ -57,37 +62,104 @@ impl Enemy {
         self.active = true;
         self.health == 0
     }
-    pub fn think(&mut self, board_size: Vector, backtraces: &Vec<BackTrace>, player: &mut Player) {
-        if !self.active {
-            match backtraces[board_size.x * self.pos.y + self.pos.x].cost {
-                Some(cost) => {
-                    if cost > (crate::random() & 0b0000_0111) as usize {
-                        return;
-                    }
-                    self.active = true;
-                }
-                None => return,
-            }
-        }
-        if self.stun != 0 {
-            self.stun -= 1;
-            return;
-        }
-        if player.pos.x.abs_diff(self.pos.x) < 2 && player.pos.y.abs_diff(self.pos.y) < 2 {
-            self.attacking = true;
-            if self.windup == 0 {
-                self.windup = self.variant.windup();
+    pub fn think(this: Rc<RefCell<Self>>, addr: usize, board: &mut Board, player: &mut Player) {
+        let mut this = this.borrow_mut();
+        if !this.active {
+            if this.variant.detect(&this, board) {
+                this.active = true;
+            } else {
                 return;
             }
-            self.windup -= 1;
-            if self.windup == 0 {
-                if let Err(_) = player.attacked((crate::random() & 0b0000_0011) as usize + 3) {
-                    self.stun = self.variant.parry_stun();
+        }
+        if this.stun != 0 {
+            this.stun -= 1;
+            return;
+        }
+        match this.variant {
+            Variant::Basic => {
+                if player.pos.x.abs_diff(this.pos.x) < 2 && player.pos.y.abs_diff(this.pos.y) < 2 {
+                    this.attacking = true;
+                    if this.windup == 0 {
+                        this.windup = 3;
+                        return;
+                    }
+                    this.windup -= 1;
+                    if this.windup == 0 {
+                        if let Err(_) =
+                            player.attacked((crate::random() & 0b0000_0011) as usize + 3)
+                        {
+                            this.stun = this.variant.parry_stun();
+                        }
+                    }
+                } else {
+                    this.attacking = false;
+                    this.windup = 0;
                 }
             }
-        } else {
-            self.attacking = false;
-            self.windup = 0;
+            Variant::Mage(cast_pos) => {
+                if this.is_near(player.pos, MAGE_RANGE) {
+                    this.attacking = true;
+                } else {
+                    this.attacking = false;
+                    this.windup = 0;
+                }
+                if this.windup > 1 {
+                    this.windup -= 1;
+                    return;
+                }
+                if this.windup == 1 {
+                    // cast time BAYBEEE
+                    if board[cast_pos].is_none() {
+                        board[cast_pos] = Some(crate::board::Piece::Spell);
+                    }
+                    this.windup = 0;
+                }
+                match crate::random() & 0b0000_0011 {
+                    0 => {
+                        // teleport
+                        let mut near = Vec::new();
+                        for enemy in board.enemies.iter() {
+                            if enemy.as_ptr().addr() == addr {
+                                continue;
+                            }
+                            let pos = enemy.borrow().pos;
+                            if pos.x.abs_diff(this.pos.x) < MAGE_RANGE
+                                && pos.y.abs_diff(this.pos.y) < MAGE_RANGE
+                            {
+                                near.push(enemy.clone());
+                            }
+                        }
+                        let target = match near.len() > 256 {
+                            true => near[crate::random() as usize].clone(),
+                            false => near[crate::random() as usize % (near.len() - 1)].clone(),
+                        };
+                        std::mem::swap(&mut target.borrow_mut().pos, &mut this.pos);
+                        crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    1 => {
+                        // Alert nearby enemies
+                        for enemy in board.enemies.iter_mut() {
+                            if enemy.as_ptr().addr() == addr {
+                                continue;
+                            }
+                            if enemy.borrow().is_near(this.pos, MAGE_RANGE) {
+                                enemy.borrow_mut().active = true;
+                            }
+                        }
+                    }
+                    2 => {
+                        // spell time
+                        if board[player.pos].is_none() {
+                            this.windup = 3;
+                            this.variant = Variant::Mage(player.pos);
+                        }
+                    }
+                    3 => {
+                        // do nothing
+                    }
+                    _ => unreachable!("Bit and seems to be broken"),
+                }
+            }
         }
     }
     pub fn is_near(&self, pos: Vector, range: usize) -> bool {
@@ -97,21 +169,44 @@ impl Enemy {
 #[derive(Clone, Copy, Debug)]
 pub enum Variant {
     Basic,
+    // cast position
+    Mage(Vector),
 }
 impl Variant {
-    fn windup(self) -> usize {
+    fn detect(self, enemy: &RefMut<Enemy>, board: &Board) -> bool {
         match self {
-            Variant::Basic => 1,
+            Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
+                Some(cost) => cost > (crate::random() & 0b0000_0111) as usize,
+                None => false,
+            },
+            Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
+                Some(cost) => cost > (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
+                None => false,
+            },
+        }
+    }
+    fn windup_color(self) -> Color {
+        match self {
+            Variant::Basic => Color::Red,
+            Variant::Mage(_) => Color::Purple,
+        }
+    }
+    fn max_health(self) -> usize {
+        match self {
+            Variant::Basic => 3,
+            Variant::Mage(_) => 5,
         }
     }
     fn parry_stun(self) -> usize {
         match self {
             Variant::Basic => 3,
+            Variant::Mage(_) => 0,
         }
     }
     fn dash_stun(self) -> usize {
         match self {
             Variant::Basic => 1,
+            Variant::Mage(_) => 2,
         }
     }
     // returns kill reward in energy, then health
@@ -119,6 +214,7 @@ impl Variant {
     pub fn kill_value(self) -> (usize, usize) {
         match self {
             Variant::Basic => (1, 5),
+            Variant::Mage(_) => (5, 5),
         }
     }
 }
@@ -126,6 +222,7 @@ impl std::fmt::Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Variant::Basic => write!(f, "basic"),
+            Variant::Mage(_) => write!(f, "mage"),
         }
     }
 }
@@ -134,6 +231,7 @@ impl std::str::FromStr for Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "basic" => Ok(Variant::Basic),
+            "mage" => Ok(Variant::Mage(Vector::new(0, 0))),
             _ => Err("invalid variant".to_string()),
         }
     }

@@ -48,6 +48,14 @@ impl Style {
             }
         }
     }
+    pub const fn set_color(&mut self, color: Color) -> &mut Self {
+        self.color = color;
+        self
+    }
+    pub const fn set_background(&mut self, color: Color) -> &mut Self {
+        self.background = color;
+        self
+    }
     pub const fn has_background(&self) -> bool {
         if let Color::Default = self.background {
             return false;

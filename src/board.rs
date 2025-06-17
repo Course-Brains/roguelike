@@ -1,11 +1,13 @@
 use crate::{
     Enemy, Random, Style, Vector,
     input::Direction,
-    pieces::{door::Door, wall::Wall},
+    pieces::{door::Door, spell::Spell, wall::Wall},
 };
+use std::cell::RefCell;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::ops::Range;
+use std::rc::Rc;
 pub struct Board {
     pub x: usize,
     pub y: usize,
@@ -13,7 +15,7 @@ pub struct Board {
     pub render_y: usize,
     pub inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
-    pub enemies: Vec<Enemy>,
+    pub enemies: Vec<Rc<RefCell<Enemy>>>,
 }
 impl Board {
     pub fn new(x: usize, y: usize, render_x: usize, render_y: usize) -> Board {
@@ -37,9 +39,11 @@ impl Board {
         let x_bound = base.x..base.x + (self.render_x * 2);
         let y_bound = base.y..base.y + (self.render_y * 2);
         for y in y_bound.clone() {
-            crossterm::queue!(lock,
-                crossterm::cursor::MoveTo(0, (y-y_bound.start) as u16)
-            ).unwrap();
+            crossterm::queue!(
+                lock,
+                crossterm::cursor::MoveTo(0, (y - y_bound.start) as u16)
+            )
+            .unwrap();
             write!(lock, "\x1b[2K").unwrap();
             for x in x_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
@@ -69,21 +73,21 @@ impl Board {
     }
     fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {
-            if !x_bound.contains(&enemy.pos.x) {
+            if !x_bound.contains(&enemy.borrow().pos.x) {
                 continue;
             }
-            if !y_bound.contains(&enemy.pos.y) {
+            if !y_bound.contains(&enemy.borrow().pos.y) {
                 continue;
             }
             crossterm::queue!(
                 lock,
                 crossterm::cursor::MoveTo(
-                    (enemy.pos.x - x_bound.start) as u16,
-                    (enemy.pos.y - y_bound.start) as u16
+                    (enemy.borrow().pos.x - x_bound.start) as u16,
+                    (enemy.borrow().pos.y - y_bound.start) as u16
                 )
             )
             .unwrap();
-            match enemy.render() {
+            match enemy.borrow().render() {
                 (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),
                 (ch, None) => write!(lock, "{ch}").unwrap(),
             }
@@ -100,8 +104,8 @@ impl Board {
             }
         }
         for enemy in self.enemies.iter() {
-            if enemy.pos == pos {
-                if let Some(style) = enemy.render().1 {
+            if enemy.borrow().pos == pos {
+                if let Some(style) = enemy.borrow().render().1 {
                     if style.has_background() {
                         return true;
                     }
@@ -128,17 +132,25 @@ impl Board {
         let start = std::time::Instant::now();
         let mut to_visit: BinaryHeap<PathData> = BinaryHeap::new();
         let mut visited = HashSet::new();
-        to_visit.push(PathData::new(Direction::Up, player, self.enemies[0].pos, 0));
+        to_visit.push(PathData::new(
+            Direction::Up,
+            player,
+            self.enemies[0].borrow().pos,
+            0,
+        ));
         for enemy in self.enemies.iter() {
-            if !enemy.reachable {
+            if !enemy.borrow().reachable {
                 continue;
             }
-            if self.backtraces[self.to_index(enemy.pos)].cost.is_some() {
+            if self.backtraces[self.to_index(enemy.borrow().pos)]
+                .cost
+                .is_some()
+            {
                 continue;
             }
             to_visit = to_visit
                 .iter()
-                .map(|item| PathData::new(item.from, item.pos, enemy.pos, item.cost))
+                .map(|item| PathData::new(item.from, item.pos, enemy.borrow().pos, item.cost))
                 .collect();
 
             while let Some(path_data) = to_visit.pop() {
@@ -150,19 +162,19 @@ impl Board {
                     self.backtraces[index].cost = Some(path_data.cost);
                     self.backtraces[index].from = path_data.from;
                 }
-                if path_data.pos == enemy.pos {
+                if path_data.pos == enemy.borrow().pos {
                     break;
                 }
                 if visited.contains(&path_data.pos) {
                     continue;
                 }
                 visited.insert(path_data.pos);
-                let adj = self.get_adjacent(path_data.pos, Some(player));
+                let adj = self.get_adjacent(path_data.pos, Some(player), true);
                 if adj.up {
                     to_visit.push(PathData::new(
                         Direction::Down,
                         path_data.pos + Direction::Up,
-                        enemy.pos,
+                        enemy.borrow().pos,
                         path_data.cost + 1,
                     ));
                 }
@@ -170,7 +182,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Up,
                         path_data.pos + Direction::Down,
-                        enemy.pos,
+                        enemy.borrow().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -178,7 +190,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Right,
                         path_data.pos + Direction::Left,
-                        enemy.pos,
+                        enemy.borrow().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -186,7 +198,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Left,
                         path_data.pos + Direction::Right,
-                        enemy.pos,
+                        enemy.borrow().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -199,14 +211,20 @@ impl Board {
             elapsed.as_nanos()
         );
     }
-    fn get_adjacent(&self, pos: Vector, player: Option<Vector>) -> Adj {
+    fn get_adjacent(&self, pos: Vector, player: Option<Vector>, enemy_collision: bool) -> Adj {
         let mut out = Adj::new(true);
 
         if pos.y == 0 {
             out.up = false
         } else if let Some(piece) = self[pos + Direction::Up] {
-            if piece.has_collision() {
-                out.up = false
+            if enemy_collision {
+                if piece.enemy_collision() {
+                    out.up = false
+                }
+            } else {
+                if piece.has_collision() {
+                    out.up = false
+                }
             }
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Up).x) < 2 {
@@ -221,8 +239,14 @@ impl Board {
         if pos.y >= self.y - 1 {
             out.down = false
         } else if let Some(piece) = self[pos + Direction::Down] {
-            if piece.has_collision() {
-                out.down = false
+            if enemy_collision {
+                if piece.enemy_collision() {
+                    out.down = false
+                }
+            } else {
+                if piece.has_collision() {
+                    out.down = false
+                }
             }
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Down).x) < 2 {
@@ -237,8 +261,14 @@ impl Board {
         if pos.x == 0 {
             out.left = false
         } else if let Some(piece) = self[pos + Direction::Left] {
-            if piece.has_collision() {
-                out.left = false
+            if enemy_collision {
+                if piece.enemy_collision() {
+                    out.left = false
+                }
+            } else {
+                if piece.has_collision() {
+                    out.left = false
+                }
             }
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Left).x) < 2 {
@@ -253,8 +283,14 @@ impl Board {
         if pos.x >= self.x - 1 {
             out.right = false
         } else if let Some(piece) = self[pos + Direction::Right] {
-            if piece.has_collision() {
-                out.right = false
+            if enemy_collision {
+                if piece.enemy_collision() {
+                    out.right = false
+                }
+            } else {
+                if piece.has_collision() {
+                    out.right = false
+                }
             }
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Right).x) < 2 {
@@ -272,8 +308,8 @@ impl Board {
         let start = std::time::Instant::now();
         let mut lookup = HashMap::new();
         for (index, enemy) in self.enemies.iter_mut().enumerate() {
-            enemy.reachable = false;
-            lookup.insert(enemy.pos, index);
+            enemy.borrow_mut().reachable = false;
+            lookup.insert(enemy.borrow().pos, index);
         }
         let mut to_visit = VecDeque::new();
         let mut seen = HashSet::new();
@@ -281,9 +317,9 @@ impl Board {
         seen.insert(player);
         while let Some(pos) = to_visit.pop_back() {
             if let Some(index) = lookup.get(&pos) {
-                self.enemies[*index].reachable = true;
+                self.enemies[*index].borrow_mut().reachable = true;
             }
-            let adj = self.get_adjacent(pos, None);
+            let adj = self.get_adjacent(pos, None, false);
             if adj.up {
                 if pos.y == 0 {
                     crate::log!("up at {pos}")
@@ -333,31 +369,37 @@ impl Board {
     }
     pub fn move_enemies(&mut self, player: Vector) {
         for index in 0..self.enemies.len() {
-            if !self.enemies[index].active {
+            if !self.enemies[index].borrow().active {
                 continue;
             }
             for index_again in 0..self.enemies.len() {
                 if index_again == index {
                     continue;
                 }
-                let pos = self.enemies[index_again].pos;
-                if self.enemies[index].is_near(pos, (crate::random() & 7) as usize) {
-                    self.enemies[index_again].active = true;
+                let pos = self.enemies[index_again].borrow().pos;
+                if self.enemies[index]
+                    .borrow()
+                    .is_near(pos, (crate::random() & 7) as usize)
+                {
+                    self.enemies[index_again].borrow_mut().active = true;
                 }
             }
             let enemy = &self.enemies[index];
-            if !enemy.reachable {
+            if !enemy.borrow().reachable {
                 continue;
             }
-            if enemy.attacking {
+            if enemy.borrow().attacking {
                 continue;
             }
-            if enemy.is_stunned() || enemy.is_windup() {
+            if enemy.borrow().is_stunned() || enemy.borrow().is_windup() {
                 continue;
             }
-            let mut new_pos = enemy.pos + self.backtraces[self.to_index(enemy.pos)].from;
-            if self.has_collision(new_pos) || crate::random() & 0b0001_1111 == 0 {
-                let mut new_dir = match self.backtraces[self.to_index(enemy.pos)].from {
+            let mut new_pos =
+                enemy.borrow().pos + self.backtraces[self.to_index(enemy.borrow().pos)].from;
+            if (self.enemy_collision(new_pos) && !self.contains_enemy(new_pos))
+                || crate::random() & 0b0001_1111 == 0
+            {
+                let mut new_dir = match self.backtraces[self.to_index(enemy.borrow().pos)].from {
                     Direction::Up | Direction::Down => {
                         if bool::random() {
                             Direction::Left
@@ -375,37 +417,37 @@ impl Board {
                 };
                 if match new_dir {
                     Direction::Up => {
-                        if enemy.pos.y == 0 {
+                        if enemy.borrow().pos.y == 0 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Down => {
-                        if enemy.pos.y == self.y - 1 {
+                        if enemy.borrow().pos.y == self.y - 1 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Left => {
-                        if enemy.pos.x == 0 {
+                        if enemy.borrow().pos.x == 0 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Right => {
-                        if enemy.pos.x == self.x - 1 {
+                        if enemy.borrow().pos.x == self.x - 1 {
                             true
                         } else {
                             false
                         }
                     }
                 } {
-                    new_dir = self.backtraces[self.to_index(enemy.pos)].from;
+                    new_dir = self.backtraces[self.to_index(enemy.borrow().pos)].from;
                 }
-                new_pos = enemy.pos + new_dir;
+                new_pos = enemy.borrow().pos + new_dir;
             }
             if new_pos == player {
                 continue;
@@ -413,7 +455,7 @@ impl Board {
             if self.has_collision(new_pos) {
                 continue;
             }
-            self.enemies[index].pos = new_pos;
+            self.enemies[index].borrow_mut().pos = new_pos;
         }
     }
     pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
@@ -433,15 +475,18 @@ impl Board {
             }
         }
         for enemy in self.enemies.iter() {
-            if enemy.pos == pos {
+            if enemy.borrow().pos == pos {
                 return true;
             }
         }
         false
     }
+    pub fn enemy_collision(&self, pos: Vector) -> bool {
+        self[pos].is_some_and(|piece| piece.enemy_collision())
+    }
     pub fn contains_enemy(&self, pos: Vector) -> bool {
         for enemy in self.enemies.iter() {
-            if enemy.pos == pos {
+            if enemy.borrow().pos == pos {
                 return true;
             }
         }
@@ -467,6 +512,49 @@ impl std::ops::IndexMut<Vector> for Board {
         &mut self.inner[index.y * self.x + index.x]
     }
 }
+pub struct ThreadBoard {
+    x: usize,
+    y: usize,
+    renx: usize,
+    reny: usize,
+    inner: Vec<Option<Piece>>,
+    backtraces: Vec<BackTrace>,
+    enemies: Vec<Enemy>,
+}
+impl ThreadBoard {
+    pub fn new(board: Board) -> ThreadBoard {
+        ThreadBoard {
+            x: board.x,
+            y: board.y,
+            renx: board.render_x,
+            reny: board.render_y,
+            inner: board.inner,
+            backtraces: board.backtraces,
+            enemies: board
+                .enemies
+                .into_iter()
+                .map(|enemy| {
+                    enemy.replace(Enemy::new(Vector::new(0, 0), crate::enemy::Variant::Basic))
+                })
+                .collect(),
+        }
+    }
+    pub fn to_board(self) -> Board {
+        Board {
+            x: self.x,
+            y: self.y,
+            render_x: self.renx,
+            render_y: self.reny,
+            inner: self.inner,
+            backtraces: self.backtraces,
+            enemies: self
+                .enemies
+                .into_iter()
+                .map(|enemy| Rc::new(RefCell::new(enemy)))
+                .collect(),
+        }
+    }
+}
 #[derive(Copy, Clone)]
 pub struct BackTrace {
     from: crate::Direction,
@@ -484,30 +572,42 @@ impl BackTrace {
 pub enum Piece {
     Wall(Wall),
     Door(Door),
+    Spell,
 }
 impl Piece {
     fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
         match self {
             Piece::Wall(_) => (Wall::render(pos, board), None),
             Piece::Door(door) => door.render(pos, board),
+            Piece::Spell => (Spell::SYMBOL, Some(Spell::STYLE)),
         }
     }
     fn has_collision(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
+            Piece::Spell => false,
         }
     }
     pub fn wall_connectable(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(_) => true,
+            Piece::Spell => false,
+        }
+    }
+    pub fn enemy_collision(&self) -> bool {
+        match self {
+            Piece::Wall(_) => true,
+            Piece::Door(door) => door.has_collision(),
+            Piece::Spell => true,
         }
     }
     fn dashable(&self) -> bool {
         match self {
             Piece::Wall(_) => false,
             Piece::Door(door) => !door.has_collision(),
+            Piece::Spell => true,
         }
     }
 }

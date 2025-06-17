@@ -56,7 +56,11 @@ impl Command {
             Command::ListEnemies => {
                 let mut result = String::new();
                 for (index, enemy) in state.board.enemies.iter().enumerate() {
-                    result += &format!("{index}: {} at {}\n", enemy.variant, enemy.pos);
+                    result += &format!(
+                        "{index}: {} at {}\n",
+                        enemy.borrow().variant,
+                        enemy.borrow().pos
+                    );
                 }
                 out.send(result).unwrap();
             }
@@ -67,7 +71,9 @@ impl Command {
                 state
                     .board
                     .enemies
-                    .push(crate::enemy::Enemy::new(pos, variant));
+                    .push(std::rc::Rc::new(std::cell::RefCell::new(
+                        crate::enemy::Enemy::new(pos, variant),
+                    )));
             }
             Command::GetEnemyData(index) => {
                 out.send(format!("{:#?}", state.board.enemies[index]))
@@ -78,7 +84,7 @@ impl Command {
             }
             Command::WakeAll => {
                 for enemy in state.board.enemies.iter_mut() {
-                    enemy.active = true;
+                    enemy.borrow_mut().active = true;
                 }
             }
             Command::OpenAllDoors => {

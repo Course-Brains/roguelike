@@ -51,7 +51,7 @@ fn main() {
     .unwrap();
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
-        board: generate(501, 501, 45, 15, 1000).join().unwrap(),
+        board: generate(501, 501, 45, 15, 1000).join().unwrap().to_board(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
@@ -142,11 +142,11 @@ fn main() {
                     continue;
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
-                    if enemy.pos == state.player.selector {
-                        if enemy.attacked() {
+                    if enemy.borrow().pos == state.player.selector {
+                        if enemy.borrow_mut().attacked() {
                             state
                                 .player
-                                .on_kill(state.board.enemies.swap_remove(index).variant)
+                                .on_kill(state.board.enemies.swap_remove(index).borrow().variant)
                         }
                         state.think();
                         state.turn += 1;
@@ -211,13 +211,13 @@ impl State {
     // returns if an enemy was hit
     fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
         for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
-            if enemy.pos == pos {
+            if enemy.borrow().pos == pos {
                 if dashstun {
-                    enemy.apply_dashstun()
+                    enemy.borrow_mut().apply_dashstun()
                 }
-                if enemy.attacked() {
+                if enemy.borrow_mut().attacked() {
                     self.player
-                        .on_kill(self.board.enemies.swap_remove(index).variant);
+                        .on_kill(self.board.enemies.swap_remove(index).borrow().variant);
                     if redrawable {
                         self.render()
                     }
@@ -261,10 +261,11 @@ impl State {
     fn think(&mut self) {
         self.board.generate_nav_data(self.player.pos);
         self.board.move_enemies(self.player.pos);
-        for enemy in self.board.enemies.iter_mut() {
-            enemy.think(
-                Vector::new(self.board.x, self.board.y),
-                &self.board.backtraces,
+        for enemy in self.board.enemies.clone().iter() {
+            Enemy::think(
+                enemy.clone(),
+                enemy.as_ptr().addr(),
+                &mut self.board,
                 &mut self.player,
             )
         }

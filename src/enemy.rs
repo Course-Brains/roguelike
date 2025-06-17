@@ -2,6 +2,7 @@ use crate::{Board, Player, Vector, board::BackTrace, style::Color};
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 const MAGE_RANGE: usize = 30;
+const TELE_THRESH: usize = 5;
 #[derive(Clone, Copy, Debug)]
 pub struct Enemy {
     pub health: usize,
@@ -96,7 +97,7 @@ impl Enemy {
                     this.windup = 0;
                 }
             }
-            Variant::Mage(cast_pos) => {
+            Variant::Mage(spell) => {
                 if this.is_near(player.pos, MAGE_RANGE) {
                     this.attacking = true;
                 } else {
@@ -109,32 +110,42 @@ impl Enemy {
                 }
                 if this.windup == 1 {
                     // cast time BAYBEEE
-                    if board[cast_pos].is_none() {
-                        board[cast_pos] = Some(crate::board::Piece::Spell);
+                    match spell {
+                        Spell::Circle(cast_pos) => {
+                            if board[cast_pos].is_none() {
+                                board[cast_pos] = Some(crate::board::Piece::Spell);
+                            }
+                            this.windup = 0;
+                        }
+                        Spell::Teleport => {
+                            let mut near = Vec::new();
+                            for enemy in board.enemies.iter() {
+                                if enemy.as_ptr().addr() == addr {
+                                    continue;
+                                }
+                                let pos = enemy.borrow().pos;
+                                if pos.x.abs_diff(this.pos.x) < MAGE_RANGE
+                                    && pos.y.abs_diff(this.pos.y) < MAGE_RANGE
+                                {
+                                    near.push(enemy.clone());
+                                }
+                            }
+                            let target = match near.len() > 256 {
+                                true => near[crate::random() as usize].clone(),
+                                false => near[crate::random() as usize % (near.len() - 1)].clone(),
+                            };
+                            std::mem::swap(&mut target.borrow_mut().pos, &mut this.pos);
+                            crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
                     }
-                    this.windup = 0;
                 }
                 match crate::random() & 0b0000_0011 {
                     0 => {
                         // teleport
-                        let mut near = Vec::new();
-                        for enemy in board.enemies.iter() {
-                            if enemy.as_ptr().addr() == addr {
-                                continue;
-                            }
-                            let pos = enemy.borrow().pos;
-                            if pos.x.abs_diff(this.pos.x) < MAGE_RANGE
-                                && pos.y.abs_diff(this.pos.y) < MAGE_RANGE
-                            {
-                                near.push(enemy.clone());
-                            }
+                        if this.is_near(player.pos, TELE_THRESH) {
+                            this.windup = 3;
+                            this.variant = Variant::Mage(Spell::Teleport);
                         }
-                        let target = match near.len() > 256 {
-                            true => near[crate::random() as usize].clone(),
-                            false => near[crate::random() as usize % (near.len() - 1)].clone(),
-                        };
-                        std::mem::swap(&mut target.borrow_mut().pos, &mut this.pos);
-                        crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     1 => {
                         // Alert nearby enemies
@@ -151,7 +162,7 @@ impl Enemy {
                         // spell time
                         if board[player.pos].is_none() {
                             this.windup = 3;
-                            this.variant = Variant::Mage(player.pos);
+                            this.variant = Variant::Mage(Spell::Circle(player.pos));
                         }
                     }
                     3 => {
@@ -170,7 +181,7 @@ impl Enemy {
 pub enum Variant {
     Basic,
     // cast position
-    Mage(Vector),
+    Mage(Spell),
 }
 impl Variant {
     fn detect(self, enemy: &RefMut<Enemy>, board: &Board) -> bool {
@@ -231,8 +242,13 @@ impl std::str::FromStr for Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "basic" => Ok(Variant::Basic),
-            "mage" => Ok(Variant::Mage(Vector::new(0, 0))),
+            "mage" => Ok(Variant::Mage(Spell::Teleport)),
             _ => Err("invalid variant".to_string()),
         }
     }
+}
+#[derive(Clone, Copy, Debug)]
+pub enum Spell {
+    Circle(Vector),
+    Teleport,
 }

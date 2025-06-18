@@ -1,6 +1,5 @@
-use crate::{Board, Player, Vector, board::BackTrace, style::Color};
-use std::cell::{RefCell, RefMut};
-use std::rc::Rc;
+use crate::{Board, Player, Vector, pieces::spell, style::Color};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
 #[derive(Clone, Copy, Debug)]
@@ -63,8 +62,8 @@ impl Enemy {
         self.active = true;
         self.health == 0
     }
-    pub fn think(this: Rc<RefCell<Self>>, addr: usize, board: &mut Board, player: &mut Player) {
-        let mut this = this.borrow_mut();
+    pub fn think(arc: Arc<RwLock<Self>>, addr: usize, board: &mut Board, player: &mut Player) {
+        let mut this = arc.write().unwrap();
         if !this.active {
             if this.variant.detect(&this, board) {
                 this.active = true;
@@ -113,17 +112,19 @@ impl Enemy {
                     match spell {
                         Spell::Circle(cast_pos) => {
                             if board[cast_pos].is_none() {
-                                board[cast_pos] = Some(crate::board::Piece::Spell);
+                                board[cast_pos] = Some(crate::board::Piece::Spell(
+                                    spell::Spell::new(Arc::downgrade(&arc)),
+                                ));
                             }
                             this.windup = 0;
                         }
                         Spell::Teleport => {
                             let mut near = Vec::new();
                             for enemy in board.enemies.iter() {
-                                if enemy.as_ptr().addr() == addr {
+                                if Arc::as_ptr(enemy).addr() == addr {
                                     continue;
                                 }
-                                let pos = enemy.borrow().pos;
+                                let pos = enemy.read().unwrap().pos;
                                 if pos.x.abs_diff(this.pos.x) < MAGE_RANGE
                                     && pos.y.abs_diff(this.pos.y) < MAGE_RANGE
                                 {
@@ -134,8 +135,9 @@ impl Enemy {
                                 true => near[crate::random() as usize].clone(),
                                 false => near[crate::random() as usize % (near.len() - 1)].clone(),
                             };
-                            std::mem::swap(&mut target.borrow_mut().pos, &mut this.pos);
+                            std::mem::swap(&mut target.write().unwrap().pos, &mut this.pos);
                             crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
+                            this.windup = 0;
                         }
                     }
                 }
@@ -150,11 +152,11 @@ impl Enemy {
                     1 => {
                         // Alert nearby enemies
                         for enemy in board.enemies.iter_mut() {
-                            if enemy.as_ptr().addr() == addr {
+                            if Arc::as_ptr(enemy).addr() == addr {
                                 continue;
                             }
-                            if enemy.borrow().is_near(this.pos, MAGE_RANGE) {
-                                enemy.borrow_mut().active = true;
+                            if enemy.read().unwrap().is_near(this.pos, MAGE_RANGE) {
+                                enemy.write().unwrap().active = true;
                             }
                         }
                     }
@@ -184,14 +186,14 @@ pub enum Variant {
     Mage(Spell),
 }
 impl Variant {
-    fn detect(self, enemy: &RefMut<Enemy>, board: &Board) -> bool {
+    fn detect(self, enemy: &RwLockWriteGuard<Enemy>, board: &Board) -> bool {
         match self {
             Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => cost > (crate::random() & 0b0000_0111) as usize,
+                Some(cost) => cost < (crate::random() & 0b0000_0111) as usize,
                 None => false,
             },
             Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => cost > (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
+                Some(cost) => cost < (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
                 None => false,
             },
         }

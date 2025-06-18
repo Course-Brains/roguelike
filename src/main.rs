@@ -51,7 +51,7 @@ fn main() {
     .unwrap();
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
-        board: generate(501, 501, 45, 15, 1000).join().unwrap().to_board(),
+        board: generate(501, 501, 45, 15, 1000).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
@@ -104,16 +104,16 @@ fn main() {
                     state.attack_enemy(state.player.pos + direction, false, true);
                     state.attack_enemy(checking - direction, false, true);
                     state.player.energy -= 1;
-                    state.player.do_move(direction);
-                    state.player.do_move(direction);
-                    state.player.do_move(direction);
+                    state.player.do_move(direction, &mut state.board);
+                    state.player.do_move(direction, &mut state.board);
+                    state.player.do_move(direction, &mut state.board);
                     state.think();
                     state.turn += 1;
                     state.render()
                 }
                 false => {
                     if state.is_valid_move(direction) {
-                        state.player.do_move(direction);
+                        state.player.do_move(direction, &mut state.board);
                         state.think();
                         state.turn += 1;
                         state.render()
@@ -142,11 +142,17 @@ fn main() {
                     continue;
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
-                    if enemy.borrow().pos == state.player.selector {
-                        if enemy.borrow_mut().attacked() {
-                            state
-                                .player
-                                .on_kill(state.board.enemies.swap_remove(index).borrow().variant)
+                    if enemy.read().unwrap().pos == state.player.selector {
+                        if enemy.write().unwrap().attacked() {
+                            state.player.on_kill(
+                                state
+                                    .board
+                                    .enemies
+                                    .swap_remove(index)
+                                    .read()
+                                    .unwrap()
+                                    .variant,
+                            )
                         }
                         state.think();
                         state.turn += 1;
@@ -211,13 +217,19 @@ impl State {
     // returns if an enemy was hit
     fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
         for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
-            if enemy.borrow().pos == pos {
+            if enemy.read().unwrap().pos == pos {
                 if dashstun {
-                    enemy.borrow_mut().apply_dashstun()
+                    enemy.write().unwrap().apply_dashstun()
                 }
-                if enemy.borrow_mut().attacked() {
-                    self.player
-                        .on_kill(self.board.enemies.swap_remove(index).borrow().variant);
+                if enemy.write().unwrap().attacked() {
+                    self.player.on_kill(
+                        self.board
+                            .enemies
+                            .swap_remove(index)
+                            .read()
+                            .unwrap()
+                            .variant,
+                    );
                     if redrawable {
                         self.render()
                     }
@@ -264,7 +276,7 @@ impl State {
         for enemy in self.board.enemies.clone().iter() {
             Enemy::think(
                 enemy.clone(),
-                enemy.as_ptr().addr(),
+                std::sync::Arc::as_ptr(enemy).addr(),
                 &mut self.board,
                 &mut self.player,
             )

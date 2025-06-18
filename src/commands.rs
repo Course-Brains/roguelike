@@ -58,8 +58,8 @@ impl Command {
                 for (index, enemy) in state.board.enemies.iter().enumerate() {
                     result += &format!(
                         "{index}: {} at {}\n",
-                        enemy.borrow().variant,
-                        enemy.borrow().pos
+                        enemy.read().unwrap().variant,
+                        enemy.read().unwrap().pos
                     );
                 }
                 out.send(result).unwrap();
@@ -71,7 +71,7 @@ impl Command {
                 state
                     .board
                     .enemies
-                    .push(std::rc::Rc::new(std::cell::RefCell::new(
+                    .push(std::sync::Arc::new(std::sync::RwLock::new(
                         crate::enemy::Enemy::new(pos, variant),
                     )));
             }
@@ -84,7 +84,7 @@ impl Command {
             }
             Command::WakeAll => {
                 for enemy in state.board.enemies.iter_mut() {
-                    enemy.borrow_mut().active = true;
+                    enemy.write().unwrap().active = true;
                 }
             }
             Command::OpenAllDoors => {

@@ -1,4 +1,4 @@
-use crate::{Board, Direction, Style, Vector};
+use crate::{Board, Direction, Style, Vector, pieces::spell::Stepper};
 use std::io::Write;
 use std::ops::Range;
 const SYMBOL: char = '@';
@@ -123,8 +123,13 @@ impl Player {
         }
         std::io::stdout().flush().unwrap();
     }
-    pub fn do_move(&mut self, direction: Direction) {
+    pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         self.pos += direction;
+        if let Some(crate::board::Piece::Spell(_)) = &board[self.pos] {
+            if let crate::board::Piece::Spell(spell) = board[self.pos].take().unwrap() {
+                spell.on_step(Stepper::Player(self));
+            }
+        }
     }
     // Returns whether the attack was successful(Ok) and whether the player died
     // true: died

@@ -1,4 +1,4 @@
-use crate::{Enemy, Player, Style};
+use crate::{Enemy, Player, Style, enemy::Variant};
 use std::sync::{Arc, RwLock, Weak};
 #[derive(Clone)]
 pub struct Spell {
@@ -13,7 +13,10 @@ impl Spell {
     pub fn on_step(self, stepper: Stepper) {
         match stepper {
             Stepper::Player(player) => {
-                let _ = player.attacked(20);
+                // if you are wondering why it says the mage was teleporting when it killed you,
+                // this is why
+                let _ =
+                    player.attacked(20, Variant::Mage(crate::enemy::Spell::Teleport).kill_name());
             }
             Stepper::Enemy(enemy) => {
                 if Arc::as_ptr(&enemy).addr() == self.caster.as_ptr().addr() {

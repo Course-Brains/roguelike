@@ -59,6 +59,9 @@ fn main() {
     state.board.flood(state.player.pos);
     state.render();
     loop {
+        if state.player.handle_death() {
+            break;
+        }
         event_handler.handle(&mut state);
         command_handler.handle(&mut state);
         match Input::get() {

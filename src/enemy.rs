@@ -85,9 +85,10 @@ impl Enemy {
                     }
                     this.windup -= 1;
                     if this.windup == 0 {
-                        if let Err(_) =
-                            player.attacked((crate::random() & 0b0000_0011) as usize + 3)
-                        {
+                        if let Err(_) = player.attacked(
+                            (crate::random() & 0b0000_0011) as usize + 3,
+                            Variant::Basic.kill_name(),
+                        ) {
                             this.stun = this.variant.parry_stun();
                         }
                     }
@@ -228,6 +229,12 @@ impl Variant {
         match self {
             Variant::Basic => (1, 5),
             Variant::Mage(_) => (5, 5),
+        }
+    }
+    pub fn kill_name(self) -> &'static str {
+        match self {
+            Variant::Basic => "",
+            Variant::Mage(_) => "Mage Construct",
         }
     }
 }

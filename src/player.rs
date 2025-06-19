@@ -1,4 +1,4 @@
-use crate::{Board, Direction, Style, Vector, pieces::spell::Stepper};
+use crate::{Board, Direction, Style, Vector, enemy::Variant, pieces::spell::Stepper};
 use std::io::Write;
 use std::ops::Range;
 const SYMBOL: char = '@';
@@ -14,6 +14,7 @@ pub struct Player {
     pub blocking: bool,
     pub was_hit: bool,
     pub focus: Focus,
+    killer: Option<&'static str>,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -27,6 +28,7 @@ impl Player {
             blocking: false,
             was_hit: false,
             focus: Focus::Player,
+            killer: None,
         }
     }
     pub fn draw(&self, board: &Board, x_range: Range<usize>, y_range: Range<usize>) {
@@ -134,12 +136,13 @@ impl Player {
     // Returns whether the attack was successful(Ok) and whether the player died
     // true: died
     // false: alive
-    pub fn attacked(&mut self, damage: usize) -> Result<bool, ()> {
+    pub fn attacked(&mut self, damage: usize, attacker: &'static str) -> Result<bool, ()> {
         self.was_hit = true;
         if self.blocking {
             return Err(());
         }
         if self.health <= damage {
+            self.killer = Some(attacker);
             return Ok(true);
         }
         self.health -= damage;
@@ -161,6 +164,28 @@ impl Player {
         match self.focus {
             Focus::Player => self.pos,
             Focus::Selector => self.selector,
+        }
+    }
+    // returns whether or not the player is dead
+    pub fn handle_death(&self) -> bool {
+        match self.killer {
+            Some(killer) => {
+                write!(
+                    std::io::stdout(),
+                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m. Do better next time.\nPress enter to exit.",
+                    Style::new().green().intense(true).enact(),
+                    killer
+                )
+                .unwrap();
+                std::io::stdout().flush().unwrap();
+                loop {
+                    if let crate::input::Input::Enter = crate::input::Input::get() {
+                        break;
+                    }
+                }
+                true
+            }
+            None => false,
         }
     }
 }

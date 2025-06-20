@@ -19,7 +19,14 @@ pub fn random() -> u8 {
     RANDOM_TABLE[INDEX.fetch_add(1, Ordering::SeqCst) as usize]
 }
 pub fn initialize() {
+    crate::log!(
+        "Initialized with random index: {}",
+        std::process::id() & 255
+    );
     INDEX.store((std::process::id() & 0b1111_1111) as u8, Ordering::SeqCst)
+}
+pub fn initialize_with(index: u8) {
+    INDEX.store(index, Ordering::SeqCst);
 }
 pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
     random() % (range.end - range.start) + range.start

@@ -73,21 +73,21 @@ impl Board {
     }
     fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {
-            if !x_bound.contains(&enemy.read().unwrap().pos.x) {
+            if !x_bound.contains(&enemy.try_read().unwrap().pos.x) {
                 continue;
             }
-            if !y_bound.contains(&enemy.read().unwrap().pos.y) {
+            if !y_bound.contains(&enemy.try_read().unwrap().pos.y) {
                 continue;
             }
             crossterm::queue!(
                 lock,
                 crossterm::cursor::MoveTo(
-                    (enemy.read().unwrap().pos.x - x_bound.start) as u16,
-                    (enemy.read().unwrap().pos.y - y_bound.start) as u16
+                    (enemy.try_read().unwrap().pos.x - x_bound.start) as u16,
+                    (enemy.try_read().unwrap().pos.y - y_bound.start) as u16
                 )
             )
             .unwrap();
-            match enemy.read().unwrap().render() {
+            match enemy.try_read().unwrap().render() {
                 (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),
                 (ch, None) => write!(lock, "{ch}").unwrap(),
             }
@@ -104,8 +104,8 @@ impl Board {
             }
         }
         for enemy in self.enemies.iter() {
-            if enemy.read().unwrap().pos == pos {
-                if let Some(style) = enemy.read().unwrap().render().1 {
+            if enemy.try_read().unwrap().pos == pos {
+                if let Some(style) = enemy.try_read().unwrap().render().1 {
                     if style.has_background() {
                         return true;
                     }
@@ -135,14 +135,14 @@ impl Board {
         to_visit.push(PathData::new(
             Direction::Up,
             player,
-            self.enemies[0].read().unwrap().pos,
+            self.enemies[0].try_read().unwrap().pos,
             0,
         ));
         for enemy in self.enemies.iter() {
-            if !enemy.read().unwrap().reachable {
+            if !enemy.try_read().unwrap().reachable {
                 continue;
             }
-            if self.backtraces[self.to_index(enemy.read().unwrap().pos)]
+            if self.backtraces[self.to_index(enemy.try_read().unwrap().pos)]
                 .cost
                 .is_some()
             {
@@ -151,7 +151,12 @@ impl Board {
             to_visit = to_visit
                 .iter()
                 .map(|item| {
-                    PathData::new(item.from, item.pos, enemy.read().unwrap().pos, item.cost)
+                    PathData::new(
+                        item.from,
+                        item.pos,
+                        enemy.try_read().unwrap().pos,
+                        item.cost,
+                    )
                 })
                 .collect();
 
@@ -164,7 +169,7 @@ impl Board {
                     self.backtraces[index].cost = Some(path_data.cost);
                     self.backtraces[index].from = path_data.from;
                 }
-                if path_data.pos == enemy.read().unwrap().pos {
+                if path_data.pos == enemy.try_read().unwrap().pos {
                     break;
                 }
                 if visited.contains(&path_data.pos) {
@@ -176,7 +181,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Down,
                         path_data.pos + Direction::Up,
-                        enemy.read().unwrap().pos,
+                        enemy.try_read().unwrap().pos,
                         path_data.cost + 1,
                     ));
                 }
@@ -184,7 +189,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Up,
                         path_data.pos + Direction::Down,
-                        enemy.read().unwrap().pos,
+                        enemy.try_read().unwrap().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -192,7 +197,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Right,
                         path_data.pos + Direction::Left,
-                        enemy.read().unwrap().pos,
+                        enemy.try_read().unwrap().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -200,7 +205,7 @@ impl Board {
                     to_visit.push(PathData::new(
                         Direction::Left,
                         path_data.pos + Direction::Right,
-                        enemy.read().unwrap().pos,
+                        enemy.try_read().unwrap().pos,
                         path_data.cost + 1,
                     ))
                 }
@@ -310,8 +315,8 @@ impl Board {
         let start = std::time::Instant::now();
         let mut lookup = HashMap::new();
         for (index, enemy) in self.enemies.iter_mut().enumerate() {
-            enemy.write().unwrap().reachable = false;
-            lookup.insert(enemy.read().unwrap().pos, index);
+            enemy.try_write().unwrap().reachable = false;
+            lookup.insert(enemy.try_read().unwrap().pos, index);
         }
         let mut to_visit = VecDeque::new();
         let mut seen = HashSet::new();
@@ -319,7 +324,7 @@ impl Board {
         seen.insert(player);
         while let Some(pos) = to_visit.pop_back() {
             if let Some(index) = lookup.get(&pos) {
-                self.enemies[*index].write().unwrap().reachable = true;
+                self.enemies[*index].try_write().unwrap().reachable = true;
             }
             let adj = self.get_adjacent(pos, None, false);
             if adj.up {
@@ -371,39 +376,39 @@ impl Board {
     }
     pub fn move_enemies(&mut self, player: Vector) {
         for index in 0..self.enemies.len() {
-            if !self.enemies[index].read().unwrap().active {
+            if !self.enemies[index].try_read().unwrap().active {
                 continue;
             }
             for index_again in 0..self.enemies.len() {
                 if index_again == index {
                     continue;
                 }
-                let pos = self.enemies[index_again].read().unwrap().pos;
+                let pos = self.enemies[index_again].try_read().unwrap().pos;
                 if self.enemies[index]
-                    .read()
+                    .try_read()
                     .unwrap()
                     .is_near(pos, (crate::random() & 7) as usize)
                 {
-                    self.enemies[index_again].write().unwrap().active = true;
+                    self.enemies[index_again].try_write().unwrap().active = true;
                 }
             }
             let enemy = &self.enemies[index];
-            if !enemy.read().unwrap().reachable {
+            if !enemy.try_read().unwrap().reachable {
                 continue;
             }
-            if enemy.read().unwrap().attacking {
+            if enemy.try_read().unwrap().attacking {
                 continue;
             }
-            if enemy.read().unwrap().is_stunned() || enemy.read().unwrap().is_windup() {
+            if enemy.try_read().unwrap().is_stunned() || enemy.try_read().unwrap().is_windup() {
                 continue;
             }
-            let mut new_pos = enemy.read().unwrap().pos
-                + self.backtraces[self.to_index(enemy.read().unwrap().pos)].from;
+            let mut new_pos = enemy.try_read().unwrap().pos
+                + self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from;
             if (self.enemy_collision(new_pos) && !self.contains_enemy(new_pos))
                 || crate::random() & 0b0001_1111 == 0
             {
                 let mut new_dir =
-                    match self.backtraces[self.to_index(enemy.read().unwrap().pos)].from {
+                    match self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from {
                         Direction::Up | Direction::Down => {
                             if bool::random() {
                                 Direction::Left
@@ -421,37 +426,37 @@ impl Board {
                     };
                 if match new_dir {
                     Direction::Up => {
-                        if enemy.read().unwrap().pos.y == 0 {
+                        if enemy.try_read().unwrap().pos.y == 0 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Down => {
-                        if enemy.read().unwrap().pos.y == self.y - 1 {
+                        if enemy.try_read().unwrap().pos.y == self.y - 1 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Left => {
-                        if enemy.read().unwrap().pos.x == 0 {
+                        if enemy.try_read().unwrap().pos.x == 0 {
                             true
                         } else {
                             false
                         }
                     }
                     Direction::Right => {
-                        if enemy.read().unwrap().pos.x == self.x - 1 {
+                        if enemy.try_read().unwrap().pos.x == self.x - 1 {
                             true
                         } else {
                             false
                         }
                     }
                 } {
-                    new_dir = self.backtraces[self.to_index(enemy.read().unwrap().pos)].from;
+                    new_dir = self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from;
                 }
-                new_pos = enemy.read().unwrap().pos + new_dir;
+                new_pos = enemy.try_read().unwrap().pos + new_dir;
             }
             if new_pos == player {
                 continue;
@@ -459,7 +464,7 @@ impl Board {
             if self.has_collision(new_pos) {
                 continue;
             }
-            self.enemies[index].write().unwrap().pos = new_pos;
+            self.enemies[index].try_write().unwrap().pos = new_pos;
         }
     }
     pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
@@ -479,7 +484,7 @@ impl Board {
             }
         }
         for enemy in self.enemies.iter() {
-            if enemy.read().unwrap().pos == pos {
+            if enemy.try_read().unwrap().pos == pos {
                 return true;
             }
         }
@@ -492,7 +497,7 @@ impl Board {
     }
     pub fn contains_enemy(&self, pos: Vector) -> bool {
         for enemy in self.enemies.iter() {
-            if enemy.read().unwrap().pos == pos {
+            if enemy.try_read().unwrap().pos == pos {
                 return true;
             }
         }
@@ -531,7 +536,7 @@ impl BackTrace {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Piece {
     Wall(Wall),
     Door(Door),

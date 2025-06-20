@@ -1,6 +1,6 @@
 use crate::{Enemy, Player, Style, enemy::Variant};
 use std::sync::{Arc, RwLock, Weak};
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Spell {
     caster: Weak<RwLock<Enemy>>,
 }
@@ -22,7 +22,7 @@ impl Spell {
                 if Arc::as_ptr(&enemy).addr() == self.caster.as_ptr().addr() {
                     return;
                 }
-                let health = &mut enemy.write().unwrap().health;
+                let health = &mut enemy.try_write().unwrap().health;
                 if *health < 3 {
                     *health = 1;
                 } else {
@@ -31,7 +31,7 @@ impl Spell {
             }
         }
         if let Some(caster) = self.caster.upgrade() {
-            caster.write().unwrap().health += 2;
+            caster.try_write().unwrap().health += 2;
         }
     }
 }

@@ -35,6 +35,7 @@ pub fn generate(
         room.place_doors(&mut board);
         remove_edge_doors(&mut board);
         room.place_enemies(&mut board);
+        promote_boss(&mut board);
         let elapsed = start.elapsed();
         crate::log!(
             "Map gen time: {}s({}ms)",
@@ -63,6 +64,31 @@ fn remove_edge_doors(board: &mut Board) {
             board[Vector::new(0, y)] = Some(Piece::Wall(Wall {}));
         }
     }
+}
+fn promote_boss(board: &mut Board) {
+    let mut highest = 1;
+    for enemy in board.enemies.iter() {
+        if enemy.try_read().unwrap().variant.get_tier().unwrap() > highest {
+            highest = enemy.try_read().unwrap().variant.get_tier().unwrap();
+        }
+    }
+    crate::log!("highest enemy is tier {highest}");
+    let mut candidates = Vec::new();
+    for enemy in board.enemies.iter() {
+        if enemy.try_read().unwrap().variant.get_tier().unwrap() == highest {
+            candidates.push(enemy.clone());
+        }
+    }
+    let boss = match candidates.len() > 256 {
+        true => candidates.swap_remove(random() as usize),
+        false => candidates.swap_remove(random() as usize % candidates.len()),
+    };
+    crate::log!(
+        "boss will be a {} at {}",
+        boss.try_read().unwrap().variant,
+        boss.try_read().unwrap().pos
+    );
+    boss.try_write().unwrap().promote().unwrap()
 }
 fn delay() {
     if DO_DELAY.load(Ordering::SeqCst) {
@@ -131,28 +157,36 @@ impl Room {
         if num_splits == 0 {
             return;
         }
-        let mut split_point;
-        loop {
+        let mut split_point = None;
+        let mut fails = 0;
+        while fails < 10 {
             delay();
-            split_point = (random() % num_splits as u8 + 1) as usize * INTERVAL + axis_bounds.start;
+            let split = (random() % num_splits as u8 + 1) as usize * INTERVAL + axis_bounds.start;
             debug!({
-                assert!(split_point > axis_bounds.start);
-                assert!(split_point < axis_bounds.end);
+                assert!(split > axis_bounds.start);
+                assert!(split < axis_bounds.end);
             });
-            if split_point - axis_bounds.start < MINIMUM {
+            if split - axis_bounds.start < MINIMUM {
                 if max {
+                    fails += 1;
                     continue;
                 }
                 return;
             }
-            if axis_bounds.end - split_point < MINIMUM {
+            if axis_bounds.end - split < MINIMUM {
                 if max {
+                    fails += 1;
                     continue;
                 }
                 return;
             }
+            split_point = Some(split);
             break;
         }
+        if split_point.is_none() {
+            return;
+        }
+        let split_point = split_point.unwrap();
         let ratio = (split_point - axis_bounds.start) as f32 / axis_len as f32;
         let split_budget = (self.budget as f32 * ratio) as usize;
         match axis {
@@ -192,13 +226,13 @@ impl Room {
         self.sub_room1
             .as_ref()
             .unwrap()
-            .write()
+            .try_write()
             .unwrap()
             .subdivide();
         self.sub_room2
             .as_ref()
             .unwrap()
-            .write()
+            .try_write()
             .unwrap()
             .subdivide();
     }
@@ -212,13 +246,13 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .create_map_rooms(board);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .create_map_rooms(board);
         }
@@ -228,13 +262,13 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .fill_leaf_adjacents(adj);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .fill_leaf_adjacents(adj);
             return;
@@ -254,13 +288,13 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .append_all_leafs(out, Some(self.sub_room1.clone().unwrap()));
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .append_all_leafs(out, Some(self.sub_room2.clone().unwrap()));
         } else {
@@ -272,13 +306,13 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .remove_extra_adjacents(Some(Arc::as_ptr(self.sub_room1.as_ref().unwrap()).addr()));
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .write()
+                .try_write()
                 .unwrap()
                 .remove_extra_adjacents(Some(Arc::as_ptr(self.sub_room2.as_ref().unwrap()).addr()));
             return;
@@ -288,8 +322,8 @@ impl Room {
             if Arc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.read().unwrap().x_bounds.clone();
-            if self.y_bounds.end != other.read().unwrap().y_bounds.start {
+            let bounds = other.try_read().unwrap().x_bounds.clone();
+            if self.y_bounds.end != other.try_read().unwrap().y_bounds.start {
                 false
             } else if bounds.start <= self.x_bounds.start && bounds.end <= self.x_bounds.start {
                 false
@@ -303,8 +337,8 @@ impl Room {
             if Arc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.read().unwrap().x_bounds.clone();
-            if self.y_bounds.start != other.read().unwrap().y_bounds.end {
+            let bounds = other.try_read().unwrap().x_bounds.clone();
+            if self.y_bounds.start != other.try_read().unwrap().y_bounds.end {
                 false
             } else if bounds.start <= self.x_bounds.start && bounds.end <= self.x_bounds.start {
                 false
@@ -318,8 +352,8 @@ impl Room {
             if Arc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.read().unwrap().y_bounds.clone();
-            if self.x_bounds.start != other.read().unwrap().x_bounds.end {
+            let bounds = other.try_read().unwrap().y_bounds.clone();
+            if self.x_bounds.start != other.try_read().unwrap().x_bounds.end {
                 false
             } else if bounds.start <= self.y_bounds.start && bounds.end <= self.y_bounds.start {
                 false
@@ -333,10 +367,10 @@ impl Room {
             if Arc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.read().unwrap().y_bounds.clone();
-            if self.x_bounds == bounds && self.y_bounds == other.read().unwrap().y_bounds {
+            let bounds = other.try_read().unwrap().y_bounds.clone();
+            if self.x_bounds == bounds && self.y_bounds == other.try_read().unwrap().y_bounds {
                 false
-            } else if self.x_bounds.end != other.read().unwrap().x_bounds.start {
+            } else if self.x_bounds.end != other.try_read().unwrap().x_bounds.start {
                 false
             } else if bounds.start <= self.y_bounds.start && bounds.end <= self.y_bounds.start {
                 false
@@ -352,34 +386,43 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .place_doors(board);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .place_doors(board);
             return;
         }
         for up in self.up.borrow().iter() {
-            let low = self.x_bounds.start.max(up.read().unwrap().x_bounds.start);
-            let high = self.x_bounds.end.min(up.read().unwrap().x_bounds.end);
+            let low = self
+                .x_bounds
+                .start
+                .max(up.try_read().unwrap().x_bounds.start);
+            let high = self.x_bounds.end.min(up.try_read().unwrap().x_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(low.midpoint(high), self.y_bounds.end)] =
                 Some(Piece::Door(Door { open: false }));
         }
         for down in self.down.borrow().iter() {
-            let low = self.x_bounds.start.max(down.read().unwrap().x_bounds.start);
-            let high = self.x_bounds.end.min(down.read().unwrap().x_bounds.end);
+            let low = self
+                .x_bounds
+                .start
+                .max(down.try_read().unwrap().x_bounds.start);
+            let high = self.x_bounds.end.min(down.try_read().unwrap().x_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(low.midpoint(high), self.y_bounds.start)] =
                 Some(Piece::Door(Door { open: false }));
         }
         for left in self.left.borrow().iter() {
-            let low = self.y_bounds.start.max(left.read().unwrap().y_bounds.start);
-            let high = self.y_bounds.end.min(left.read().unwrap().y_bounds.end);
+            let low = self
+                .y_bounds
+                .start
+                .max(left.try_read().unwrap().y_bounds.start);
+            let high = self.y_bounds.end.min(left.try_read().unwrap().y_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
                 Some(Piece::Door(Door { open: false }));
@@ -388,8 +431,11 @@ impl Room {
             let low = self
                 .y_bounds
                 .start
-                .max(right.read().unwrap().y_bounds.start);
-            let high = self.y_bounds.end.min(right.read().unwrap().y_bounds.end);
+                .max(right.try_read().unwrap().y_bounds.start);
+            let high = self
+                .y_bounds
+                .end
+                .min(right.try_read().unwrap().y_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
                 Some(Piece::Door(Door { open: false }));
@@ -400,19 +446,20 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .place_enemies(board);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .read()
+                .try_read()
                 .unwrap()
                 .place_enemies(board);
             return;
         }
         let mut budget = self.budget;
-        'outer: while budget > 0 {
+        let mut fails = 0;
+        'outer: while budget > 0 && fails < 10 {
             delay();
             let pos = Vector::new(
                 random_in_range(0..(self.x_bounds.end - self.x_bounds.start - 2) as u8) as usize
@@ -423,7 +470,8 @@ impl Room {
                     + 1,
             );
             for enemy in board.enemies.iter() {
-                if enemy.read().unwrap().pos == pos {
+                if enemy.try_read().unwrap().pos == pos {
+                    fails += 1;
                     continue 'outer;
                 }
             }

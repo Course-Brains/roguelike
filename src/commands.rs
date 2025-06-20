@@ -58,8 +58,8 @@ impl Command {
                 for (index, enemy) in state.board.enemies.iter().enumerate() {
                     result += &format!(
                         "{index}: {} at {}\n",
-                        enemy.read().unwrap().variant,
-                        enemy.read().unwrap().pos
+                        enemy.try_read().unwrap().variant,
+                        enemy.try_read().unwrap().pos
                     );
                 }
                 out.send(result).unwrap();
@@ -84,7 +84,7 @@ impl Command {
             }
             Command::WakeAll => {
                 for enemy in state.board.enemies.iter_mut() {
-                    enemy.write().unwrap().active = true;
+                    enemy.try_write().unwrap().active = true;
                 }
             }
             Command::OpenAllDoors => {

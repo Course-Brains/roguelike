@@ -12,8 +12,6 @@ use enemy::Enemy;
 mod random;
 use random::{Random, random, random_in_range};
 mod commands;
-mod events;
-use events::EventHandler;
 mod generator;
 use generator::generate;
 
@@ -42,27 +40,45 @@ fn main() {
         *LOG.lock().unwrap() = Some(File::create("log").unwrap());
     }
     random::initialize();
+    let mut args = std::env::args();
+    let mut testing = false;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--seed" | "-s" => {
+                let new_index = args.next().unwrap().parse().unwrap();
+                log!("Setting random index to {new_index}");
+                random::initialize_with(new_index)
+            }
+            "testgen" => {
+                log!("TESTING MAP GEN");
+                testing = true
+            }
+            _ => {}
+        }
+    }
+    if testing {
+        generate(501, 501, 45, 15, 1000).join().unwrap();
+        return;
+    }
 
     let _weirdifier = Weirdifier::new();
-    crossterm::execute!(
+    /*crossterm::execute!(
         std::io::stdout(),
         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
     )
-    .unwrap();
+    .unwrap();*/
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
         board: generate(501, 501, 45, 15, 1000).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
-    let mut event_handler = EventHandler::new();
     state.board.flood(state.player.pos);
     state.render();
     loop {
         if state.player.handle_death() {
             break;
         }
-        event_handler.handle(&mut state);
         command_handler.handle(&mut state);
         match Input::get() {
             Input::WASD(direction, sprint) => match sprint {
@@ -145,14 +161,14 @@ fn main() {
                     continue;
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
-                    if enemy.read().unwrap().pos == state.player.selector {
-                        if enemy.write().unwrap().attacked() {
+                    if enemy.try_read().unwrap().pos == state.player.selector {
+                        if enemy.try_write().unwrap().attacked() {
                             state.player.on_kill(
                                 state
                                     .board
                                     .enemies
                                     .swap_remove(index)
-                                    .read()
+                                    .try_read()
                                     .unwrap()
                                     .variant,
                             )
@@ -220,16 +236,16 @@ impl State {
     // returns if an enemy was hit
     fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
         for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
-            if enemy.read().unwrap().pos == pos {
+            if enemy.try_read().unwrap().pos == pos {
                 if dashstun {
-                    enemy.write().unwrap().apply_dashstun()
+                    enemy.try_write().unwrap().apply_dashstun()
                 }
-                if enemy.write().unwrap().attacked() {
+                if enemy.try_write().unwrap().attacked() {
                     self.player.on_kill(
                         self.board
                             .enemies
                             .swap_remove(index)
-                            .read()
+                            .try_read()
                             .unwrap()
                             .variant,
                     );

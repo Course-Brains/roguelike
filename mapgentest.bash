@@ -1,0 +1,11 @@
+#!/bin/bash
+
+touch output.txt
+for (( i=0; i < 256; ++i ))
+do
+    cargo run -- testgen -s $i || echo "DEBUG FAILURE AT $i" >> output.txt
+    cargo run --release -- testgen -s $i || echo "RELEASE FAILURE AT $i" >> output.txt
+done
+
+echo "Failures:"
+cat output.txt

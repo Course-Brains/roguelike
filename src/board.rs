@@ -1,5 +1,5 @@
 use crate::{
-    Enemy, Random, Style, Vector,
+    Enemy, Player, Random, Style, Vector,
     input::Direction,
     pieces::{door::Door, spell::Spell, wall::Wall},
 };
@@ -33,11 +33,11 @@ impl Board {
         }
     }
     // returns whether or not the cursor has a background behind it
-    pub fn render(&self, base: Vector) {
+    pub fn render(&self, bounds: Range<Vector>) {
         let mut lock = VecDeque::new();
         crossterm::queue!(lock, crossterm::terminal::BeginSynchronizedUpdate).unwrap();
-        let x_bound = base.x..base.x + (self.render_x * 2);
-        let y_bound = base.y..base.y + (self.render_y * 2);
+        let x_bound = bounds.start.x..bounds.end.x;
+        let y_bound = bounds.start.y..bounds.end.y;
         for y in y_bound.clone() {
             crossterm::queue!(
                 lock,
@@ -70,6 +70,12 @@ impl Board {
         crossterm::queue!(lock, crossterm::terminal::EndSynchronizedUpdate).unwrap();
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         std::io::stdout().flush().unwrap();
+    }
+    pub fn smart_render(&self, player: &mut Player) {
+        let bounds = self.get_render_bounds(player);
+        self.render(bounds.clone());
+        player.draw(self, bounds.clone());
+        player.reposition_cursor(self.has_background(player.pos), bounds.clone());
     }
     fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {
@@ -236,7 +242,7 @@ impl Board {
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Up).x) < 2 {
                 if player.y.abs_diff((pos + Direction::Up).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Up) {
+                    if self.contains_enemy(pos + Direction::Up, None) {
                         out.up = false
                     }
                 }
@@ -258,7 +264,7 @@ impl Board {
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Down).x) < 2 {
                 if player.y.abs_diff((pos + Direction::Down).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Down) {
+                    if self.contains_enemy(pos + Direction::Down, None) {
                         out.down = false
                     }
                 }
@@ -280,7 +286,7 @@ impl Board {
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Left).x) < 2 {
                 if player.y.abs_diff((pos + Direction::Left).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Left) {
+                    if self.contains_enemy(pos + Direction::Left, None) {
                         out.left = false
                     }
                 }
@@ -302,7 +308,7 @@ impl Board {
         } else if let Some(player) = player {
             if player.x.abs_diff((pos + Direction::Right).x) < 2 {
                 if player.y.abs_diff((pos + Direction::Right).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Right) {
+                    if self.contains_enemy(pos + Direction::Right, None) {
                         out.right = false
                     }
                 }
@@ -374,98 +380,91 @@ impl Board {
     fn to_index(&self, pos: Vector) -> usize {
         pos.y * self.x + pos.x
     }
-    pub fn move_enemies(&mut self, player: Vector) {
-        for index in 0..self.enemies.len() {
-            if !self.enemies[index].try_read().unwrap().active {
-                continue;
+    pub fn get_render_bounds(&self, player: &Player) -> Range<Vector> {
+        let mut base = Vector::new(0, 0);
+        let pos = player.get_focus();
+        if pos.x < self.render_x {
+            base.x = 0
+        } else if pos.x > self.x - self.render_x {
+            base.x = self.x - self.render_x
+        } else {
+            base.x = pos.x - self.render_x
+        }
+        if pos.y < self.render_y {
+            base.y = 0
+        } else if pos.y > self.y - self.render_y {
+            base.y = self.y - self.render_y
+        } else {
+            base.y = pos.y - self.render_y
+        }
+        base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
+    }
+    pub fn move_and_think(
+        &mut self,
+        player: &mut Player,
+        enemy: Arc<RwLock<Enemy>>,
+        bounds: Range<Vector>,
+    ) {
+        if self.move_enemy(player, enemy.clone()) && bounds.contains(&enemy.try_read().unwrap().pos)
+        {
+            self.smart_render(player);
+            std::thread::sleep(crate::DELAY);
+        }
+        Enemy::think(enemy, self, player)
+    }
+    pub fn move_enemy(&self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {
+        let mut enemy = arc.try_write().unwrap();
+        let addr = Arc::as_ptr(&arc).addr();
+        if !enemy.active || !enemy.reachable || enemy.attacking || enemy.is_stunned() {
+            return false;
+        }
+        enemy.alert_nearby(addr, self, crate::random() as usize & 7);
+        let mut new_dir = self.backtraces[self.to_index(enemy.pos)].from;
+        if self.contains_enemy(enemy.pos + new_dir, Some(addr))
+            || crate::random() & 0b0001_1111 == 0
+        {
+            match new_dir {
+                Direction::Up | Direction::Down => {
+                    if bool::random() {
+                        new_dir = Direction::Left
+                    } else {
+                        new_dir = Direction::Right
+                    }
+                }
+                Direction::Left | Direction::Right => {
+                    if bool::random() {
+                        new_dir = Direction::Up
+                    } else {
+                        new_dir = Direction::Down
+                    }
+                }
             }
-            for index_again in 0..self.enemies.len() {
-                if index_again == index {
+        }
+        let new_pos = enemy.pos + new_dir;
+        if self.enemy_collision(new_pos) {
+            return false;
+        }
+        if self.contains_enemy(new_pos, Some(addr)) {
+            return false;
+        }
+        if player.pos == new_pos {
+            return false;
+        }
+        enemy.pos = new_pos;
+        true
+    }
+    fn contains_enemy(&self, pos: Vector, addr: Option<usize>) -> bool {
+        for enemy in self.enemies.iter() {
+            if let Some(addr) = addr {
+                if Arc::as_ptr(enemy).addr() == addr {
                     continue;
                 }
-                let pos = self.enemies[index_again].try_read().unwrap().pos;
-                if self.enemies[index]
-                    .try_read()
-                    .unwrap()
-                    .is_near(pos, (crate::random() & 7) as usize)
-                {
-                    self.enemies[index_again].try_write().unwrap().active = true;
-                }
             }
-            let enemy = &self.enemies[index];
-            if !enemy.try_read().unwrap().reachable {
-                continue;
+            if enemy.try_read().unwrap().pos == pos {
+                return true;
             }
-            if enemy.try_read().unwrap().attacking {
-                continue;
-            }
-            if enemy.try_read().unwrap().is_stunned() || enemy.try_read().unwrap().is_windup() {
-                continue;
-            }
-            let mut new_pos = enemy.try_read().unwrap().pos
-                + self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from;
-            if (self.enemy_collision(new_pos) && !self.contains_enemy(new_pos))
-                || crate::random() & 0b0001_1111 == 0
-            {
-                let mut new_dir =
-                    match self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from {
-                        Direction::Up | Direction::Down => {
-                            if bool::random() {
-                                Direction::Left
-                            } else {
-                                Direction::Right
-                            }
-                        }
-                        Direction::Left | Direction::Right => {
-                            if bool::random() {
-                                Direction::Up
-                            } else {
-                                Direction::Down
-                            }
-                        }
-                    };
-                if match new_dir {
-                    Direction::Up => {
-                        if enemy.try_read().unwrap().pos.y == 0 {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    Direction::Down => {
-                        if enemy.try_read().unwrap().pos.y == self.y - 1 {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    Direction::Left => {
-                        if enemy.try_read().unwrap().pos.x == 0 {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    Direction::Right => {
-                        if enemy.try_read().unwrap().pos.x == self.x - 1 {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                } {
-                    new_dir = self.backtraces[self.to_index(enemy.try_read().unwrap().pos)].from;
-                }
-                new_pos = enemy.try_read().unwrap().pos + new_dir;
-            }
-            if new_pos == player {
-                continue;
-            }
-            if self.has_collision(new_pos) {
-                continue;
-            }
-            self.enemies[index].try_write().unwrap().pos = new_pos;
         }
+        false
     }
     pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
         for x in point_1.x..point_2.x {
@@ -494,14 +493,6 @@ impl Board {
         self[pos]
             .as_ref()
             .is_some_and(|piece| piece.enemy_collision())
-    }
-    pub fn contains_enemy(&self, pos: Vector) -> bool {
-        for enemy in self.enemies.iter() {
-            if enemy.try_read().unwrap().pos == pos {
-                return true;
-            }
-        }
-        false
     }
     pub fn dashable(&self, pos: Vector) -> bool {
         if let Some(piece) = &self[pos] {

@@ -15,8 +15,7 @@ impl Spell {
             Stepper::Player(player) => {
                 // if you are wondering why it says the mage was teleporting when it killed you,
                 // this is why
-                let _ =
-                    player.attacked(20, Variant::Mage(crate::enemy::Spell::Teleport).kill_name());
+                let _ = player.attacked(20, Variant::mage().kill_name());
             }
             Stepper::Enemy(enemy) => {
                 if Arc::as_ptr(&enemy).addr() == self.caster.as_ptr().addr() {

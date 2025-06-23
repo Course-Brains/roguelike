@@ -478,10 +478,10 @@ impl Room {
             let variant = {
                 if budget >= 5 {
                     budget -= 5;
-                    Variant::Mage(crate::enemy::Spell::Teleport)
+                    Variant::mage()
                 } else {
                     budget -= 1;
-                    Variant::Basic
+                    Variant::basic()
                 }
             };
             board

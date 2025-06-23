@@ -18,7 +18,10 @@ use generator::generate;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Mutex;
+
 static LOG: Mutex<Option<File>> = Mutex::new(None);
+const DELAY: std::time::Duration = std::time::Duration::from_millis(250);
+
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
@@ -142,11 +145,9 @@ fn main() {
             Input::Arrow(direction) => {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
-                    let base = state.get_render_base(state.player.get_focus());
                     state.player.reposition_cursor(
                         state.board.has_background(state.player.selector),
-                        base.x..base.x + state.board.render_x * 2,
-                        base.y..base.y + state.board.render_y * 2,
+                        state.board.get_render_bounds(&state.player),
                     );
                     if let player::Focus::Selector = state.player.focus {
                         state.render();
@@ -170,7 +171,8 @@ fn main() {
                                     .swap_remove(index)
                                     .try_read()
                                     .unwrap()
-                                    .variant,
+                                    .variant
+                                    .clone(),
                             )
                         }
                         state.think();
@@ -195,12 +197,9 @@ fn main() {
             }
             Input::Return => {
                 state.player.selector = state.player.pos;
-                let base = state.get_render_base(state.player.pos);
-                state.player.reposition_cursor(
-                    false,
-                    base.x..base.x + state.board.render_x * 2,
-                    base.y..base.y + state.board.render_y * 2,
-                );
+                state
+                    .player
+                    .reposition_cursor(false, state.board.get_render_bounds(&state.player));
                 state.render();
             }
             Input::Wait => {
@@ -247,7 +246,8 @@ impl State {
                             .swap_remove(index)
                             .try_read()
                             .unwrap()
-                            .variant,
+                            .variant
+                            .clone(),
                     );
                     if redrawable {
                         self.render()
@@ -291,47 +291,19 @@ impl State {
     }
     fn think(&mut self) {
         self.board.generate_nav_data(self.player.pos);
-        self.board.move_enemies(self.player.pos);
+        let bounds = self.board.get_render_bounds(&self.player);
         for enemy in self.board.enemies.clone().iter() {
-            Enemy::think(
-                enemy.clone(),
-                std::sync::Arc::as_ptr(enemy).addr(),
-                &mut self.board,
-                &mut self.player,
-            )
+            self.board
+                .move_and_think(&mut self.player, enemy.clone(), bounds.clone());
         }
     }
     fn render(&mut self) {
-        let base = self.get_render_base(self.player.get_focus());
-        let x_range = base.x..base.x + self.board.render_x * 2;
-        let y_range = base.y..base.y + self.board.render_y * 2;
-        self.board.render(base);
-        self.player
-            .draw(&self.board, x_range.clone(), y_range.clone());
+        let bounds = self.board.get_render_bounds(&self.player);
+        self.board.render(bounds.clone());
+        self.player.draw(&self.board, bounds.clone());
         self.draw_turn();
-        self.player.reposition_cursor(
-            self.board.has_background(self.player.selector),
-            x_range,
-            y_range,
-        );
-    }
-    fn get_render_base(&self, center: Vector) -> Vector {
-        let mut out = center;
-        if center.x < self.board.render_x {
-            out.x = 0;
-        } else if self.board.x - center.x < self.board.render_x {
-            out.x = self.board.x - (self.board.render_x * 2);
-        } else {
-            out.x = center.x - self.board.render_x;
-        }
-        if center.y < self.board.render_y {
-            out.y = 0;
-        } else if self.board.y - center.y < self.board.render_y {
-            out.y = self.board.y - (self.board.render_y * 2);
-        } else {
-            out.y = center.y - self.board.render_y;
-        }
-        out
+        self.player
+            .reposition_cursor(self.board.has_background(self.player.selector), bounds);
     }
     fn draw_turn(&self) {
         crossterm::execute!(
@@ -350,6 +322,23 @@ struct Vector {
 impl Vector {
     fn new(x: usize, y: usize) -> Vector {
         Vector { x, y }
+    }
+    fn to_move(self) -> crossterm::cursor::MoveTo {
+        crossterm::cursor::MoveTo(self.x as u16, self.y as u16)
+    }
+    fn clamp(self, bounds: std::ops::Range<Vector>) -> Vector {
+        let mut out = self;
+        if bounds.start.x > out.x {
+            out.x = bounds.start.x
+        } else if bounds.end.x < out.x {
+            out.x = bounds.end.x
+        }
+        if bounds.start.y > out.y {
+            out.y = bounds.start.y
+        } else if bounds.end.y < out.y {
+            out.y = bounds.end.y
+        }
+        out
     }
 }
 impl std::ops::Sub for Vector {
@@ -373,6 +362,31 @@ impl std::ops::Add for Vector {
 impl std::fmt::Display for Vector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({},{})", self.x, self.y)
+    }
+}
+impl PartialOrd for Vector {
+    fn lt(&self, other: &Self) -> bool {
+        self.x.lt(&other.x) && self.y.lt(&other.y)
+    }
+    fn le(&self, other: &Self) -> bool {
+        self.x.le(&other.x) && self.y.le(&other.y)
+    }
+    fn gt(&self, other: &Self) -> bool {
+        self.x.gt(&other.x) && self.y.le(&other.y)
+    }
+    fn ge(&self, other: &Self) -> bool {
+        self.x.ge(&other.x) && self.y.le(&other.y)
+    }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self < other {
+            Some(std::cmp::Ordering::Less)
+        } else if self > other {
+            Some(std::cmp::Ordering::Greater)
+        } else if self == other {
+            Some(std::cmp::Ordering::Equal)
+        } else {
+            None
+        }
     }
 }
 struct Weirdifier;

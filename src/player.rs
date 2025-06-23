@@ -1,4 +1,4 @@
-use crate::{Board, Direction, Style, Vector, enemy::Variant, pieces::spell::Stepper};
+use crate::{Board, Direction, Style, Vector, pieces::spell::Stepper};
 use std::io::Write;
 use std::ops::Range;
 const SYMBOL: char = '@';
@@ -31,29 +31,17 @@ impl Player {
             killer: None,
         }
     }
-    pub fn draw(&self, board: &Board, x_range: Range<usize>, y_range: Range<usize>) {
+    pub fn draw(&self, board: &Board, bounds: Range<Vector>) {
         let mut lock = std::io::stdout().lock();
-        self.draw_player(&mut lock, x_range, y_range);
+        self.draw_player(&mut lock, bounds);
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock)
     }
-    fn draw_player(
-        &self,
-        lock: &mut impl std::io::Write,
-        x_range: Range<usize>,
-        y_range: Range<usize>,
-    ) {
-        if !(x_range.contains(&self.pos.x) && y_range.contains(&self.pos.y)) {
+    fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>) {
+        if !bounds.contains(&self.pos) {
             return;
         }
-        crossterm::queue!(
-            lock,
-            crossterm::cursor::MoveTo(
-                (self.pos.x - x_range.start) as u16,
-                (self.pos.y - y_range.start) as u16
-            )
-        )
-        .unwrap();
+        crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
         write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
@@ -86,30 +74,11 @@ impl Player {
         )
         .unwrap();
     }
-    pub fn reposition_cursor(
-        &mut self,
-        underscore: bool,
-        x_range: Range<usize>,
-        y_range: Range<usize>,
-    ) {
-        if self.selector.x < x_range.start {
-            self.selector.x = x_range.start
-        } else if self.selector.x > x_range.end {
-            self.selector.x = x_range.end - 1
-        }
-        if self.selector.y < y_range.start {
-            self.selector.y = y_range.start
-        } else if self.selector.y > y_range.end {
-            self.selector.y = y_range.end - 1
-        }
-        crossterm::execute!(
-            std::io::stdout(),
-            crossterm::cursor::MoveTo(
-                (self.selector.x - x_range.start) as u16,
-                (self.selector.y - y_range.start) as u16
-            )
-        )
-        .unwrap();
+    pub fn reposition_cursor(&mut self, underscore: bool, bounds: Range<Vector>) {
+        self.selector = self
+            .selector
+            .clamp(bounds.start..bounds.end - Vector::new(1, 1));
+        crossterm::execute!(std::io::stdout(), (self.selector - bounds.start).to_move()).unwrap();
         if underscore {
             crossterm::execute!(
                 std::io::stdout(),

@@ -1,8 +1,8 @@
 use crate::{Board, Direction, Player, Vector, pieces::spell, style::Color};
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
@@ -30,7 +30,7 @@ impl Enemy {
         (
             match self.variant {
                 Variant::Basic | Variant::BasicBoss(_) => '1',
-                Variant::Mage(_) | Variant::MageBoss => '2',
+                Variant::Mage(_) | Variant::MageBoss(_) => '2',
             },
             Some({
                 let mut out = crate::Style::new();
@@ -66,8 +66,9 @@ impl Enemy {
         self.active = true;
         self.health == 0
     }
-    pub fn think(arc: Arc<RwLock<Self>>, addr: usize, board: &mut Board, player: &mut Player) {
+    pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) {
         let mut this = arc.try_write().unwrap();
+        let addr = Arc::as_ptr(&arc).addr();
         if !this.active {
             if this.variant.detect(&this, board) {
                 this.active = true;
@@ -79,7 +80,7 @@ impl Enemy {
             this.stun -= 1;
             return;
         }
-        match this.variant {
+        match this.variant.clone() {
             Variant::Basic => {
                 if player.pos.x.abs_diff(this.pos.x) < 2 && player.pos.y.abs_diff(this.pos.y) < 2 {
                     this.attacking = true;
@@ -115,7 +116,7 @@ impl Enemy {
                 if this.windup == 1 {
                     // cast time BAYBEEE
                     match spell {
-                        Spell::Circle(cast_pos) => {
+                        MageSpell::Circle(cast_pos) => {
                             if board[cast_pos].is_none() {
                                 board[cast_pos] = Some(crate::board::Piece::Spell(
                                     spell::Spell::new(Arc::downgrade(&arc)),
@@ -123,7 +124,7 @@ impl Enemy {
                             }
                             this.windup = 0;
                         }
-                        Spell::Teleport => {
+                        MageSpell::Teleport => {
                             let mut near = Vec::new();
                             for enemy in board.enemies.iter() {
                                 if Arc::as_ptr(enemy).addr() == addr {
@@ -151,7 +152,7 @@ impl Enemy {
                         // teleport
                         if this.is_near(player.pos, TELE_THRESH) {
                             this.windup = 3;
-                            this.variant = Variant::Mage(Spell::Teleport);
+                            this.variant = Variant::Mage(MageSpell::Teleport);
                         }
                     }
                     1 => {
@@ -169,7 +170,7 @@ impl Enemy {
                         // spell time
                         if board[player.pos].is_none() {
                             this.windup = 3;
-                            this.variant = Variant::Mage(Spell::Circle(player.pos));
+                            this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
                     }
                     3 => {
@@ -243,7 +244,42 @@ impl Enemy {
                     this.windup = 2;
                 }
             }
-            Variant::MageBoss => {}
+            Variant::MageBoss(spell) => {
+                if this.windup > 0 {
+                    if this.windup == 1 {
+                        // casting time
+                        match spell {
+                            MageBossSpell::Obamehameha(direction) => {}
+                            MageBossSpell::Promote(enemy) => {
+                                if let Some(enemy) = enemy.upgrade() {
+                                    let _ = enemy.try_write().unwrap().promote();
+                                }
+                            }
+                            MageBossSpell::Create => {}
+                            MageBossSpell::Swap(enemy) => {
+                                if let Some(enemy) = enemy.upgrade() {
+                                    std::mem::swap(
+                                        &mut this.pos,
+                                        &mut enemy.try_write().unwrap().pos,
+                                    );
+                                }
+                                crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    }
+                    this.windup -= 1;
+                }
+                // Deciding what to do
+                else {
+                    match crate::random() & 3 {
+                        0 => {}
+                        1 => {}
+                        2 => {}
+                        3 => {}
+                        _ => unreachable!("Shit -> Fan"),
+                    }
+                }
+            }
         }
     }
     pub fn is_near(&self, pos: Vector, range: usize) -> bool {
@@ -251,23 +287,34 @@ impl Enemy {
     }
     pub fn promote(&mut self) -> Result<(), ()> {
         match self.variant {
-            Variant::Basic => self.variant = Variant::BasicBoss(Direction::Up),
+            Variant::Basic => self.variant = Variant::basic_boss(),
             Variant::BasicBoss(_) => return Err(()),
-            Variant::Mage(_) => self.variant = Variant::MageBoss,
-            Variant::MageBoss => return Err(()),
+            Variant::Mage(_) => self.variant = Variant::mage_boss(),
+            Variant::MageBoss(_) => return Err(()),
         }
         Ok(())
     }
+    pub fn alert_nearby(&self, addr: usize, board: &Board, range: usize) {
+        for enemy in board.enemies.iter() {
+            if Arc::as_ptr(enemy).addr() == addr {
+                continue;
+            }
+            let mut enemy = enemy.try_write().unwrap();
+            if enemy.is_near(self.pos, range) {
+                enemy.active = true;
+            }
+        }
+    }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Variant {
     Basic,
     BasicBoss(Direction),
-    Mage(Spell),
-    MageBoss,
+    Mage(MageSpell),
+    MageBoss(MageBossSpell),
 }
 impl Variant {
-    fn detect(self, enemy: &RwLockWriteGuard<Enemy>, board: &Board) -> bool {
+    fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board) -> bool {
         match self {
             Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
                 Some(cost) => cost < (crate::random() & 0b0000_0111) as usize,
@@ -280,79 +327,91 @@ impl Variant {
             Variant::BasicBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
                 .cost
                 .is_some(),
-            Variant::MageBoss => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
+            Variant::MageBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
                 .cost
                 .is_some(),
         }
     }
-    fn windup_color(self) -> Color {
+    fn windup_color(&self) -> Color {
         // red is physical
         // purple is magic
         match self {
             Variant::Basic => Color::Red,
             Variant::BasicBoss(_) => Color::Red,
             Variant::Mage(_) => Color::Purple,
-            Variant::MageBoss => Color::Purple,
+            Variant::MageBoss(_) => Color::Purple,
         }
     }
-    fn max_health(self) -> usize {
+    fn max_health(&self) -> usize {
         match self {
             Variant::Basic => 3,
             Variant::BasicBoss(_) => 10,
             Variant::Mage(_) => 5,
-            Variant::MageBoss => 10,
+            Variant::MageBoss(_) => 10,
         }
     }
-    fn parry_stun(self) -> usize {
+    fn parry_stun(&self) -> usize {
         match self {
             Variant::Basic => 3,
             Variant::BasicBoss(_) => 1,
             Variant::Mage(_) => 0,
-            Variant::MageBoss => 0,
+            Variant::MageBoss(_) => 0,
         }
     }
-    fn dash_stun(self) -> usize {
+    fn dash_stun(&self) -> usize {
         match self {
             Variant::Basic => 1,
             Variant::BasicBoss(_) => 0,
             Variant::Mage(_) => 2,
-            Variant::MageBoss => 0,
+            Variant::MageBoss(_) => 0,
         }
     }
     // returns kill reward in energy, then health
     // per energy
-    pub const fn kill_value(self) -> (usize, usize) {
+    pub const fn kill_value(&self) -> (usize, usize) {
         match self {
             Variant::Basic => (1, 5),
             Variant::BasicBoss(_) => (10, 10),
             Variant::Mage(_) => (5, 5),
-            Variant::MageBoss => (20, 5),
+            Variant::MageBoss(_) => (20, 5),
         }
     }
-    pub fn kill_name(self) -> &'static str {
+    pub fn kill_name(&self) -> &'static str {
         match self {
             Variant::Basic => "Repurposed Automata",
             Variant::BasicBoss(_) => "Specialized Automata",
             Variant::Mage(_) => "Mage Construct",
-            Variant::MageBoss => "",
+            Variant::MageBoss(_) => "Lazy Mage",
         }
     }
-    pub fn is_boss(self) -> bool {
+    pub fn is_boss(&self) -> bool {
         match self {
             Variant::Basic => false,
             Variant::BasicBoss(_) => true,
             Variant::Mage(_) => false,
-            Variant::MageBoss => true,
+            Variant::MageBoss(_) => true,
         }
     }
     // used to get which type should be promoted into the boss
-    pub fn get_tier(self) -> Result<usize, ()> {
+    pub fn get_tier(&self) -> Result<usize, ()> {
         match self {
             Variant::Basic => Ok(1),
             Variant::BasicBoss(_) => Err(()),
             Variant::Mage(_) => Ok(2),
-            Variant::MageBoss => Err(()),
+            Variant::MageBoss(_) => Err(()),
         }
+    }
+    pub const fn basic() -> Variant {
+        Variant::Basic
+    }
+    pub const fn basic_boss() -> Variant {
+        Variant::BasicBoss(Direction::Up)
+    }
+    pub const fn mage() -> Variant {
+        Variant::Mage(MageSpell::Teleport)
+    }
+    pub const fn mage_boss() -> Variant {
+        Variant::MageBoss(MageBossSpell::Create)
     }
 }
 impl std::fmt::Display for Variant {
@@ -361,7 +420,7 @@ impl std::fmt::Display for Variant {
             Variant::Basic => write!(f, "basic"),
             Variant::Mage(_) => write!(f, "mage"),
             Variant::BasicBoss(_) => write!(f, "basic_boss"),
-            Variant::MageBoss => write!(f, "mage_boss"),
+            Variant::MageBoss(_) => write!(f, "mage_boss"),
         }
     }
 }
@@ -370,15 +429,25 @@ impl std::str::FromStr for Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "basic" => Ok(Variant::Basic),
-            "mage" => Ok(Variant::Mage(Spell::Teleport)),
-            "basic_boss" => Ok(Variant::BasicBoss(Direction::Up)),
-            "mage_boss" => Ok(Variant::MageBoss),
+            "mage" => Ok(Variant::mage()),
+            "basic_boss" => Ok(Variant::basic_boss()),
+            "mage_boss" => Ok(Variant::mage_boss()),
             _ => Err("invalid variant".to_string()),
         }
     }
 }
 #[derive(Clone, Copy, Debug)]
-pub enum Spell {
+pub enum MageSpell {
     Circle(Vector),
     Teleport,
+}
+#[derive(Clone, Debug)]
+pub enum MageBossSpell {
+    Obamehameha(Direction),
+    // promote basic to mage (5 turns)
+    Promote(Weak<RwLock<Enemy>>),
+    // create new basic (10 turns)
+    Create,
+    // swap places with another enemy (5 turns)
+    Swap(Weak<RwLock<Enemy>>),
 }

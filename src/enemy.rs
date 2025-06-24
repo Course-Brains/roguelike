@@ -1,4 +1,5 @@
 use crate::{Board, Direction, Player, Vector, pieces::spell, style::Color};
+use std::io::Write;
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
@@ -41,9 +42,9 @@ impl Enemy {
                         out.yellow();
                     }
                 }
-                if self.stun > 0 {
+                if self.is_stunned() {
                     out.background_blue();
-                } else if self.windup > 0 {
+                } else if self.is_windup() {
                     out.set_background(self.variant.windup_color())
                         .intense_background(true);
                 }
@@ -66,19 +67,20 @@ impl Enemy {
         self.active = true;
         self.health == 0
     }
-    pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) {
+    // returns whether or not it needs to re-render the board after this
+    pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
         let mut this = arc.try_write().unwrap();
         let addr = Arc::as_ptr(&arc).addr();
         if !this.active {
             if this.variant.detect(&this, board) {
                 this.active = true;
             } else {
-                return;
+                return false;
             }
         }
         if this.stun != 0 {
             this.stun -= 1;
-            return;
+            return false;
         }
         match this.variant.clone() {
             Variant::Basic => {
@@ -86,7 +88,7 @@ impl Enemy {
                     this.attacking = true;
                     if this.windup == 0 {
                         this.windup = 3;
-                        return;
+                        return true;
                     }
                     this.windup -= 1;
                     if this.windup == 0 {
@@ -96,10 +98,13 @@ impl Enemy {
                         ) {
                             this.stun = this.variant.parry_stun();
                         }
+                        return true;
                     }
+                    false
                 } else {
                     this.attacking = false;
                     this.windup = 0;
+                    false
                 }
             }
             Variant::Mage(spell) => {
@@ -111,7 +116,7 @@ impl Enemy {
                 }
                 if this.windup > 1 {
                     this.windup -= 1;
-                    return;
+                    return false;
                 }
                 if this.windup == 1 {
                     // cast time BAYBEEE
@@ -153,7 +158,9 @@ impl Enemy {
                         if this.is_near(player.pos, TELE_THRESH) {
                             this.windup = 3;
                             this.variant = Variant::Mage(MageSpell::Teleport);
+                            return true;
                         }
+                        false
                     }
                     1 => {
                         // Alert nearby enemies
@@ -165,6 +172,7 @@ impl Enemy {
                                 enemy.try_write().unwrap().active = true;
                             }
                         }
+                        false
                     }
                     2 => {
                         // spell time
@@ -172,9 +180,11 @@ impl Enemy {
                             this.windup = 3;
                             this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
+                        true
                     }
                     3 => {
                         // do nothing
+                        false
                     }
                     _ => unreachable!("Bit and seems to be broken"),
                 }
@@ -184,6 +194,9 @@ impl Enemy {
                     if this.windup == 1 {
                         // charge time
                         let mut pos = this.pos;
+                        let mut this = Some(this);
+                        // Explained lower
+                        #[allow(unused_assignments)]
                         loop {
                             pos += direction;
                             if player.pos == pos {
@@ -214,11 +227,23 @@ impl Enemy {
                                 other.try_write().unwrap().attacked();
                                 break;
                             }
+                            this.unwrap().pos = pos;
+                            // It is VERY important that we release the lock on the enemy here.
+                            // Rendering REQUIRES that it can get a read of EVERY enemy (that
+                            // includes this one) which means that even though I have to do bad
+                            // shit, it is very important that the value inside this is dropped.
+                            this = None;
+                            board.smart_render(player);
+                            this = Some(arc.try_write().unwrap());
+                            std::thread::sleep(crate::DELAY / 2);
                         }
+                        let mut this = this.unwrap();
                         this.pos = pos - direction;
                         this.windup = 0;
+                        true
                     } else {
                         this.windup -= 1;
+                        false
                     }
                 } else if this.is_near(player.pos, 2) {
                     // smack 'em
@@ -226,6 +251,7 @@ impl Enemy {
                         (crate::random() & 0b11) as usize + 3,
                         Variant::BasicBoss(Direction::Up).kill_name(),
                     );
+                    true
                 } else if this.pos.x == player.pos.x {
                     // charge up a vertical charge
                     if this.pos.y > player.pos.y {
@@ -234,6 +260,7 @@ impl Enemy {
                         this.variant = Variant::BasicBoss(Direction::Down)
                     }
                     this.windup = 2;
+                    true
                 } else if this.pos.y == player.pos.y {
                     // charge up a horizontal charge
                     if this.pos.x > player.pos.x {
@@ -242,6 +269,9 @@ impl Enemy {
                         this.variant = Variant::BasicBoss(Direction::Right)
                     }
                     this.windup = 2;
+                    true
+                } else {
+                    false
                 }
             }
             Variant::MageBoss(spell) => {
@@ -268,6 +298,7 @@ impl Enemy {
                         }
                     }
                     this.windup -= 1;
+                    this.windup == 0
                 }
                 // Deciding what to do
                 else {
@@ -278,6 +309,7 @@ impl Enemy {
                         3 => {}
                         _ => unreachable!("Shit -> Fan"),
                     }
+                    todo!()
                 }
             }
         }

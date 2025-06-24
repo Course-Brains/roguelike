@@ -386,14 +386,14 @@ impl Board {
         if pos.x < self.render_x {
             base.x = 0
         } else if pos.x > self.x - self.render_x {
-            base.x = self.x - self.render_x
+            base.x = self.x - self.render_x * 2
         } else {
             base.x = pos.x - self.render_x
         }
         if pos.y < self.render_y {
             base.y = 0
         } else if pos.y > self.y - self.render_y {
-            base.y = self.y - self.render_y
+            base.y = self.y - self.render_y * 2
         } else {
             base.y = pos.y - self.render_y
         }
@@ -410,7 +410,10 @@ impl Board {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);
         }
-        Enemy::think(enemy, self, player)
+        if Enemy::think(enemy, self, player) {
+            self.smart_render(player);
+            std::thread::sleep(crate::DELAY);
+        }
     }
     pub fn move_enemy(&self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {
         let mut enemy = arc.try_write().unwrap();

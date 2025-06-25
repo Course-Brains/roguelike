@@ -6,8 +6,8 @@ use crate::{
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::ops::Range;
-use std::sync::Arc;
 use std::sync::RwLock;
+use std::sync::{Arc, Weak};
 pub struct Board {
     pub x: usize,
     pub y: usize,
@@ -16,6 +16,8 @@ pub struct Board {
     pub inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Arc<RwLock<Enemy>>>,
+    // Stuff that doesn't get calculated but does get drawn
+    pub specials: Vec<Special>,
 }
 impl Board {
     pub fn new(x: usize, y: usize, render_x: usize, render_y: usize) -> Board {
@@ -30,6 +32,7 @@ impl Board {
             inner,
             enemies: Vec::new(),
             backtraces,
+            specials: Vec::new(),
         }
     }
     // returns whether or not the cursor has a background behind it
@@ -67,6 +70,7 @@ impl Board {
         }
         write!(lock, "\x1b[B\x1b[2K").unwrap();
         self.draw_enemies(&mut lock, x_bound, y_bound);
+        self.draw_specials(&mut lock, bounds);
         crossterm::queue!(lock, crossterm::terminal::EndSynchronizedUpdate).unwrap();
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         std::io::stdout().flush().unwrap();
@@ -96,6 +100,17 @@ impl Board {
             match enemy.try_read().unwrap().render() {
                 (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),
                 (ch, None) => write!(lock, "{ch}").unwrap(),
+            }
+        }
+    }
+    fn draw_specials(&self, lock: &mut impl Write, bounds: Range<Vector>) {
+        for special in self.specials.iter() {
+            if bounds.contains(&special.pos) {
+                crossterm::queue!(lock, (special.pos - bounds.start).to_move()).unwrap();
+                match special.style {
+                    Some(style) => write!(lock, "{}{}\x1b[0m", style.enact(), special.ch).unwrap(),
+                    None => write!(lock, "{}", special.ch).unwrap(),
+                }
             }
         }
     }
@@ -224,7 +239,7 @@ impl Board {
             elapsed.as_nanos()
         );
     }
-    fn get_adjacent(&self, pos: Vector, player: Option<Vector>, enemy_collision: bool) -> Adj {
+    pub fn get_adjacent(&self, pos: Vector, player: Option<Vector>, enemy_collision: bool) -> Adj {
         let mut out = Adj::new(true);
 
         if pos.y == 0 {
@@ -505,6 +520,41 @@ impl Board {
         }
         true
     }
+    pub fn get_near(
+        &self,
+        addr: Option<usize>,
+        pos: Vector,
+        range: usize,
+    ) -> Vec<Weak<RwLock<Enemy>>> {
+        let mut out = Vec::new();
+        for enemy in self.enemies.iter() {
+            if let Some(addr) = addr {
+                if Arc::as_ptr(enemy).addr() == addr {
+                    continue;
+                }
+            }
+            if enemy.try_read().unwrap().is_near(pos, range) {
+                out.push(Arc::downgrade(enemy))
+            }
+        }
+        out
+    }
+    pub fn pick_near(
+        &self,
+        addr: Option<usize>,
+        pos: Vector,
+        range: usize,
+    ) -> Option<Weak<RwLock<Enemy>>> {
+        let mut candidates = self.get_near(addr, pos, range);
+        if candidates.len() == 0 {
+            return None;
+        }
+        let index = crate::random() as usize;
+        match candidates.len() > 256 {
+            true => Some(candidates.swap_remove(index)),
+            false => Some(candidates.swap_remove(index % candidates.len())),
+        }
+    }
 }
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;
@@ -544,7 +594,7 @@ impl Piece {
             Piece::Spell(_) => (Spell::SYMBOL, Some(Spell::STYLE)),
         }
     }
-    fn has_collision(&self) -> bool {
+    pub fn has_collision(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
@@ -570,6 +620,15 @@ impl Piece {
             Piece::Wall(_) => false,
             Piece::Door(door) => !door.has_collision(),
             Piece::Spell(_) => true,
+        }
+    }
+}
+impl std::fmt::Display for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Piece::Wall(wall) => wall.fmt(f),
+            Piece::Door(door) => door.fmt(f),
+            Piece::Spell(spell) => spell.fmt(f),
         }
     }
 }
@@ -646,7 +705,7 @@ impl Ord for PathData {
         unimplemented!("don't")
     }
 }
-struct Adj {
+pub struct Adj {
     up: bool,
     down: bool,
     left: bool,
@@ -660,5 +719,31 @@ impl Adj {
             left: state,
             right: state,
         }
+    }
+    pub fn to_vec(self, base: Vector) -> Vec<Vector> {
+        let mut out = Vec::new();
+        if self.up {
+            out.push(base + Direction::Up)
+        }
+        if self.down {
+            out.push(base + Direction::Down)
+        }
+        if self.left {
+            out.push(base + Direction::Left)
+        }
+        if self.right {
+            out.push(base + Direction::Right)
+        }
+        out
+    }
+}
+pub struct Special {
+    pos: Vector,
+    ch: char,
+    style: Option<Style>,
+}
+impl Special {
+    pub fn new(pos: Vector, ch: char, style: Option<Style>) -> Special {
+        Special { pos, ch, style }
     }
 }

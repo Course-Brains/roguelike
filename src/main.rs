@@ -72,7 +72,7 @@ fn main() {
     .unwrap();*/
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
-        board: generate(101, 101, 45, 15, 10).join().unwrap(),
+        board: generate(501, 501, 45, 15, 1000).join().unwrap(),
         turn: 0,
     };
     let mut command_handler = commands::CommandHandler::new();
@@ -339,6 +339,9 @@ impl Vector {
             out.y = bounds.end.y
         }
         out
+    }
+    fn is_near(self, other: Vector, range: usize) -> bool {
+        self.x.abs_diff(other.x) < range && self.y.abs_diff(other.y) < range
     }
 }
 impl std::ops::Sub for Vector {

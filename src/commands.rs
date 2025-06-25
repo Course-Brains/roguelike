@@ -15,6 +15,7 @@ enum Command {
     ForceFlood,
     WakeAll,
     OpenAllDoors,
+    KillAllEnemies,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -35,6 +36,7 @@ impl Command {
             "force_flood" => Ok(Command::ForceFlood),
             "wake_all" => Ok(Command::WakeAll),
             "open_all_doors" => Ok(Command::OpenAllDoors),
+            "kill_all_enemies" => Ok(Command::KillAllEnemies),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -93,6 +95,9 @@ impl Command {
                         door.open = true;
                     }
                 }
+            }
+            Command::KillAllEnemies => {
+                state.board.enemies = Vec::new();
             }
         }
     }

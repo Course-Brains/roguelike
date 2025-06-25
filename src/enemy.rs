@@ -1,8 +1,11 @@
-use crate::{Board, Direction, Player, Vector, pieces::spell, style::Color};
+use crate::{Board, Direction, Player, Style, Vector, board::Special, pieces::spell, style::Color};
 use std::io::Write;
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
+const MAGE_BOSS_PROMOTE_RANGE: usize = 10;
+const MAGE_BOSS_SWAP_RANGE: usize = 20;
+const MAGE_BOSS_SWAP_THRESH: usize = 10;
 #[derive(Clone, Debug)]
 pub struct Enemy {
     pub health: usize,
@@ -130,24 +133,13 @@ impl Enemy {
                             this.windup = 0;
                         }
                         MageSpell::Teleport => {
-                            let mut near = Vec::new();
-                            for enemy in board.enemies.iter() {
-                                if Arc::as_ptr(enemy).addr() == addr {
-                                    continue;
-                                }
-                                let pos = enemy.try_read().unwrap().pos;
-                                if pos.x.abs_diff(this.pos.x) < MAGE_RANGE
-                                    && pos.y.abs_diff(this.pos.y) < MAGE_RANGE
-                                {
-                                    near.push(enemy.clone());
-                                }
+                            if let Some(target) = board
+                                .pick_near(Some(addr), this.pos, MAGE_RANGE)
+                                .map(|weak| weak.upgrade().unwrap())
+                            {
+                                std::mem::swap(&mut target.try_write().unwrap().pos, &mut this.pos);
+                                crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                             }
-                            let target = match near.len() > 256 {
-                                true => near[crate::random() as usize].clone(),
-                                false => near[crate::random() as usize % (near.len() - 1)].clone(),
-                            };
-                            std::mem::swap(&mut target.try_write().unwrap().pos, &mut this.pos);
-                            crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                             this.windup = 0;
                         }
                     }
@@ -235,11 +227,12 @@ impl Enemy {
                             this = None;
                             board.smart_render(player);
                             this = Some(arc.try_write().unwrap());
-                            std::thread::sleep(crate::DELAY / 2);
+                            std::thread::sleep(crate::DELAY / 10);
                         }
                         let mut this = this.unwrap();
                         this.pos = pos - direction;
                         this.windup = 0;
+                        this.attacking = false;
                         true
                     } else {
                         this.windup -= 1;
@@ -260,6 +253,7 @@ impl Enemy {
                         this.variant = Variant::BasicBoss(Direction::Down)
                     }
                     this.windup = 2;
+                    this.attacking = true;
                     true
                 } else if this.pos.y == player.pos.y {
                     // charge up a horizontal charge
@@ -269,6 +263,7 @@ impl Enemy {
                         this.variant = Variant::BasicBoss(Direction::Right)
                     }
                     this.windup = 2;
+                    this.attacking = true;
                     true
                 } else {
                     false
@@ -276,20 +271,93 @@ impl Enemy {
             }
             Variant::MageBoss(spell) => {
                 if this.windup > 0 {
-                    if this.windup == 1 {
+                    let mut this = Some(this);
+                    if this.as_ref().unwrap().windup == 1 {
                         // casting time
+                        this.as_mut().unwrap().attacking = false;
                         match spell {
-                            MageBossSpell::Obamehameha(direction) => {}
+                            #[allow(unused_assignments)]
+                            MageBossSpell::Obamehameha(direction) => {
+                                let mut pos = this.as_ref().unwrap().pos;
+                                crate::log!("firing obamehameha from {pos} to {direction}");
+                                this = None;
+                                'outer: loop {
+                                    pos += direction;
+                                    crate::log!("\tchecking {pos}");
+                                    if let Some(piece) = &board[pos] {
+                                        crate::log!("\t\thit piece: {piece}");
+                                        if piece.has_collision() {
+                                            break;
+                                        }
+                                    }
+                                    if player.pos == pos {
+                                        crate::log!("\t\thit player");
+                                        break;
+                                    }
+                                    for enemy in board.enemies.iter() {
+                                        if Arc::as_ptr(enemy).addr() == addr {
+                                            continue;
+                                        }
+                                        if enemy.try_read().unwrap().pos == pos {
+                                            crate::log!("\t\thit enemy");
+                                            break 'outer;
+                                        }
+                                    }
+                                    board.specials.push(Special::new(
+                                        pos,
+                                        '●',
+                                        Some(*Style::new().red().intense(true)),
+                                    ));
+                                    board.smart_render(player);
+                                    board.specials.pop();
+                                    std::thread::sleep(crate::DELAY / 10);
+                                }
+                                pos = pos - direction;
+                                if player.pos.is_near(pos, 3) {
+                                    let damage = (((crate::random() & 3) + 1) * 10) as usize;
+                                    crate::log!("\tDamaging player for {damage}");
+                                    let _ =
+                                        player.attacked(damage, Variant::mage_boss().kill_name());
+                                }
+                                this = Some(arc.try_write().unwrap());
+                            }
                             MageBossSpell::Promote(enemy) => {
                                 if let Some(enemy) = enemy.upgrade() {
-                                    let _ = enemy.try_write().unwrap().promote();
+                                    enemy.try_write().unwrap().variant = Variant::mage();
                                 }
                             }
-                            MageBossSpell::Create => {}
+                            MageBossSpell::Create => {
+                                // If the player is near then get_adjacent can crash or fail
+                                if this.as_ref().unwrap().is_near(player.pos, 5) {
+                                    this.unwrap().windup = 0;
+                                    return false;
+                                }
+                                'outer: for pos in board
+                                    .get_adjacent(this.as_ref().unwrap().pos, None, true)
+                                    .to_vec(this.as_ref().unwrap().pos)
+                                    .iter()
+                                {
+                                    for enemy in board.enemies.iter() {
+                                        if Arc::as_ptr(enemy).addr() == addr {
+                                            continue;
+                                        }
+                                        if enemy.try_read().unwrap().pos == *pos {
+                                            continue 'outer;
+                                        }
+                                    }
+                                    board.enemies.push(Arc::new(RwLock::new(Enemy::new(
+                                        *pos,
+                                        Variant::Basic,
+                                    ))));
+                                    crate::RE_FLOOD
+                                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                                    break;
+                                }
+                            }
                             MageBossSpell::Swap(enemy) => {
                                 if let Some(enemy) = enemy.upgrade() {
                                     std::mem::swap(
-                                        &mut this.pos,
+                                        &mut this.as_mut().unwrap().pos,
                                         &mut enemy.try_write().unwrap().pos,
                                     );
                                 }
@@ -297,19 +365,78 @@ impl Enemy {
                             }
                         }
                     }
-                    this.windup -= 1;
-                    this.windup == 0
+                    this.as_mut().unwrap().windup -= 1;
+                    // redraw if it actually cast something
+                    this.unwrap().windup == 0
                 }
                 // Deciding what to do
                 else {
-                    match crate::random() & 3 {
-                        0 => {}
-                        1 => {}
-                        2 => {}
-                        3 => {}
-                        _ => unreachable!("Shit -> Fan"),
+                    if (this.pos.x == player.pos.x || this.pos.y == player.pos.y)
+                        && this.is_near(player.pos, 15)
+                    {
+                        // Obamehameha
+                        if crate::random() & 3 == 0 {
+                            let dir;
+                            if this.pos.x == player.pos.x {
+                                if this.pos.y > player.pos.y {
+                                    dir = Direction::Up;
+                                } else {
+                                    dir = Direction::Down
+                                }
+                            } else {
+                                if this.pos.x > player.pos.x {
+                                    dir = Direction::Left
+                                } else {
+                                    dir = Direction::Right
+                                }
+                            }
+                            this.variant = Variant::MageBoss(MageBossSpell::Obamehameha(dir));
+                            this.windup = 4;
+                            this.attacking = true;
+                            return true;
+                        }
+                        false
+                    } else {
+                        match crate::random() & 3 {
+                            0 => {
+                                // Promote
+                                if let Some(chosen) =
+                                    board.pick_near(Some(addr), this.pos, MAGE_BOSS_PROMOTE_RANGE)
+                                {
+                                    this.variant =
+                                        Variant::MageBoss(MageBossSpell::Promote(chosen));
+                                    this.windup = 5;
+                                    this.attacking = true;
+                                    return true;
+                                }
+                                false
+                            }
+                            1 => {
+                                // Create
+                                this.variant = Variant::MageBoss(MageBossSpell::Create);
+                                this.windup = 5;
+                                this.attacking = true;
+                                true
+                            }
+                            2 => {
+                                // Swap
+                                if !this.is_near(player.pos, MAGE_BOSS_SWAP_THRESH) {
+                                    return false;
+                                }
+                                if let Some(chosen) =
+                                    board.pick_near(Some(addr), this.pos, MAGE_BOSS_SWAP_RANGE)
+                                {
+                                    this.variant = Variant::MageBoss(MageBossSpell::Swap(chosen));
+                                    this.windup = 5;
+                                    this.attacking = true;
+                                    return true;
+                                }
+                                false
+                            }
+                            3 => false,
+                            _ => unreachable!("Shit -> Fan"),
+                        }
                     }
-                    todo!()
                 }
             }
         }

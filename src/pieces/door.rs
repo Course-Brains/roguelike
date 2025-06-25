@@ -16,3 +16,11 @@ impl Door {
         !self.open
     }
 }
+impl std::fmt::Display for Door {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self.open {
+            true => write!(f, "Open Door"),
+            false => write!(f, "Closed Door"),
+        }
+    }
+}

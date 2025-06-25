@@ -34,6 +34,11 @@ impl Spell {
         }
     }
 }
+impl std::fmt::Display for Spell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "Spell")
+    }
+}
 pub enum Stepper<'a> {
     Player(&'a mut Player),
     Enemy(Arc<RwLock<Enemy>>),

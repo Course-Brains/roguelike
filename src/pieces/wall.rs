@@ -93,3 +93,8 @@ impl Wall {
         }
     }
 }
+impl std::fmt::Display for Wall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "Wall")
+    }
+}

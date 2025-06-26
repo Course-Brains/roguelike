@@ -549,11 +549,7 @@ impl Board {
         if candidates.len() == 0 {
             return None;
         }
-        let index = crate::random() as usize;
-        match candidates.len() > 256 {
-            true => Some(candidates.swap_remove(index)),
-            false => Some(candidates.swap_remove(index % candidates.len())),
-        }
+        crate::random::random_index(candidates.len()).map(|index| candidates.swap_remove(index))
     }
 }
 impl std::ops::Index<Vector> for Board {

@@ -188,7 +188,6 @@ impl Enemy {
                         let mut pos = this.pos;
                         let mut this = Some(this);
                         // Explained lower
-                        #[allow(unused_assignments)]
                         loop {
                             pos += direction;
                             if player.pos == pos {
@@ -219,12 +218,12 @@ impl Enemy {
                                 other.try_write().unwrap().attacked();
                                 break;
                             }
-                            this.unwrap().pos = pos;
+                            this.as_mut().unwrap().pos = pos;
                             // It is VERY important that we release the lock on the enemy here.
                             // Rendering REQUIRES that it can get a read of EVERY enemy (that
                             // includes this one) which means that even though I have to do bad
                             // shit, it is very important that the value inside this is dropped.
-                            this = None;
+                            this.take();
                             board.smart_render(player);
                             this = Some(arc.try_write().unwrap());
                             std::thread::sleep(crate::DELAY / 10);
@@ -276,11 +275,10 @@ impl Enemy {
                         // casting time
                         this.as_mut().unwrap().attacking = false;
                         match spell {
-                            #[allow(unused_assignments)]
                             MageBossSpell::Obamehameha(direction) => {
                                 let mut pos = this.as_ref().unwrap().pos;
                                 crate::log!("firing obamehameha from {pos} to {direction}");
-                                this = None;
+                                this.take();
                                 'outer: loop {
                                     pos += direction;
                                     crate::log!("\tchecking {pos}");
@@ -400,8 +398,17 @@ impl Enemy {
                         match crate::random() & 3 {
                             0 => {
                                 // Promote
-                                if let Some(chosen) =
-                                    board.pick_near(Some(addr), this.pos, MAGE_BOSS_PROMOTE_RANGE)
+                                let mut candidates = Vec::new();
+                                for enemy in board.enemies.iter() {
+                                    if Arc::as_ptr(enemy).addr() == addr {
+                                        continue;
+                                    }
+                                    if let Variant::Basic = enemy.try_read().unwrap().variant {
+                                        candidates.push(Arc::downgrade(enemy))
+                                    }
+                                }
+                                if let Some(chosen) = crate::random::random_index(candidates.len())
+                                    .map(|index| candidates.swap_remove(index))
                                 {
                                     this.variant =
                                         Variant::MageBoss(MageBossSpell::Promote(chosen));

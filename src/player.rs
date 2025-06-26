@@ -120,17 +120,15 @@ impl Player {
     pub fn on_kill(&mut self, variant: crate::enemy::Variant) {
         let (energy, health) = variant.kill_value();
         for _ in 0..energy {
-            if self.health > self.max_health {
-                self.health = self.max_health;
-                break;
-            } else if self.energy != self.max_energy {
+            if self.energy < self.max_energy {
                 self.energy += 1;
-            } else if self.health != self.max_health {
+            } else if self.health < self.max_health {
                 self.health += health;
             } else {
                 break;
             }
         }
+        self.health = self.health.min(self.max_health);
         crate::log!(
             "Killed {variant}, health is now: {}, energy is now: {}",
             self.health,

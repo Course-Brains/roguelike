@@ -31,6 +31,17 @@ pub fn initialize_with(index: u8) {
 pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
     random() % (range.end - range.start) + range.start
 }
+pub fn random_index(max: usize) -> Option<usize> {
+    match max > 256 {
+        true => Some(random() as usize),
+        false => {
+            if max == 0 {
+                return None;
+            }
+            Some(random() as usize % max)
+        }
+    }
+}
 pub trait Random {
     fn random() -> Self;
 }

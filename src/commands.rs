@@ -16,6 +16,7 @@ enum Command {
     WakeAll,
     OpenAllDoors,
     KillAllEnemies,
+    SetPiece(Vector, String),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -37,6 +38,10 @@ impl Command {
             "wake_all" => Ok(Command::WakeAll),
             "open_all_doors" => Ok(Command::OpenAllDoors),
             "kill_all_enemies" => Ok(Command::KillAllEnemies),
+            "set_piece" => Ok(Command::SetPiece(
+                parse_vector(iter.next(), iter.next())?,
+                iter.map(|s| s.to_string() + " ").collect(),
+            )),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -98,6 +103,15 @@ impl Command {
             }
             Command::KillAllEnemies => {
                 state.board.enemies = Vec::new();
+            }
+            Command::SetPiece(pos, args) => {
+                state.board[pos] = Some(match args.parse() {
+                    Ok(piece) => piece,
+                    Err(error) => {
+                        out.send(error).unwrap();
+                        return;
+                    }
+                })
             }
         }
     }

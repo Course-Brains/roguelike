@@ -14,13 +14,19 @@ use random::{Random, random, random_in_range};
 mod commands;
 mod generator;
 use generator::generate;
+mod items;
+use items::ItemType;
 
 use std::fs::File;
 use std::io::Write;
 use std::sync::Mutex;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
-const DELAY: std::time::Duration = std::time::Duration::from_millis(250);
+
+// Delay between moves/applicable thinks
+const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+// Delay between subtick animaion frames
+const PROJ_DELAY: std::time::Duration = std::time::Duration::from_millis(25);
 
 #[macro_export]
 macro_rules! log {
@@ -36,7 +42,10 @@ fn log(string: String) {
 
 use std::sync::atomic::{AtomicBool, Ordering};
 static RE_FLOOD: AtomicBool = AtomicBool::new(false);
-
+// Load the next level
+static LOAD_MAP: AtomicBool = AtomicBool::new(false);
+// load the shop
+static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 fn main() {
     #[cfg(any(debug_assertions, feature = "force_log"))]
     {
@@ -72,9 +81,13 @@ fn main() {
     .unwrap();*/
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
-        board: generate(501, 501, 45, 15, 1000).join().unwrap(),
+        board: generate(101, 101, 45, 15, 50).join().unwrap(),
         turn: 0,
+        next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
+        level: 0,
     };
+    generator::DO_DELAY.store(true, Ordering::SeqCst);
+    state.next_map = generate(501, 501, 45, 15, 1000);
     let mut command_handler = commands::CommandHandler::new();
     state.board.flood(state.player.pos);
     state.render();
@@ -82,7 +95,15 @@ fn main() {
         if state.player.handle_death() {
             break;
         }
+        if LOAD_MAP.swap(false, Ordering::Relaxed) {
+            state.load_next_map();
+        }
+        // loading the map and loading the shop are mutually exclusive
+        else if LOAD_SHOP.swap(false, Ordering::Relaxed) {
+            state.load_shop()
+        }
         command_handler.handle(&mut state);
+        state.board.place_exit();
         match Input::get() {
             Input::WASD(direction, sprint) => match sprint {
                 true => {
@@ -129,22 +150,19 @@ fn main() {
                     state.player.do_move(direction, &mut state.board);
                     state.player.do_move(direction, &mut state.board);
                     state.player.do_move(direction, &mut state.board);
-                    state.think();
-                    state.turn += 1;
-                    state.render()
+                    state.increment()
                 }
                 false => {
                     if state.is_valid_move(direction) {
                         state.player.do_move(direction, &mut state.board);
-                        state.think();
-                        state.turn += 1;
-                        state.render()
+                        state.increment()
                     }
                 }
             },
             Input::Arrow(direction) => {
                 if state.is_on_board(state.player.selector, direction) {
                     state.player.selector += direction;
+                    state.board.draw_desc(&state.player, &mut std::io::stdout());
                     state.player.reposition_cursor(
                         state.board.has_background(state.player.selector),
                         state.board.get_render_bounds(&state.player),
@@ -163,7 +181,7 @@ fn main() {
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
                     if enemy.try_read().unwrap().pos == state.player.selector {
-                        if enemy.try_write().unwrap().attacked() {
+                        if enemy.try_write().unwrap().attacked(1) {
                             state.player.on_kill(
                                 state
                                     .board
@@ -175,9 +193,7 @@ fn main() {
                                     .clone(),
                             )
                         }
-                        state.think();
-                        state.turn += 1;
-                        state.render();
+                        state.increment();
                         break;
                     }
                 }
@@ -202,11 +218,7 @@ fn main() {
                     .reposition_cursor(false, state.board.get_render_bounds(&state.player));
                 state.render();
             }
-            Input::Wait => {
-                state.think();
-                state.turn += 1;
-                state.render()
-            }
+            Input::Wait => state.increment(),
             Input::SwapFocus => {
                 state.player.focus.cycle();
                 state.render();
@@ -214,10 +226,16 @@ fn main() {
             Input::Enter => {
                 if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
                     door.open = !door.open;
-                    state.think();
-                    state.turn += 1;
-                    state.render();
+                    state.increment();
                     RE_FLOOD.store(true, Ordering::Relaxed)
+                }
+            }
+            Input::Item(index) => {
+                debug_assert!(index < 7);
+                if let Some(item) = state.player.items[index - 1].take() {
+                    if item.enact(&mut state) {
+                        state.increment()
+                    }
                 }
             }
         }
@@ -230,6 +248,8 @@ struct State {
     player: Player,
     board: Board,
     turn: usize,
+    next_map: std::thread::JoinHandle<Board>,
+    level: usize,
 }
 impl State {
     // returns if an enemy was hit
@@ -239,7 +259,7 @@ impl State {
                 if dashstun {
                     enemy.try_write().unwrap().apply_dashstun()
                 }
-                if enemy.try_write().unwrap().attacked() {
+                if enemy.try_write().unwrap().attacked(1) {
                     self.player.on_kill(
                         self.board
                             .enemies
@@ -290,6 +310,7 @@ impl State {
         false
     }
     fn think(&mut self) {
+        self.board.purge_dead();
         self.board.generate_nav_data(self.player.pos);
         let bounds = self.board.get_render_bounds(&self.player);
         for enemy in self.board.enemies.clone().iter() {
@@ -299,8 +320,7 @@ impl State {
     }
     fn render(&mut self) {
         let bounds = self.board.get_render_bounds(&self.player);
-        self.board.render(bounds.clone());
-        self.player.draw(&self.board, bounds.clone());
+        self.board.smart_render(&mut self.player);
         self.draw_turn();
         self.player
             .reposition_cursor(self.board.has_background(self.player.selector), bounds);
@@ -312,6 +332,32 @@ impl State {
         )
         .unwrap();
         print!("turn: {}", self.turn);
+    }
+    fn increment(&mut self) {
+        self.think();
+        self.turn += 1;
+        self.render();
+    }
+    fn load_next_map(&mut self) {
+        generator::DO_DELAY.store(false, Ordering::SeqCst);
+        self.board = std::mem::replace(
+            &mut self.next_map,
+            std::thread::spawn(|| Board::new(1, 1, 1, 1)),
+        )
+        .join()
+        .unwrap();
+        generator::DO_DELAY.store(true, Ordering::SeqCst);
+        self.next_map = generate(501, 501, 45, 15, self.turn);
+        self.level += 1;
+        self.player.pos = Vector::new(1, 1);
+        self.player.selector = Vector::new(1, 1);
+    }
+    fn load_shop(&mut self) {
+        self.board = Board::new(90, 30, 45, 15);
+        self.board.make_room(Vector::new(0, 0), Vector::new(90, 30));
+        self.player.pos = Vector::new(1, 1);
+        self.player.selector = Vector::new(1, 1);
+        self.board[Vector::new(45, 15)] = Some(Piece::Exit(pieces::exit::Exit::Level));
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -401,9 +447,7 @@ impl Weirdifier {
             .arg("-echo")
             .status()
             .unwrap();
-        /*crossterm::execute!(std::io::stdout(),
-            crossterm::terminal::EnterAlternateScreen
-        ).unwrap();*/
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::DisableLineWrap).unwrap();
         Weirdifier
     }
 }
@@ -415,8 +459,6 @@ impl Drop for Weirdifier {
             .arg("echo")
             .status()
             .unwrap();
-        /*crossterm::execute!(std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen
-        ).unwrap()*/
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnableLineWrap).unwrap()
     }
 }

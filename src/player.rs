@@ -1,5 +1,5 @@
-use crate::{Board, Direction, Style, Vector, pieces::spell::Stepper};
-use std::io::Write;
+use crate::{Board, Direction, ItemType, Style, Vector, pieces::spell::Stepper};
+use std::io::{Read, Write};
 use std::ops::Range;
 const SYMBOL: char = '@';
 const STYLE: Style = *Style::new().cyan().intense(true);
@@ -15,6 +15,8 @@ pub struct Player {
     pub was_hit: bool,
     pub focus: Focus,
     killer: Option<&'static str>,
+    pub items: [Option<ItemType>; 6],
+    pub money: usize,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -29,76 +31,15 @@ impl Player {
             was_hit: false,
             focus: Focus::Player,
             killer: None,
+            items: [Some(ItemType::Testing); 6],
+            money: 0,
         }
-    }
-    pub fn draw(&self, board: &Board, bounds: Range<Vector>) {
-        let mut lock = std::io::stdout().lock();
-        self.draw_player(&mut lock, bounds);
-        self.draw_health(board, &mut lock);
-        self.draw_energy(board, &mut lock)
-    }
-    fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>) {
-        if !bounds.contains(&self.pos) {
-            return;
-        }
-        crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
-        write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
-    }
-    fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
-        crossterm::queue!(
-            lock,
-            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 1)
-        )
-        .unwrap();
-        write!(
-            lock,
-            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
-            "#".repeat(self.health),
-            "-".repeat(self.max_health - self.health),
-            self.health,
-        )
-        .unwrap();
-    }
-    fn draw_energy(&self, board: &Board, lock: &mut impl std::io::Write) {
-        crossterm::queue!(
-            lock,
-            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 2)
-        )
-        .unwrap();
-        write!(
-            lock,
-            "\x1b[2K[\x1b[96m{}\x1b[0m{}] {}/3",
-            "#".repeat(self.energy * 5),
-            "-".repeat((self.max_energy - self.energy) * 5),
-            self.energy
-        )
-        .unwrap();
-    }
-    pub fn reposition_cursor(&mut self, underscore: bool, bounds: Range<Vector>) {
-        self.selector = self
-            .selector
-            .clamp(bounds.start..bounds.end - Vector::new(1, 1));
-        crossterm::execute!(std::io::stdout(), (self.selector - bounds.start).to_move()).unwrap();
-        if underscore {
-            crossterm::execute!(
-                std::io::stdout(),
-                crossterm::cursor::SetCursorStyle::SteadyUnderScore
-            )
-            .unwrap()
-        } else {
-            crossterm::execute!(
-                std::io::stdout(),
-                crossterm::cursor::SetCursorStyle::DefaultUserShape
-            )
-            .unwrap()
-        }
-        std::io::stdout().flush().unwrap();
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         self.pos += direction;
-        if let Some(crate::board::Piece::Spell(_)) = &board[self.pos] {
-            if let crate::board::Piece::Spell(spell) = board[self.pos].take().unwrap() {
-                spell.on_step(Stepper::Player(self));
+        if let Some(piece) = &board[self.pos] {
+            if piece.on_step(Stepper::Player(self)) {
+                board[self.pos] = None;
             }
         }
     }
@@ -162,6 +103,111 @@ impl Player {
             }
             None => false,
         }
+    }
+    // returns whether or not the item was added successfully
+    pub fn add_item(&mut self, item: ItemType) -> bool {
+        let mut buf = [0];
+        let mut lock = std::io::stdin().lock();
+        let selected = loop {
+            lock.read(&mut buf).unwrap();
+            match buf[0] {
+                b'1' => break Some(0),
+                b'2' => break Some(1),
+                b'3' => break Some(2),
+                b'4' => break Some(3),
+                b'5' => break Some(4),
+                b'6' => break Some(5),
+                b'c' => break None,
+                _ => continue,
+            }
+        };
+        match selected {
+            Some(index) => {
+                self.items[index] = Some(item);
+                true
+            }
+            None => false,
+        }
+    }
+}
+// Rendering
+impl Player {
+    pub fn draw(&self, board: &Board, bounds: Range<Vector>) {
+        let mut lock = std::io::stdout().lock();
+        self.draw_player(&mut lock, bounds);
+        self.draw_health(board, &mut lock);
+        self.draw_energy(board, &mut lock);
+        self.draw_items(board, &mut lock);
+    }
+    fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>) {
+        if !bounds.contains(&self.pos) {
+            return;
+        }
+        crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
+        write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
+    }
+    fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
+        crossterm::queue!(
+            lock,
+            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 1)
+        )
+        .unwrap();
+        write!(
+            lock,
+            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
+            "#".repeat(self.health),
+            "-".repeat(self.max_health - self.health),
+            self.health,
+        )
+        .unwrap();
+    }
+    fn draw_energy(&self, board: &Board, lock: &mut impl std::io::Write) {
+        crossterm::queue!(
+            lock,
+            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 2)
+        )
+        .unwrap();
+        write!(
+            lock,
+            "\x1b[2K[\x1b[96m{}\x1b[0m{}] {}/3",
+            "#".repeat(self.energy * 5),
+            "-".repeat((self.max_energy - self.energy) * 5),
+            self.energy
+        )
+        .unwrap();
+    }
+    fn draw_items(&self, board: &Board, lock: &mut impl std::io::Write) {
+        for (index, item) in self.items.iter().enumerate() {
+            if let Some(item) = item {
+                crossterm::queue!(
+                    lock,
+                    Vector::new(board.render_x * 2 + 2, index * 5).to_move(),
+                    crossterm::cursor::SavePosition
+                )
+                .unwrap();
+                item.name(lock);
+            }
+        }
+    }
+    pub fn reposition_cursor(&mut self, underscore: bool, bounds: Range<Vector>) {
+        self.selector = self
+            .selector
+            .clamp(bounds.start..bounds.end - Vector::new(1, 1));
+        crossterm::execute!(std::io::stdout(), (self.selector - bounds.start).to_move()).unwrap();
+        if underscore {
+            crossterm::execute!(
+                std::io::stdout(),
+                crossterm::cursor::SetCursorStyle::SteadyUnderScore
+            )
+            .unwrap()
+        } else {
+            crossterm::execute!(
+                std::io::stdout(),
+                crossterm::cursor::SetCursorStyle::DefaultUserShape
+            )
+            .unwrap()
+        }
+        std::io::stdout().flush().unwrap();
     }
 }
 #[derive(Debug, Clone, Copy)]

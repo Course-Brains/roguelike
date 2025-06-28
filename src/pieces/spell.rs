@@ -10,7 +10,7 @@ impl Spell {
     pub fn new(caster: Weak<RwLock<Enemy>>) -> Spell {
         Spell { caster }
     }
-    pub fn on_step(self, stepper: Stepper) {
+    pub fn on_step(&self, stepper: Stepper) {
         match stepper {
             Stepper::Player(player) => {
                 // if you are wondering why it says the mage was teleporting when it killed you,
@@ -21,12 +21,7 @@ impl Spell {
                 if Arc::as_ptr(&enemy).addr() == self.caster.as_ptr().addr() {
                     return;
                 }
-                let health = &mut enemy.try_write().unwrap().health;
-                if *health < 3 {
-                    *health = 1;
-                } else {
-                    *health -= 2;
-                }
+                enemy.try_write().unwrap().attacked(4);
             }
         }
         if let Some(caster) = self.caster.upgrade() {

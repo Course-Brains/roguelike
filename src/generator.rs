@@ -88,6 +88,7 @@ fn promote_boss(board: &mut Board) {
         boss.try_read().unwrap().variant,
         boss.try_read().unwrap().pos
     );
+    board.boss = Some(Arc::downgrade(&boss));
     boss.try_write().unwrap().promote().unwrap()
 }
 fn delay() {

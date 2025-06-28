@@ -7,7 +7,8 @@ pub enum Input {
     Block,                 // block
     Return,                // return cursor
     Wait,                  // do nothing
-    SwapFocus,
+    SwapFocus,             // swap camera focus(player/selector)
+    Item(usize),           // Use an item(1-6)
 }
 impl Input {
     pub fn get() -> Input {
@@ -42,6 +43,12 @@ impl Input {
                 b't' => return Input::SwapFocus,
                 b'\t' => return Input::Wait,
                 b'\n' => return Input::Enter,
+                b'1' => return Input::Item(1),
+                b'2' => return Input::Item(2),
+                b'3' => return Input::Item(3),
+                b'4' => return Input::Item(4),
+                b'5' => return Input::Item(5),
+                b'6' => return Input::Item(6),
                 _ => {}
             }
         }

@@ -1,5 +1,4 @@
 use crate::{Board, Direction, Player, Style, Vector, board::Special, pieces::spell, style::Color};
-use std::io::Write;
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
@@ -16,6 +15,7 @@ pub struct Enemy {
     pub active: bool,
     pub reachable: bool,
     pub attacking: bool,
+    pub dead: bool,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -28,6 +28,7 @@ impl Enemy {
             active: false,
             reachable: false,
             attacking: false,
+            dead: false,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -65,10 +66,17 @@ impl Enemy {
         self.stun += self.variant.dash_stun();
     }
     // returns whether or not it was killed
-    pub fn attacked(&mut self) -> bool {
-        self.health -= 1;
+    pub fn attacked(&mut self, damage: usize) -> bool {
+        if damage > self.health {
+            self.dead = true
+        } else {
+            self.health -= damage;
+            if self.health == 0 {
+                self.dead = true
+            }
+        }
         self.active = true;
-        self.health == 0
+        self.dead
     }
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
@@ -214,8 +222,7 @@ impl Enemy {
                                 albatrice::debug!(if Arc::ptr_eq(&other, &arc) {
                                     unreachable!("basic boss charged itself")
                                 });
-                                other.try_write().unwrap().attacked();
-                                other.try_write().unwrap().attacked();
+                                other.try_write().unwrap().attacked(4);
                                 break;
                             }
                             this.as_mut().unwrap().pos = pos;
@@ -226,7 +233,7 @@ impl Enemy {
                             this.take();
                             board.smart_render(player);
                             this = Some(arc.try_write().unwrap());
-                            std::thread::sleep(crate::DELAY / 10);
+                            std::thread::sleep(crate::PROJ_DELAY);
                         }
                         let mut this = this.unwrap();
                         this.pos = pos - direction;
@@ -308,9 +315,19 @@ impl Enemy {
                                     ));
                                     board.smart_render(player);
                                     board.specials.pop();
-                                    std::thread::sleep(crate::DELAY / 10);
+                                    std::thread::sleep(crate::PROJ_DELAY);
                                 }
                                 pos = pos - direction;
+                                for enemy in board
+                                    .get_near(None, pos, 3)
+                                    .iter()
+                                    .map(|enemy| enemy.upgrade().unwrap())
+                                {
+                                    enemy
+                                        .try_write()
+                                        .unwrap()
+                                        .attacked((crate::random() as usize & 3) + 1);
+                                }
                                 if player.pos.is_near(pos, 3) {
                                     let damage = (((crate::random() & 3) + 1) * 10) as usize;
                                     crate::log!("\tDamaging player for {damage}");

@@ -1,7 +1,13 @@
 use crate::{
     Enemy, Player, Random, Style, Vector,
     input::Direction,
-    pieces::{door::Door, spell::Spell, wall::Wall},
+    pieces::{
+        door::Door,
+        exit::Exit,
+        item::Item,
+        spell::{Spell, Stepper},
+        wall::Wall,
+    },
 };
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::io::Write;
@@ -18,7 +24,10 @@ pub struct Board {
     pub enemies: Vec<Arc<RwLock<Enemy>>>,
     // Stuff that doesn't get calculated but does get drawn
     pub specials: Vec<Special>,
+    boss_pos: Vector,
+    pub boss: Option<Weak<RwLock<Enemy>>>,
 }
+// General use
 impl Board {
     pub fn new(x: usize, y: usize, render_x: usize, render_y: usize) -> Board {
         let mut inner = Vec::with_capacity(x * y);
@@ -33,12 +42,93 @@ impl Board {
             enemies: Vec::new(),
             backtraces,
             specials: Vec::new(),
+            boss_pos: Vector::new(0, 0),
+            boss: None,
         }
     }
+    fn to_index(&self, pos: Vector) -> usize {
+        pos.y * self.x + pos.x
+    }
+    pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
+        for x in point_1.x..point_2.x {
+            self[Vector::new(x, point_1.y)] = Some(Piece::Wall(Wall {}));
+            self[Vector::new(x, point_2.y - 1)] = Some(Piece::Wall(Wall {}));
+        }
+        for y in point_1.y..point_2.y {
+            self[Vector::new(point_1.x, y)] = Some(Piece::Wall(Wall {}));
+            self[Vector::new(point_2.x - 1, y)] = Some(Piece::Wall(Wall {}));
+        }
+    }
+    pub fn has_collision(&self, pos: Vector) -> bool {
+        if let Some(piece) = &self[pos] {
+            if piece.has_collision() {
+                return true;
+            }
+        }
+        for enemy in self.enemies.iter() {
+            if enemy.try_read().unwrap().pos == pos {
+                return true;
+            }
+        }
+        false
+    }
+    pub fn enemy_collision(&self, pos: Vector) -> bool {
+        self[pos]
+            .as_ref()
+            .is_some_and(|piece| piece.enemy_collision())
+    }
+    pub fn dashable(&self, pos: Vector) -> bool {
+        if let Some(piece) = &self[pos] {
+            if !piece.dashable() {
+                return false;
+            }
+        }
+        true
+    }
+    pub fn get_near(
+        &self,
+        addr: Option<usize>,
+        pos: Vector,
+        range: usize,
+    ) -> Vec<Weak<RwLock<Enemy>>> {
+        let mut out = Vec::new();
+        for enemy in self.enemies.iter() {
+            if let Some(addr) = addr {
+                if Arc::as_ptr(enemy).addr() == addr {
+                    continue;
+                }
+            }
+            if enemy.try_read().unwrap().is_near(pos, range) {
+                out.push(Arc::downgrade(enemy))
+            }
+        }
+        out
+    }
+    pub fn pick_near(
+        &self,
+        addr: Option<usize>,
+        pos: Vector,
+        range: usize,
+    ) -> Option<Weak<RwLock<Enemy>>> {
+        let mut candidates = self.get_near(addr, pos, range);
+        if candidates.len() == 0 {
+            return None;
+        }
+        crate::random::random_index(candidates.len()).map(|index| candidates.swap_remove(index))
+    }
+    pub fn get_enemy(&self, pos: Vector) -> Option<Arc<RwLock<Enemy>>> {
+        for enemy in self.enemies.iter() {
+            if enemy.try_read().unwrap().pos == pos {
+                return Some(enemy.clone());
+            }
+        }
+        None
+    }
+}
+// Rendering
+impl Board {
     // returns whether or not the cursor has a background behind it
-    pub fn render(&self, bounds: Range<Vector>) {
-        let mut lock = VecDeque::new();
-        crossterm::queue!(lock, crossterm::terminal::BeginSynchronizedUpdate).unwrap();
+    pub fn render(&self, bounds: Range<Vector>, lock: &mut impl Write) {
         let x_bound = bounds.start.x..bounds.end.x;
         let y_bound = bounds.start.y..bounds.end.y;
         for y in y_bound.clone() {
@@ -69,17 +159,28 @@ impl Board {
             }
         }
         write!(lock, "\x1b[B\x1b[2K").unwrap();
-        self.draw_enemies(&mut lock, x_bound, y_bound);
-        self.draw_specials(&mut lock, bounds);
-        crossterm::queue!(lock, crossterm::terminal::EndSynchronizedUpdate).unwrap();
-        std::io::stdout().write_all(lock.make_contiguous()).unwrap();
-        std::io::stdout().flush().unwrap();
+        self.draw_enemies(lock, x_bound, y_bound);
+        self.draw_specials(lock, bounds);
     }
     pub fn smart_render(&self, player: &mut Player) {
+        let mut lock = VecDeque::new();
         let bounds = self.get_render_bounds(player);
-        self.render(bounds.clone());
+        crossterm::queue!(
+            std::io::stdout(),
+            crossterm::terminal::BeginSynchronizedUpdate
+        )
+        .unwrap();
+        self.render(bounds.clone(), &mut lock);
+        self.draw_desc(player, &mut lock);
+        std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         player.draw(self, bounds.clone());
         player.reposition_cursor(self.has_background(player.pos), bounds.clone());
+        crossterm::queue!(
+            std::io::stdout(),
+            crossterm::terminal::EndSynchronizedUpdate
+        )
+        .unwrap();
+        std::io::stdout().flush().unwrap();
     }
     fn draw_enemies(&self, lock: &mut impl Write, x_bound: Range<usize>, y_bound: Range<usize>) {
         for enemy in self.enemies.iter() {
@@ -136,6 +237,47 @@ impl Board {
         }
         false
     }
+    pub fn get_render_bounds(&self, player: &Player) -> Range<Vector> {
+        let mut base = Vector::new(0, 0);
+        let pos = player.get_focus();
+        if pos.x < self.render_x {
+            base.x = 0
+        } else if pos.x > self.x - self.render_x {
+            base.x = self.x - self.render_x * 2
+        } else {
+            base.x = pos.x - self.render_x
+        }
+        if pos.y < self.render_y {
+            base.y = 0
+        } else if pos.y > self.y - self.render_y {
+            base.y = self.y - self.render_y * 2
+        } else {
+            base.y = pos.y - self.render_y
+        }
+        base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
+    }
+    pub fn draw_desc(&self, player: &Player, lock: &mut impl Write) {
+        crossterm::queue!(
+            lock,
+            crossterm::cursor::MoveTo(0, self.render_y as u16 * 2 + 3),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+        )
+        .unwrap();
+        // Player -> Enemies -> Map elements
+        if player.pos == player.selector {
+            write!(lock, "You").unwrap();
+        } else if let Some(enemy) = self.get_enemy(player.selector) {
+            write!(lock, "{}", enemy.try_read().unwrap().variant.kill_name()).unwrap()
+        } else {
+            match &self[player.selector] {
+                Some(piece) => write!(lock, "{}", piece.get_desc()).unwrap(),
+                None => write!(lock, "Nothing").unwrap(),
+            }
+        }
+    }
+}
+// Enemy logic
+impl Board {
     pub fn generate_nav_data(&mut self, player: Vector) {
         if self.enemies.len() == 0 {
             return;
@@ -392,28 +534,6 @@ impl Board {
             elapsed.as_nanos()
         )
     }
-    fn to_index(&self, pos: Vector) -> usize {
-        pos.y * self.x + pos.x
-    }
-    pub fn get_render_bounds(&self, player: &Player) -> Range<Vector> {
-        let mut base = Vector::new(0, 0);
-        let pos = player.get_focus();
-        if pos.x < self.render_x {
-            base.x = 0
-        } else if pos.x > self.x - self.render_x {
-            base.x = self.x - self.render_x * 2
-        } else {
-            base.x = pos.x - self.render_x
-        }
-        if pos.y < self.render_y {
-            base.y = 0
-        } else if pos.y > self.y - self.render_y {
-            base.y = self.y - self.render_y * 2
-        } else {
-            base.y = pos.y - self.render_y
-        }
-        base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
-    }
     pub fn move_and_think(
         &mut self,
         player: &mut Player,
@@ -430,7 +550,7 @@ impl Board {
             std::thread::sleep(crate::DELAY);
         }
     }
-    pub fn move_enemy(&self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {
+    pub fn move_enemy(&mut self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {
         let mut enemy = arc.try_write().unwrap();
         let addr = Arc::as_ptr(&arc).addr();
         if !enemy.active || !enemy.reachable || enemy.attacking || enemy.is_stunned() {
@@ -469,6 +589,11 @@ impl Board {
             return false;
         }
         enemy.pos = new_pos;
+        if let Some(boss) = self.boss.as_ref().unwrap().upgrade() {
+            if Arc::ptr_eq(&boss, &arc) {
+                self.boss_pos = enemy.pos;
+            }
+        }
         true
     }
     fn contains_enemy(&self, pos: Vector, addr: Option<usize>) -> bool {
@@ -484,72 +609,17 @@ impl Board {
         }
         false
     }
-    pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
-        for x in point_1.x..point_2.x {
-            self[Vector::new(x, point_1.y)] = Some(Piece::Wall(Wall {}));
-            self[Vector::new(x, point_2.y - 1)] = Some(Piece::Wall(Wall {}));
-        }
-        for y in point_1.y..point_2.y {
-            self[Vector::new(point_1.x, y)] = Some(Piece::Wall(Wall {}));
-            self[Vector::new(point_2.x - 1, y)] = Some(Piece::Wall(Wall {}));
-        }
+    pub fn purge_dead(&mut self) {
+        self.enemies.retain(|enemy| !enemy.try_read().unwrap().dead);
     }
-    pub fn has_collision(&self, pos: Vector) -> bool {
-        if let Some(piece) = &self[pos] {
-            if piece.has_collision() {
-                return true;
+    // places the exit if the boss is dead
+    pub fn place_exit(&mut self) {
+        if let Some(boss) = self.boss.as_ref() {
+            if boss.upgrade().is_none() {
+                let pos = self.boss_pos;
+                self[pos] = Some(Piece::Exit(Exit::Shop));
             }
         }
-        for enemy in self.enemies.iter() {
-            if enemy.try_read().unwrap().pos == pos {
-                return true;
-            }
-        }
-        false
-    }
-    pub fn enemy_collision(&self, pos: Vector) -> bool {
-        self[pos]
-            .as_ref()
-            .is_some_and(|piece| piece.enemy_collision())
-    }
-    pub fn dashable(&self, pos: Vector) -> bool {
-        if let Some(piece) = &self[pos] {
-            if !piece.dashable() {
-                return false;
-            }
-        }
-        true
-    }
-    pub fn get_near(
-        &self,
-        addr: Option<usize>,
-        pos: Vector,
-        range: usize,
-    ) -> Vec<Weak<RwLock<Enemy>>> {
-        let mut out = Vec::new();
-        for enemy in self.enemies.iter() {
-            if let Some(addr) = addr {
-                if Arc::as_ptr(enemy).addr() == addr {
-                    continue;
-                }
-            }
-            if enemy.try_read().unwrap().is_near(pos, range) {
-                out.push(Arc::downgrade(enemy))
-            }
-        }
-        out
-    }
-    pub fn pick_near(
-        &self,
-        addr: Option<usize>,
-        pos: Vector,
-        range: usize,
-    ) -> Option<Weak<RwLock<Enemy>>> {
-        let mut candidates = self.get_near(addr, pos, range);
-        if candidates.len() == 0 {
-            return None;
-        }
-        crate::random::random_index(candidates.len()).map(|index| candidates.swap_remove(index))
     }
 }
 impl std::ops::Index<Vector> for Board {
@@ -581,6 +651,8 @@ pub enum Piece {
     Wall(Wall),
     Door(Door),
     Spell(Spell),
+    Exit(Exit),
+    Item(Item),
 }
 impl Piece {
     fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
@@ -588,20 +660,22 @@ impl Piece {
             Piece::Wall(_) => (Wall::render(pos, board), None),
             Piece::Door(door) => door.render(pos, board),
             Piece::Spell(_) => (Spell::SYMBOL, Some(Spell::STYLE)),
+            Piece::Exit(_) => Exit::render(),
+            Piece::Item(_) => Item::render(),
         }
     }
     pub fn has_collision(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
-            Piece::Spell(_) => false,
+            _ => false,
         }
     }
     pub fn wall_connectable(&self) -> bool {
         match self {
             Piece::Wall(_) => true,
             Piece::Door(_) => true,
-            Piece::Spell(_) => false,
+            _ => false,
         }
     }
     pub fn enemy_collision(&self) -> bool {
@@ -609,13 +683,39 @@ impl Piece {
             Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
             Piece::Spell(_) => true,
+            Piece::Exit(_) => false,
+            Piece::Item(_) => false,
         }
     }
     fn dashable(&self) -> bool {
         match self {
             Piece::Wall(_) => false,
             Piece::Door(door) => !door.has_collision(),
-            Piece::Spell(_) => true,
+            _ => true,
+        }
+    }
+    // returns whether or not the piece should be deleted
+    pub fn on_step(&self, stepper: Stepper<'_>) -> bool {
+        match self {
+            Piece::Spell(spell) => {
+                spell.on_step(stepper);
+                true
+            }
+            Piece::Exit(exit) => {
+                exit.on_step(stepper);
+                false
+            }
+            Piece::Item(item) => item.on_step(stepper),
+            _ => false,
+        }
+    }
+    pub fn get_desc(&self) -> &'static str {
+        match self {
+            Self::Wall(_) => "A wall",
+            Self::Door(door) => door.get_desc(),
+            Self::Spell(_) => "A spell",
+            Self::Exit(_) => "The exit",
+            Self::Item(item) => item.get_desc(),
         }
     }
 }
@@ -625,6 +725,27 @@ impl std::fmt::Display for Piece {
             Piece::Wall(wall) => wall.fmt(f),
             Piece::Door(door) => door.fmt(f),
             Piece::Spell(spell) => spell.fmt(f),
+            Piece::Exit(exit) => exit.fmt(f),
+            Piece::Item(item) => item.fmt(f),
+        }
+    }
+}
+impl std::str::FromStr for Piece {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split(' ');
+        match split.next() {
+            Some(piece_type) => {
+                let args: String = split.map(|s| s.to_string() + " ").collect();
+                match piece_type {
+                    "wall" => Ok(Piece::Wall(Wall {})),
+                    "door" => Ok(Piece::Door(args.parse()?)),
+                    "exit" => Ok(Piece::Exit(args.parse()?)),
+                    "spell" => Err("Spells cannot be created like this".to_string()),
+                    invalid => Err(format!("{invalid} is not a valid piece type")),
+                }
+            }
+            None => Err("You have to specify a piece type".to_string()),
         }
     }
 }

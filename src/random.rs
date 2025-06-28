@@ -50,3 +50,13 @@ impl Random for bool {
         random() & 0b0000_0001 == 1
     }
 }
+impl Random for crate::ItemType {
+    fn random() -> Self {
+        loop {
+            match random() {
+                0 => break Self::Testing,
+                _ => {}
+            }
+        }
+    }
+}

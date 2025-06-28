@@ -421,7 +421,13 @@ impl Enemy {
                                         continue;
                                     }
                                     if let Variant::Basic = enemy.try_read().unwrap().variant {
-                                        candidates.push(Arc::downgrade(enemy))
+                                        if enemy
+                                            .try_read()
+                                            .unwrap()
+                                            .is_near(this.pos, MAGE_BOSS_PROMOTE_RANGE)
+                                        {
+                                            candidates.push(Arc::downgrade(enemy))
+                                        }
                                     }
                                 }
                                 if let Some(chosen) = crate::random::random_index(candidates.len())

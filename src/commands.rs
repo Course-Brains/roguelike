@@ -17,6 +17,8 @@ enum Command {
     OpenAllDoors,
     KillAllEnemies,
     SetPiece(Vector, String),
+    LoadNext,
+    LoadShop,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -42,6 +44,8 @@ impl Command {
                 parse_vector(iter.next(), iter.next())?,
                 iter.map(|s| s.to_string() + " ").collect(),
             )),
+            "load_next" => Ok(Command::LoadNext),
+            "load_shop" => Ok(Command::LoadShop),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -113,6 +117,8 @@ impl Command {
                     }
                 })
             }
+            Command::LoadNext => crate::LOAD_MAP.store(true, std::sync::atomic::Ordering::Relaxed),
+            Command::LoadShop => crate::LOAD_SHOP.store(true, std::sync::atomic::Ordering::Relaxed),
         }
     }
 }

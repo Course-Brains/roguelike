@@ -9,6 +9,7 @@ pub enum Input {
     Wait,                  // do nothing
     SwapFocus,             // swap camera focus(player/selector)
     Item(usize),           // Use an item(1-6)
+    Convert,               // Convert energy to money
 }
 impl Input {
     pub fn get() -> Input {
@@ -49,6 +50,7 @@ impl Input {
                 b'4' => return Input::Item(4),
                 b'5' => return Input::Item(5),
                 b'6' => return Input::Item(6),
+                b'c' => return Input::Convert,
                 _ => {}
             }
         }

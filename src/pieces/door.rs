@@ -15,10 +15,10 @@ impl Door {
     pub fn has_collision(&self) -> bool {
         !self.open
     }
-    pub fn get_desc(&self) -> &'static str {
+    pub fn get_desc(&self, lock: &mut impl std::io::Write) {
         match self.open {
-            true => "An open door",
-            false => "A closed door",
+            true => write!(lock, "An open door").unwrap(),
+            false => write!(lock, "A closed door").unwrap(),
         }
     }
 }

@@ -124,6 +124,18 @@ impl Board {
         }
         None
     }
+    pub fn new_shop() -> Board {
+        let mut out = Board::new(90, 30, 45, 15);
+        out.make_room(Vector::new(0, 0), Vector::new(90, 30));
+        out[Vector::new(88, 15)] = Some(Piece::Exit(Exit::Level));
+        for x in 1..=88 {
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            out[Vector::new(x, 1)] = Some(Piece::Item(Item::new(None)));
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            out[Vector::new(x, 28)] = Some(Piece::Item(Item::new(None)));
+        }
+        out
+    }
 }
 // Rendering
 impl Board {
@@ -257,12 +269,13 @@ impl Board {
         base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
     }
     pub fn draw_desc(&self, player: &Player, lock: &mut impl Write) {
+        Board::go_to_desc(lock);
         crossterm::queue!(
             lock,
-            crossterm::cursor::MoveTo(0, self.render_y as u16 * 2 + 3),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
         )
         .unwrap();
+        write!(lock, " {}: ", player.selector).unwrap();
         // Player -> Enemies -> Map elements
         if player.pos == player.selector {
             write!(lock, "You").unwrap();
@@ -270,10 +283,22 @@ impl Board {
             write!(lock, "{}", enemy.try_read().unwrap().variant.kill_name()).unwrap()
         } else {
             match &self[player.selector] {
-                Some(piece) => write!(lock, "{}", piece.get_desc()).unwrap(),
+                Some(piece) => piece.get_desc(lock),
                 None => write!(lock, "Nothing").unwrap(),
             }
         }
+    }
+    pub fn go_to_desc(lock: &mut impl Write) {
+        crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 93),).unwrap();
+    }
+    pub fn set_desc(lock: &mut impl Write, text: &str) {
+        Board::go_to_desc(lock);
+        crossterm::queue!(
+            lock,
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+        )
+        .unwrap();
+        write!(lock, "{text}").unwrap()
     }
 }
 // Enemy logic
@@ -709,13 +734,13 @@ impl Piece {
             _ => false,
         }
     }
-    pub fn get_desc(&self) -> &'static str {
+    pub fn get_desc(&self, lock: &mut impl std::io::Write) {
         match self {
-            Self::Wall(_) => "A wall",
-            Self::Door(door) => door.get_desc(),
-            Self::Spell(_) => "A spell",
-            Self::Exit(_) => "The exit",
-            Self::Item(item) => item.get_desc(),
+            Self::Wall(_) => write!(lock, "A wall").unwrap(),
+            Self::Door(door) => door.get_desc(lock),
+            Self::Spell(_) => write!(lock, "A spell").unwrap(),
+            Self::Exit(_) => write!(lock, "The exit").unwrap(),
+            Self::Item(item) => item.get_desc(lock),
         }
     }
 }

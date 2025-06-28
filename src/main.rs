@@ -84,6 +84,7 @@ fn main() {
         board: generate(101, 101, 45, 15, 50).join().unwrap(),
         turn: 0,
         next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
+        next_shop: std::thread::spawn(|| Board::new_shop()),
         level: 0,
     };
     generator::DO_DELAY.store(true, Ordering::SeqCst);
@@ -238,6 +239,11 @@ fn main() {
                     }
                 }
             }
+            Input::Convert => {
+                state.player.money += state.player.energy;
+                state.player.energy = 0;
+                state.increment();
+            }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
@@ -249,6 +255,7 @@ struct State {
     board: Board,
     turn: usize,
     next_map: std::thread::JoinHandle<Board>,
+    next_shop: std::thread::JoinHandle<Board>,
     level: usize,
 }
 impl State {
@@ -321,17 +328,21 @@ impl State {
     fn render(&mut self) {
         let bounds = self.board.get_render_bounds(&self.player);
         self.board.smart_render(&mut self.player);
-        self.draw_turn();
+        self.draw_turn_level_and_money();
         self.player
             .reposition_cursor(self.board.has_background(self.player.selector), bounds);
     }
-    fn draw_turn(&self) {
+    fn draw_turn_level_and_money(&self) {
         crossterm::execute!(
             std::io::stdout(),
-            crossterm::cursor::MoveTo(2, self.board.y as u16 + 3)
+            crossterm::cursor::MoveTo(1, self.board.render_y as u16 * 2 + 4),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
         )
         .unwrap();
-        print!("turn: {}", self.turn);
+        print!(
+            "turn: {}\x1b[30Glayer: {}\x1b[60Gmoney: {}",
+            self.turn, self.level, self.player.money
+        );
     }
     fn increment(&mut self) {
         self.think();
@@ -351,13 +362,18 @@ impl State {
         self.level += 1;
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
+        self.render();
     }
     fn load_shop(&mut self) {
-        self.board = Board::new(90, 30, 45, 15);
-        self.board.make_room(Vector::new(0, 0), Vector::new(90, 30));
-        self.player.pos = Vector::new(1, 1);
-        self.player.selector = Vector::new(1, 1);
-        self.board[Vector::new(45, 15)] = Some(Piece::Exit(pieces::exit::Exit::Level));
+        self.board = std::mem::replace(
+            &mut self.next_shop,
+            std::thread::spawn(|| Board::new_shop()),
+        )
+        .join()
+        .unwrap();
+        self.player.pos = Vector::new(1, 15);
+        self.player.selector = Vector::new(1, 15);
+        self.render();
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

@@ -31,14 +31,17 @@ impl Player {
             was_hit: false,
             focus: Focus::Player,
             killer: None,
-            items: [Some(ItemType::Testing); 6],
+            items: [None; 6],
             money: 0,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
+        crate::log!("Moving from {} in {direction}", self.pos);
         self.pos += direction;
         if let Some(piece) = &board[self.pos] {
+            crate::log!("  Triggering on_step at {}", self.pos);
             if piece.on_step(Stepper::Player(self)) {
+                crate::log!("    Removing piece");
                 board[self.pos] = None;
             }
         }
@@ -106,10 +109,17 @@ impl Player {
     }
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {
+        crate::log!("Adding {item} to player");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
+        Board::set_desc(
+            &mut std::io::stdout(),
+            "Select slot for the item(1-6) or c to cancel",
+        );
+        std::io::stdout().flush().unwrap();
         let selected = loop {
             lock.read(&mut buf).unwrap();
+            crate::log!("  recieved {}", buf[0].to_string());
             match buf[0] {
                 b'1' => break Some(0),
                 b'2' => break Some(1),
@@ -123,10 +133,14 @@ impl Player {
         };
         match selected {
             Some(index) => {
+                crate::log!("  Putting item in slot {index}");
                 self.items[index] = Some(item);
                 true
             }
-            None => false,
+            None => {
+                crate::log!("  Pickup canceled");
+                false
+            }
         }
     }
 }

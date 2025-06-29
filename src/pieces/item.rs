@@ -33,8 +33,10 @@ impl Item {
     pub fn get_desc(&self, lock: &mut impl std::io::Write) {
         write!(
             lock,
-            "item: {}. price: {}",
+            "item: {}{}\x1b[0m. price: {}{}\x1b[0m",
+            crate::Style::new().green().intense(true).enact(),
             self.item_type.get_desc(),
+            crate::Style::new().red().enact(),
             self.item_type.price()
         )
         .unwrap();

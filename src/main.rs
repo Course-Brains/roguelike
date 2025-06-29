@@ -104,45 +104,52 @@ fn main() {
             state.load_shop()
         }
         command_handler.handle(&mut state);
-        state.board.place_exit();
         match Input::get() {
             Input::WASD(direction, sprint) => match sprint {
                 true => {
                     match direction {
                         Direction::Up => {
                             if state.player.pos.y < 3 {
+                                bell(None);
                                 continue;
                             }
                         }
                         Direction::Down => {
                             if state.player.pos.y > state.board.y - 2 {
+                                bell(None);
                                 continue;
                             }
                         }
                         Direction::Left => {
                             if state.player.pos.x < 3 {
+                                bell(None);
                                 continue;
                             }
                         }
                         Direction::Right => {
                             if state.player.pos.x > state.board.x - 2 {
+                                bell(None);
                                 continue;
                             }
                         }
                     }
                     if state.player.energy == 0 {
+                        bell(None);
                         continue;
                     }
                     let mut checking = state.player.pos + direction;
                     if !state.board.dashable(checking) {
+                        bell(None);
                         continue;
                     }
                     checking += direction;
                     if !state.board.dashable(checking) {
+                        bell(None);
                         continue;
                     }
                     checking += direction;
                     if state.board.has_collision(checking) {
+                        bell(None);
                         continue;
                     }
                     state.attack_enemy(state.player.pos + direction, false, true);
@@ -157,6 +164,8 @@ fn main() {
                     if state.is_valid_move(direction) {
                         state.player.do_move(direction, &mut state.board);
                         state.increment()
+                    } else {
+                        bell(None)
                     }
                 }
             },
@@ -174,10 +183,18 @@ fn main() {
                 }
             }
             Input::Attack => {
+                let fail_msg = Style::new().red().enact()
+                    + "You can only attack in the 3 by 3 around you\x1b[0m";
                 if state.player.pos.x.abs_diff(state.player.selector.x) > 1 {
+                    Board::set_desc(&mut std::io::stdout(), &fail_msg);
+                    bell(None);
+                    std::io::stdout().flush().unwrap();
                     continue;
                 }
                 if state.player.pos.y.abs_diff(state.player.selector.y) > 1 {
+                    Board::set_desc(&mut std::io::stdout(), &fail_msg);
+                    bell(None);
+                    std::io::stdout().flush().unwrap();
                     continue;
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
@@ -237,6 +254,8 @@ fn main() {
                     if item.enact(&mut state) {
                         state.increment()
                     }
+                } else {
+                    bell(None);
                 }
             }
             Input::Convert => {
@@ -324,6 +343,7 @@ impl State {
             self.board
                 .move_and_think(&mut self.player, enemy.clone(), bounds.clone());
         }
+        self.board.place_exit();
     }
     fn render(&mut self) {
         let bounds = self.board.get_render_bounds(&self.player);
@@ -476,5 +496,17 @@ impl Drop for Weirdifier {
             .status()
             .unwrap();
         crossterm::execute!(std::io::stdout(), crossterm::terminal::EnableLineWrap).unwrap()
+    }
+}
+fn bell(lock: Option<&mut dyn std::io::Write>) {
+    let mut buf = [7];
+    match lock {
+        Some(lock) => {
+            lock.write(&mut buf).unwrap();
+        }
+        None => {
+            std::io::stdout().write(&mut buf).unwrap();
+            std::io::stdout().flush().unwrap();
+        }
     }
 }

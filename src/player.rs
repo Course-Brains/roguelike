@@ -110,7 +110,8 @@ impl Player {
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {
         crate::log!("Adding {item} to player");
-        let mut buf = [0];
+        let mut buf = [7];
+        std::io::stdout().write(&mut buf).unwrap();
         let mut lock = std::io::stdin().lock();
         Board::set_desc(
             &mut std::io::stdout(),

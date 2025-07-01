@@ -19,6 +19,7 @@ enum Command {
     SetPiece(Vector, String),
     LoadNext,
     LoadShop,
+    GodMode,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -46,6 +47,7 @@ impl Command {
             )),
             "load_next" => Ok(Command::LoadNext),
             "load_shop" => Ok(Command::LoadShop),
+            "god_mode" => Ok(Command::GodMode),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -119,6 +121,7 @@ impl Command {
             }
             Command::LoadNext => crate::LOAD_MAP.store(true, std::sync::atomic::Ordering::Relaxed),
             Command::LoadShop => crate::LOAD_SHOP.store(true, std::sync::atomic::Ordering::Relaxed),
+            Command::GodMode => state.player.invincible = !state.player.invincible,
         }
     }
 }

@@ -318,6 +318,33 @@ impl Enemy {
                                     std::thread::sleep(crate::PROJ_DELAY);
                                 }
                                 pos = pos - direction;
+
+                                let restore_to = board.specials.len();
+                                board.specials.push(Special::new(
+                                    pos,
+                                    ' ',
+                                    Some(*Style::new().background_red()),
+                                ));
+                                board.smart_render(player);
+                                board.specials.pop();
+                                std::thread::sleep(crate::DELAY * 2);
+                                for x in -1..=1 {
+                                    for y in -1..=1 {
+                                        board.specials.push(Special::new(
+                                            Vector::new(
+                                                (pos.x as isize + x) as usize,
+                                                (pos.y as isize + y) as usize,
+                                            ),
+                                            ' ',
+                                            Some(*Style::new().background_red()),
+                                        ));
+                                    }
+                                }
+                                board.smart_render(player);
+                                board.specials.truncate(restore_to);
+
+                                std::thread::sleep(crate::DELAY * 2);
+
                                 for enemy in board
                                     .get_near(None, pos, 3)
                                     .iter()

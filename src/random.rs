@@ -52,11 +52,9 @@ impl Random for bool {
 }
 impl Random for crate::ItemType {
     fn random() -> Self {
-        loop {
-            match random() {
-                0 => break Self::Testing,
-                _ => {}
-            }
+        match random() & 0b0000_0000 {
+            0 => Self::Testing,
+            _ => unreachable!("idk, not my problem"),
         }
     }
 }

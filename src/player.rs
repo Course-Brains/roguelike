@@ -17,6 +17,8 @@ pub struct Player {
     killer: Option<&'static str>,
     pub items: [Option<ItemType>; 6],
     pub money: usize,
+    pub invincible: bool,
+    pub perception: usize,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -33,6 +35,8 @@ impl Player {
             killer: None,
             items: [None; 6],
             money: 0,
+            invincible: false,
+            perception: 10,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -50,6 +54,9 @@ impl Player {
     // true: died
     // false: alive
     pub fn attacked(&mut self, damage: usize, attacker: &'static str) -> Result<bool, ()> {
+        if self.invincible {
+            return Err(());
+        }
         self.was_hit = true;
         if self.blocking {
             return Err(());
@@ -91,9 +98,27 @@ impl Player {
             Some(killer) => {
                 write!(
                     std::io::stdout(),
-                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m. Do better next time.\nPress enter to exit.",
+                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.\n",
                     Style::new().green().intense(true).enact(),
                     killer
+                )
+                .unwrap();
+                write!(
+                    std::io::stdout(),
+                    "{}",
+                    match crate::random() & 3 {
+                        0 => "Do better next time.",
+                        1 => "With enough luck you'll eventually win even without skill.",
+                        2 => "You CAN prevail.",
+                        3 => "You ever heard of the definition of insanity?",
+                        _ => unreachable!("Ain't my problem"),
+                    }
+                )
+                .unwrap();
+                write!(
+                    std::io::stdout(),
+                    "\nPress {}Enter\x1b[0m to exit.",
+                    Style::new().cyan().enact()
                 )
                 .unwrap();
                 std::io::stdout().flush().unwrap();

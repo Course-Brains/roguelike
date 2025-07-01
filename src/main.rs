@@ -40,12 +40,15 @@ fn log(string: String) {
     write!(LOG.lock().unwrap().as_ref().unwrap(), "{string}\n").unwrap();
 }
 
+// Global flags
 use std::sync::atomic::{AtomicBool, Ordering};
+// Trigger the enemies to be rechecked for reachability
 static RE_FLOOD: AtomicBool = AtomicBool::new(false);
 // Load the next level
 static LOAD_MAP: AtomicBool = AtomicBool::new(false);
 // load the shop
 static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
+
 fn main() {
     #[cfg(any(debug_assertions, feature = "force_log"))]
     {
@@ -61,7 +64,7 @@ fn main() {
                 log!("Setting random index to {new_index}");
                 random::initialize_with(new_index)
             }
-            "testgen" => {
+            "maptest" => {
                 log!("TESTING MAP GEN");
                 testing = true
             }
@@ -81,7 +84,7 @@ fn main() {
     .unwrap();*/
     let mut state = State {
         player: Player::new(Vector::new(1, 1)),
-        board: generate(101, 101, 45, 15, 50).join().unwrap(),
+        board: generate(151, 151, 45, 15, 75).join().unwrap(),
         turn: 0,
         next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
         next_shop: std::thread::spawn(|| Board::new_shop()),

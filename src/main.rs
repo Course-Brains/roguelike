@@ -269,6 +269,7 @@ fn main() {
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
+            state.render();
         }
     }
 }

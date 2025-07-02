@@ -835,6 +835,7 @@ impl std::str::FromStr for Piece {
                     "wall" => Ok(Piece::Wall(Wall {})),
                     "door" => Ok(Piece::Door(args.parse()?)),
                     "exit" => Ok(Piece::Exit(args.parse()?)),
+                    "item" => Ok(Piece::Item(args.parse()?)),
                     "spell" => Err("Spells cannot be created like this".to_string()),
                     invalid => Err(format!("{invalid} is not a valid piece type")),
                 }

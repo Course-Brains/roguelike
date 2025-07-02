@@ -135,9 +135,8 @@ impl Player {
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {
         crate::log!("Adding {item} to player");
-        let mut buf = [7];
-        std::io::stdout().write(&mut buf).unwrap();
         let mut lock = std::io::stdin().lock();
+        let mut buf = [0];
         Board::set_desc(
             &mut std::io::stdout(),
             "Select slot for the item(1-6) or c to cancel",
@@ -171,6 +170,12 @@ impl Player {
     }
     pub fn decriment_effects(&mut self) {
         self.effects.decriment()
+    }
+    pub fn heal(&mut self, amount: usize) {
+        self.health += amount;
+        if self.health > self.max_health {
+            self.health = self.max_health;
+        }
     }
 }
 // Rendering
@@ -272,6 +277,8 @@ pub struct Effects {
     pub invincible: Duration,
     // No perception check on enemies, but aggro all mage types
     pub mage_sight: Duration,
+    // Heal 2 health per turn
+    pub regen: Duration,
 }
 impl Effects {
     // Creates an instance with no effects
@@ -279,12 +286,14 @@ impl Effects {
         Effects {
             invincible: Duration::None,
             mage_sight: Duration::None,
+            regen: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
     fn decriment(&mut self) {
         self.invincible.decriment();
         self.mage_sight.decriment();
+        self.regen.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -295,6 +304,7 @@ impl Effects {
                 match effect {
                     "invincible" => self.invincible = args.parse()?,
                     "mage_sight" => self.mage_sight = args.parse()?,
+                    "regen" => self.regen = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
@@ -306,6 +316,7 @@ impl Effects {
 #[derive(Debug, Clone, Copy)]
 pub enum Duration {
     None,
+    // Stops just before hitting 0, so to do 10 turns, set to 11
     Turns(usize),
     Infinite,
 }

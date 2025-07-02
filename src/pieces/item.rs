@@ -19,7 +19,7 @@ impl Item {
         crate::log!("Item({self}) was stepped on");
         if let Stepper::Player(player) = stepper {
             crate::log!("  Attempting pickup");
-            if player.money > self.item_type.price() {
+            if player.money >= self.item_type.price() {
                 crate::log!("    Pickup is valid");
                 if player.add_item(self.item_type) {
                     player.money -= self.item_type.price();
@@ -45,5 +45,13 @@ impl Item {
 impl Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.item_type.fmt(f)
+    }
+}
+impl std::str::FromStr for Item {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Item {
+            item_type: s.parse()?,
+        })
     }
 }

@@ -52,8 +52,9 @@ impl Random for bool {
 }
 impl Random for crate::ItemType {
     fn random() -> Self {
-        match random() & 0b0000_0000 {
+        match random() & 0b0000_0001 {
             0 => Self::MageSight,
+            1 => Self::HealthPotion,
             _ => unreachable!("idk, not my problem"),
         }
     }

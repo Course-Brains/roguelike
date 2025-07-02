@@ -2,7 +2,7 @@ use std::io::Read;
 pub enum Input {
     Arrow(Direction),      // move cursor
     WASD(Direction, bool), // move character
-    Enter,                 // exit
+    Enter,                 // interact
     Attack,                // attack
     Block,                 // block
     Return,                // return cursor

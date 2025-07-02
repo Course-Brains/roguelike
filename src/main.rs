@@ -340,6 +340,9 @@ impl State {
         false
     }
     fn think(&mut self) {
+        if self.player.effects.regen.is_active() {
+            self.player.heal(2)
+        }
         self.board.purge_dead();
         self.board.generate_nav_data(self.player.pos);
         let bounds = self.board.get_render_bounds(&self.player);
@@ -387,6 +390,7 @@ impl State {
         self.level += 1;
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
+        self.board.flood(self.player.pos);
         self.render();
     }
     fn load_shop(&mut self) {

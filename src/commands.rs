@@ -21,6 +21,7 @@ enum Command {
     LoadShop,
     Effect(String),
     Give(ItemType, usize),
+    SetMoney(usize),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -50,6 +51,7 @@ impl Command {
             "load_shop" => Ok(Command::LoadShop),
             "effect" => Ok(Command::Effect(iter.map(|s| s.to_string() + " ").collect())),
             "give" => Ok(Command::Give(parse(iter.next())?, parse(iter.next())?)),
+            "set_money" => Ok(Command::SetMoney(parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -129,6 +131,7 @@ impl Command {
                 }
             }
             Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
+            Command::SetMoney(money) => state.player.money = money,
         }
     }
 }

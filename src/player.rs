@@ -313,7 +313,12 @@ impl Duration {
     fn decriment(&mut self) {
         match self {
             Self::None => {}
-            Self::Turns(turns) => *turns -= 1,
+            Self::Turns(turns) => {
+                *turns -= 1;
+                if *turns == 0 {
+                    *self = Self::None
+                }
+            }
             Self::Infinite => {}
         }
     }

@@ -13,7 +13,10 @@ impl ItemType {
     // returns whether or not it succeeded and should take the turn
     pub fn enact(self, state: &mut crate::State) -> bool {
         match self {
-            Self::MageSight => todo!(),
+            Self::MageSight => {
+                state.player.effects.mage_sight += 100;
+                true
+            }
         }
     }
     // The price to pick up
@@ -26,6 +29,15 @@ impl ItemType {
     pub fn get_desc(self) -> &'static str {
         match self {
             Self::MageSight => "Scroll of magical sight",
+        }
+    }
+}
+impl std::str::FromStr for ItemType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mage_sight" => Ok(Self::MageSight),
+            other => Err(format!("{other} is not an item type")),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{State, Vector};
+use crate::{ItemType, State, Vector};
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -20,6 +20,7 @@ enum Command {
     LoadNext,
     LoadShop,
     Effect(String),
+    Give(ItemType, usize),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -48,6 +49,7 @@ impl Command {
             "load_next" => Ok(Command::LoadNext),
             "load_shop" => Ok(Command::LoadShop),
             "effect" => Ok(Command::Effect(iter.map(|s| s.to_string() + " ").collect())),
+            "give" => Ok(Command::Give(parse(iter.next())?, parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -126,6 +128,7 @@ impl Command {
                     out.send(msg).unwrap()
                 }
             }
+            Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
         }
     }
 }

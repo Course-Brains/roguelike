@@ -1,4 +1,4 @@
-use crate::{Board, Direction, ItemType, Style, Vector, pieces::spell::Stepper};
+use crate::{Board, Direction, ItemType, Style, Vector, commands::parse, pieces::spell::Stepper};
 use std::io::{Read, Write};
 use std::ops::Range;
 const SYMBOL: char = '@';
@@ -17,8 +17,8 @@ pub struct Player {
     killer: Option<&'static str>,
     pub items: [Option<ItemType>; 6],
     pub money: usize,
-    pub invincible: bool,
     pub perception: usize,
+    pub effects: Effects,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -35,8 +35,8 @@ impl Player {
             killer: None,
             items: [None; 6],
             money: 0,
-            invincible: false,
             perception: 10,
+            effects: Effects::new(),
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -54,7 +54,7 @@ impl Player {
     // true: died
     // false: alive
     pub fn attacked(&mut self, damage: usize, attacker: &'static str) -> Result<bool, ()> {
-        if self.invincible {
+        if self.effects.invincible.is_active() {
             return Err(());
         }
         self.was_hit = true;
@@ -169,6 +169,9 @@ impl Player {
             }
         }
     }
+    pub fn decriment_effects(&mut self) {
+        self.effects.decriment()
+    }
 }
 // Rendering
 impl Player {
@@ -260,6 +263,87 @@ impl Focus {
         match self {
             Focus::Player => *self = Focus::Selector,
             Focus::Selector => *self = Focus::Player,
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct Effects {
+    // self explanitory
+    pub invincible: Duration,
+    // No perception check on enemies, but aggro all mage types
+    pub mage_sight: Duration,
+}
+impl Effects {
+    // Creates an instance with no effects
+    fn new() -> Effects {
+        Effects {
+            invincible: Duration::None,
+            mage_sight: Duration::None,
+        }
+    }
+    // Decreases all effect durations by 1 turn
+    fn decriment(&mut self) {
+        self.invincible.decriment();
+        self.mage_sight.decriment();
+    }
+    // for setting effects by command
+    pub fn set(&mut self, s: &str) -> Result<(), String> {
+        let mut split = s.split(' ');
+        match split.next() {
+            Some(effect) => {
+                let args: String = split.map(|s| s.to_string() + " ").collect();
+                match effect {
+                    "invincible" => self.invincible = args.parse()?,
+                    "mage_sight" => self.mage_sight = args.parse()?,
+                    other => return Err(format!("{other} is not an effect")),
+                }
+            }
+            None => return Err("No effect specified".to_string()),
+        }
+        Ok(())
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub enum Duration {
+    None,
+    Turns(usize),
+    Infinite,
+}
+impl Duration {
+    fn decriment(&mut self) {
+        match self {
+            Self::None => {}
+            Self::Turns(turns) => *turns -= 1,
+            Self::Infinite => {}
+        }
+    }
+    pub fn is_active(self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Turns(_) => true,
+            Self::Infinite => true,
+        }
+    }
+}
+impl std::ops::AddAssign<usize> for Duration {
+    fn add_assign(&mut self, rhs: usize) {
+        match self {
+            Self::None => *self = Self::Turns(rhs),
+            Self::Turns(turns) => *turns += rhs,
+            Self::Infinite => {}
+        }
+    }
+}
+impl std::str::FromStr for Duration {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split(' ');
+        match split.next() {
+            Some("none") => Ok(Duration::None),
+            Some("turns") => Ok(Duration::Turns(parse(split.next())?)),
+            Some("infinite") => Ok(Duration::Infinite),
+            Some(other) => Err(format!("{other} is not a valid duration")),
+            None => Err("Did not get duration".to_string()),
         }
     }
 }

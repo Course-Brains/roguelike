@@ -83,7 +83,11 @@ impl Enemy {
         let mut this = arc.try_write().unwrap();
         let addr = Arc::as_ptr(&arc).addr();
         if !this.active {
-            if this.variant.detect(&this, board) {
+            if this.variant.mage_aggro() && player.effects.mage_sight.is_active() {
+                if this.reachable {
+                    this.active = true;
+                }
+            } else if this.variant.detect(&this, board) {
                 this.active = true;
             } else {
                 return false;
@@ -615,6 +619,13 @@ impl Variant {
             Variant::BasicBoss(_) => Err(()),
             Variant::Mage(_) => Ok(2),
             Variant::MageBoss(_) => Err(()),
+        }
+    }
+    fn mage_aggro(&self) -> bool {
+        match self {
+            Self::Mage(_) => true,
+            // Bosses don't matter because they always have aggro
+            _ => false,
         }
     }
     pub const fn basic() -> Variant {

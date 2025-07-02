@@ -49,7 +49,7 @@ impl Board {
             visible,
         }
     }
-    fn to_index(&self, pos: Vector) -> usize {
+    pub fn to_index(&self, pos: Vector) -> usize {
         pos.y * self.x + pos.x
     }
     pub fn make_room(&mut self, point_1: Vector, point_2: Vector) {
@@ -204,7 +204,14 @@ impl Board {
     fn draw_enemies(&self, lock: &mut impl Write, bounds: Range<Vector>, player: &Player) {
         for enemy in self.enemies.iter() {
             let pos = enemy.try_read().unwrap().pos;
-            if !self.is_visible(pos, player.perception, bounds.clone()) {
+            if !bounds.contains(&pos) {
+                continue;
+            }
+            if player.effects.mage_sight.is_active() {
+                if !enemy.try_read().unwrap().reachable {
+                    continue;
+                }
+            } else if !self.visible[self.to_index(pos)] {
                 continue;
             }
             crossterm::queue!(lock, (pos - bounds.start).to_move()).unwrap();
@@ -214,19 +221,11 @@ impl Board {
             }
         }
     }
-    fn is_visible(&self, pos: Vector, perception: usize, bounds: Range<Vector>) -> bool {
+    fn is_visible(&self, pos: Vector, bounds: Range<Vector>) -> bool {
         if !bounds.contains(&pos) {
             return false;
         }
-        match self.backtraces[self.to_index(pos)].cost {
-            Some(cost) => {
-                if cost > perception {
-                    return false;
-                }
-            }
-            None => return false,
-        }
-        true
+        self.visible[self.to_index(pos)]
     }
     fn draw_specials(&self, lock: &mut impl Write, bounds: Range<Vector>) {
         for special in self.specials.iter() {
@@ -287,16 +286,28 @@ impl Board {
             crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
         )
         .unwrap();
-        write!(lock, " {}: ", player.selector).unwrap();
-        // Player -> Enemies -> Map elements
-        if player.pos == player.selector {
-            write!(lock, "You").unwrap();
-        } else if let Some(enemy) = self.get_enemy(player.selector) {
-            write!(lock, "{}", enemy.try_read().unwrap().variant.kill_name()).unwrap()
+        write!(lock, " {}", player.selector).unwrap();
+        if self.visible[self.to_index(player.selector)] {
+            write!(lock, ": ").unwrap();
+            // Player -> Enemies -> Map elements
+            if player.pos == player.selector {
+                write!(lock, "You").unwrap();
+            } else if let Some(enemy) = self.get_enemy(player.selector) {
+                write!(lock, "{}", enemy.try_read().unwrap().variant.kill_name()).unwrap()
+            } else {
+                match &self[player.selector] {
+                    Some(piece) => piece.get_desc(lock),
+                    None => write!(lock, "Nothing").unwrap(),
+                }
+            }
         } else {
-            match &self[player.selector] {
-                Some(piece) => piece.get_desc(lock),
-                None => write!(lock, "Nothing").unwrap(),
+            if player.effects.mage_sight.is_active() {
+                if let Some(enemy) = self.get_enemy(player.selector) {
+                    if enemy.try_read().unwrap().reachable {
+                        write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name())
+                            .unwrap();
+                    }
+                }
             }
         }
     }
@@ -621,21 +632,13 @@ impl Board {
         bounds: Range<Vector>,
     ) {
         if self.move_enemy(player, enemy.clone())
-            && self.is_visible(
-                enemy.try_read().unwrap().pos,
-                player.perception,
-                bounds.clone(),
-            )
+            && self.is_visible(enemy.try_read().unwrap().pos, bounds.clone())
         {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);
         }
         if Enemy::think(enemy.clone(), self, player)
-            && self.is_visible(
-                enemy.try_read().unwrap().pos,
-                player.perception,
-                bounds.clone(),
-            )
+            && self.is_visible(enemy.try_read().unwrap().pos, bounds.clone())
         {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);

@@ -19,7 +19,7 @@ enum Command {
     SetPiece(Vector, String),
     LoadNext,
     LoadShop,
-    GodMode,
+    Effect(String),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -47,7 +47,7 @@ impl Command {
             )),
             "load_next" => Ok(Command::LoadNext),
             "load_shop" => Ok(Command::LoadShop),
-            "god_mode" => Ok(Command::GodMode),
+            "effect" => Ok(Command::Effect(iter.map(|s| s.to_string() + " ").collect())),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -121,7 +121,11 @@ impl Command {
             }
             Command::LoadNext => crate::LOAD_MAP.store(true, std::sync::atomic::Ordering::Relaxed),
             Command::LoadShop => crate::LOAD_SHOP.store(true, std::sync::atomic::Ordering::Relaxed),
-            Command::GodMode => state.player.invincible = !state.player.invincible,
+            Command::Effect(args) => {
+                if let Err(msg) = state.player.effects.set(&args) {
+                    out.send(msg).unwrap()
+                }
+            }
         }
     }
 }
@@ -168,7 +172,7 @@ fn listen() -> (Receiver<Command>, Sender<String>) {
     });
     (rx, tx_out)
 }
-fn parse<T: std::str::FromStr>(option: Option<&str>) -> Result<T, String>
+pub fn parse<T: std::str::FromStr>(option: Option<&str>) -> Result<T, String>
 where
     <T as std::str::FromStr>::Err: ToString,
 {

@@ -368,6 +368,7 @@ impl State {
         );
     }
     fn increment(&mut self) {
+        self.player.decriment_effects();
         self.think();
         self.turn += 1;
         self.render();

@@ -1,4 +1,4 @@
-use crate::{Player, Style, player::Duration};
+use crate::{Player, Style, player::Duration, random};
 
 const SYMBOL: char = 'U';
 const AVAILABLE: Style = *Style::new().green();
@@ -39,7 +39,7 @@ impl UpgradeType {
             Self::MageEye => {
                 player.effects.mage_sight = Duration::Infinite;
                 player.upgrades.mage_eye += 1;
-                let _ = player.attacked(20, "stupidity");
+                let _ = player.attacked(((random() as usize & 3) + 1) * 5, "stupidity");
             }
         }
     }

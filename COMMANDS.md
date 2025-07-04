@@ -43,6 +43,9 @@ set\_piece \[x\] \[y\] [args]
             Sets it to an item piece containing the item specified by
             \[item\], [item] has the same valid values as the give
             command
+        upgrade \[upgrade\]
+            Sets it to an Upgrade which grants the given \[upgrade\].
+            Valid upgrades are as in the upgrade command
     No, you cannot create spells using this because they require a
     caster
 
@@ -73,3 +76,9 @@ give \[item\] \[slot\]
     valid items are:
         mage\_sight
         health\_potion
+
+upgrade \[upgrade\]
+    Gives the specified \[upgrade\]
+    Valid upgrades are:
+        mage\_eye
+            The mage's eye

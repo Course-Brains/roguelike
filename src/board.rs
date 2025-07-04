@@ -146,7 +146,7 @@ impl Board {
 // Rendering
 impl Board {
     // returns whether or not the cursor has a background behind it
-    pub fn render(&self, bounds: Range<Vector>, lock: &mut impl Write) {
+    pub fn render(&self, bounds: Range<Vector>, lock: &mut impl Write, player: &Player) {
         let x_bound = bounds.start.x..bounds.end.x;
         let y_bound = bounds.start.y..bounds.end.y;
         for y in y_bound.clone() {
@@ -161,7 +161,7 @@ impl Board {
                     if !self.visible[self.to_index(Vector::new(x, y))] {
                         continue;
                     }
-                    let (ch, style) = piece.render(Vector::new(x, y), self);
+                    let (ch, style) = piece.render(Vector::new(x, y), self, player);
                     crossterm::queue!(
                         lock,
                         crossterm::cursor::MoveTo(
@@ -190,13 +190,13 @@ impl Board {
         )
         .unwrap();
         self.generate_visible(player);
-        self.render(bounds.clone(), &mut lock);
+        self.render(bounds.clone(), &mut lock, player);
         self.draw_enemies(&mut lock, bounds.clone(), player);
         self.draw_specials(&mut lock, bounds.clone());
         self.draw_desc(player, &mut lock);
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         player.draw(self, bounds.clone());
-        player.reposition_cursor(self.has_background(player.pos), bounds.clone());
+        player.reposition_cursor(self.has_background(player.pos, player), bounds.clone());
         crossterm::queue!(
             std::io::stdout(),
             crossterm::terminal::EndSynchronizedUpdate
@@ -241,10 +241,10 @@ impl Board {
             }
         }
     }
-    pub fn has_background(&self, pos: Vector) -> bool {
+    pub fn has_background(&self, pos: Vector, player: &Player) -> bool {
         if let Some(piece) = &self[pos] {
             if piece
-                .render(pos, self)
+                .render(pos, self, player)
                 .1
                 .is_some_and(|x| x.has_background())
             {
@@ -753,14 +753,14 @@ pub enum Piece {
     Upgrade(Upgrade),
 }
 impl Piece {
-    fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
+    fn render(&self, pos: Vector, board: &Board, player: &Player) -> (char, Option<Style>) {
         match self {
             Piece::Wall(_) => (Wall::render(pos, board), None),
             Piece::Door(door) => door.render(pos, board),
             Piece::Spell(_) => (Spell::SYMBOL, Some(Spell::STYLE)),
             Piece::Exit(_) => Exit::render(),
-            Piece::Item(item) => item.render(),
-            Piece::Upgrade(upgrade) => upgrade.render(),
+            Piece::Item(item) => item.render(player),
+            Piece::Upgrade(upgrade) => upgrade.render(player),
         }
     }
     pub fn has_collision(&self) -> bool {
@@ -842,6 +842,7 @@ impl std::str::FromStr for Piece {
                     "door" => Ok(Piece::Door(args.parse()?)),
                     "exit" => Ok(Piece::Exit(args.parse()?)),
                     "item" => Ok(Piece::Item(args.parse()?)),
+                    "upgrade" => Ok(Piece::Upgrade(args.parse()?)),
                     "spell" => Err("Spells cannot be created like this".to_string()),
                     invalid => Err(format!("{invalid} is not a valid piece type")),
                 }

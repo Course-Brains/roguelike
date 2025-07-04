@@ -5,8 +5,8 @@ impl Upgrade {
     pub fn new(which: Option<UpgradeType>) -> Upgrade {
         Upgrade(which.unwrap_or(UpgradeType::random()))
     }
-    pub const fn render(&self) -> (char, Option<crate::Style>) {
-        self.0.render()
+    pub fn render(&self, player: &crate::Player) -> (char, Option<crate::Style>) {
+        self.0.render(player)
     }
     pub fn on_step(&self, stepper: Stepper<'_>) -> bool {
         if let Stepper::Player(player) = stepper {

@@ -1,7 +1,7 @@
-use crate::{Player, Style};
+use crate::Style;
 
-const SCROLL: (char, Option<Style>) = ('S', Some(*Style::new().green()));
-const POTION: (char, Option<Style>) = ('P', Some(*Style::new().green()));
+const SCROLL: char = 'S';
+const POTION: char = 'P';
 
 #[derive(Clone, Copy, Debug)]
 pub enum ItemType {
@@ -50,17 +50,17 @@ impl ItemType {
             Self::HealthPotion => "Potion of healing",
         }
     }
-    pub fn render(self) -> (char, Option<Style>) {
-        match self {
-            Self::MageSight => SCROLL,
-            Self::HealthPotion => POTION,
-        }
-    }
-    pub fn can_get(self, player: &mut Player) -> bool {
-        match self {
-            Self::MageSight => true,
-            Self::HealthPotion => true,
-        }
+    pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {
+        (
+            match self {
+                Self::MageSight => SCROLL,
+                Self::HealthPotion => POTION,
+            },
+            Some(match self.price() <= player.money {
+                true => *Style::new().green(),
+                false => *Style::new().red(),
+            }),
+        )
     }
 }
 impl std::str::FromStr for ItemType {

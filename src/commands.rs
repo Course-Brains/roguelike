@@ -1,4 +1,4 @@
-use crate::{ItemType, State, Vector};
+use crate::{ItemType, State, Vector, upgrades::UpgradeType};
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -22,6 +22,7 @@ enum Command {
     Effect(String),
     Give(ItemType, usize),
     SetMoney(usize),
+    Upgrade(UpgradeType),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -52,6 +53,7 @@ impl Command {
             "effect" => Ok(Command::Effect(iter.map(|s| s.to_string() + " ").collect())),
             "give" => Ok(Command::Give(parse(iter.next())?, parse(iter.next())?)),
             "set_money" => Ok(Command::SetMoney(parse(iter.next())?)),
+            "upgrade" => Ok(Command::Upgrade(parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -132,6 +134,7 @@ impl Command {
             }
             Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
             Command::SetMoney(money) => state.player.money = money,
+            Command::Upgrade(upgrade_type) => upgrade_type.on_pickup(&mut state.player),
         }
     }
 }

@@ -10,14 +10,14 @@ impl Item {
             item_type: item_type.unwrap_or(crate::ItemType::random()),
         }
     }
-    pub fn render(&self) -> (char, Option<Style>) {
-        self.item_type.render()
+    pub fn render(&self, player: &crate::Player) -> (char, Option<Style>) {
+        self.item_type.render(player)
     }
     pub fn on_step(&self, stepper: Stepper<'_>) -> bool {
         crate::log!("Item({self}) was stepped on");
         if let Stepper::Player(player) = stepper {
             crate::log!("  Attempting pickup");
-            if player.money >= self.item_type.price() && self.item_type.can_get(player) {
+            if player.money >= self.item_type.price() {
                 crate::log!("    Pickup is valid");
                 if player.add_item(self.item_type) {
                     player.money -= self.item_type.price();

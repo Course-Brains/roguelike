@@ -179,7 +179,9 @@ fn main() {
                     state.player.selector += direction;
                     state.board.draw_desc(&state.player, &mut std::io::stdout());
                     state.player.reposition_cursor(
-                        state.board.has_background(state.player.selector),
+                        state
+                            .board
+                            .has_background(state.player.selector, &state.player),
                         state.board.get_render_bounds(&state.player),
                     );
                     if let player::Focus::Selector = state.player.focus {
@@ -358,8 +360,11 @@ impl State {
         let bounds = self.board.get_render_bounds(&self.player);
         self.board.smart_render(&mut self.player);
         self.draw_turn_level_and_money();
-        self.player
-            .reposition_cursor(self.board.has_background(self.player.selector), bounds);
+        self.player.reposition_cursor(
+            self.board
+                .has_background(self.player.selector, &self.player),
+            bounds,
+        );
     }
     fn draw_turn_level_and_money(&self) {
         crossterm::execute!(

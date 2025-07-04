@@ -1,6 +1,8 @@
 use crate::{Player, Style, player::Duration};
 
-const RENDER: (char, Option<Style>) = ('U', Some(*Style::new().green()));
+const SYMBOL: char = 'U';
+const AVAILABLE: Style = *Style::new().green();
+const UNAVAILABLE: Style = *Style::new().red();
 
 #[derive(Clone, Copy, Debug)]
 pub struct Upgrades {
@@ -16,8 +18,16 @@ pub enum UpgradeType {
     MageEye,
 }
 impl UpgradeType {
-    pub const fn render(&self) -> (char, Option<Style>) {
-        RENDER
+    pub fn render(&self, player: &Player) -> (char, Option<Style>) {
+        (
+            SYMBOL,
+            Some(
+                match self.cost() <= player.money && self.can_pickup(player) {
+                    true => AVAILABLE,
+                    false => UNAVAILABLE,
+                },
+            ),
+        )
     }
     pub fn cost(self) -> usize {
         match self {
@@ -28,11 +38,12 @@ impl UpgradeType {
         match self {
             Self::MageEye => {
                 player.effects.mage_sight = Duration::Infinite;
-                player.upgrades.mage_eye += 1
+                player.upgrades.mage_eye += 1;
+                let _ = player.attacked(20, "stupidity");
             }
         }
     }
-    pub fn can_pickup(self, player: &mut Player) -> bool {
+    pub fn can_pickup(self, player: &Player) -> bool {
         match self {
             Self::MageEye => player.upgrades.mage_eye < 2,
         }

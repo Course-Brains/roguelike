@@ -23,6 +23,7 @@ enum Command {
     Give(ItemType, usize),
     SetMoney(usize),
     Upgrade(UpgradeType),
+    SetDetectMod(isize),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -54,6 +55,7 @@ impl Command {
             "give" => Ok(Command::Give(parse(iter.next())?, parse(iter.next())?)),
             "set_money" => Ok(Command::SetMoney(parse(iter.next())?)),
             "upgrade" => Ok(Command::Upgrade(parse(iter.next())?)),
+            "set_detect_mod" => Ok(Command::SetDetectMod(parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -135,6 +137,7 @@ impl Command {
             Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
             Command::SetMoney(money) => state.player.money = money,
             Command::Upgrade(upgrade_type) => upgrade_type.on_pickup(&mut state.player),
+            Command::SetDetectMod(modifier) => state.player.detect_mod = modifier,
         }
     }
 }

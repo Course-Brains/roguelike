@@ -526,3 +526,26 @@ fn bell(lock: Option<&mut dyn std::io::Write>) {
         }
     }
 }
+fn advantage_pass(pass: impl Fn() -> bool, modifier: isize) -> bool {
+    match modifier.cmp(&0) {
+        std::cmp::Ordering::Less => {
+            // negative(disadvantage)
+            for _ in 0..(modifier.abs() + 1) {
+                if !pass() {
+                    return false;
+                }
+            }
+            true
+        }
+        std::cmp::Ordering::Greater => {
+            // positive(advantage)
+            for _ in 0..(modifier + 1) {
+                if pass() {
+                    return true;
+                }
+            }
+            false
+        }
+        std::cmp::Ordering::Equal => pass(),
+    }
+}

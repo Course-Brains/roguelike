@@ -158,8 +158,14 @@ impl Board {
             write!(lock, "\x1b[2K").unwrap();
             for x in x_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
-                    if !self.visible[self.to_index(Vector::new(x, y))] {
-                        continue;
+                    if player.upgrades.map && piece.on_map() {
+                        if !bounds.contains(&Vector::new(x, y)) {
+                            continue;
+                        }
+                    } else {
+                        if !self.visible[self.to_index(Vector::new(x, y))] {
+                            continue;
+                        }
                     }
                     let (ch, style) = piece.render(Vector::new(x, y), self, player);
                     crossterm::queue!(
@@ -815,6 +821,13 @@ impl Piece {
             Self::Exit(_) => write!(lock, "The exit").unwrap(),
             Self::Item(item) => item.get_desc(lock),
             Self::Upgrade(upgrade) => upgrade.get_desc(lock),
+        }
+    }
+    pub fn on_map(&self) -> bool {
+        match self {
+            Self::Wall(_) => true,
+            Self::Door(_) => true,
+            _ => false,
         }
     }
 }

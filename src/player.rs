@@ -22,6 +22,8 @@ pub struct Player {
     pub perception: usize,
     pub effects: Effects,
     pub upgrades: Upgrades,
+    // -: harder to detect, +: easier
+    pub detect_mod: isize,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -41,6 +43,7 @@ impl Player {
             perception: 10,
             effects: Effects::new(),
             upgrades: crate::Upgrades::new(),
+            detect_mod: 0,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {

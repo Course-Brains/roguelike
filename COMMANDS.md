@@ -82,3 +82,6 @@ upgrade \[upgrade\]
     Valid upgrades are:
         mage\_eye
             The mage's eye
+
+set\_detect\_mod \[mod\]
+    Sets the detection modifier to the given \[mod\]

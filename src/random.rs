@@ -59,11 +59,3 @@ impl Random for crate::ItemType {
         }
     }
 }
-impl Random for crate::upgrades::UpgradeType {
-    fn random() -> Self {
-        match random() & 0b0000_0000 {
-            0 => Self::MageEye,
-            _ => unreachable!("Le fucked is up"),
-        }
-    }
-}

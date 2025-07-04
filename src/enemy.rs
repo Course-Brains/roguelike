@@ -1,4 +1,7 @@
-use crate::{Board, Direction, Player, Style, Vector, board::Special, pieces::spell, style::Color};
+use crate::{
+    Board, Direction, Player, Style, Vector, advantage_pass, board::Special, pieces::spell,
+    style::Color,
+};
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
@@ -87,7 +90,7 @@ impl Enemy {
                 if this.reachable {
                     this.active = true;
                 }
-            } else if this.variant.detect(&this, board) {
+            } else if this.variant.detect(&this, board, player) {
                 this.active = true;
             } else {
                 return false;
@@ -534,14 +537,20 @@ pub enum Variant {
     MageBoss(MageBossSpell),
 }
 impl Variant {
-    fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board) -> bool {
+    fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
         match self {
             Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => cost < (crate::random() & 0b0000_0111) as usize,
+                Some(cost) => advantage_pass(
+                    || cost < (crate::random() & 0b0000_0111) as usize,
+                    player.detect_mod,
+                ),
                 None => false,
             },
             Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => cost < (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
+                Some(cost) => advantage_pass(
+                    || cost < (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
+                    player.detect_mod,
+                ),
                 None => false,
             },
             Variant::BasicBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]

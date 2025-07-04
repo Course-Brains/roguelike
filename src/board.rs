@@ -6,6 +6,7 @@ use crate::{
         exit::Exit,
         item::Item,
         spell::{Spell, Stepper},
+        upgrade::Upgrade,
         wall::Wall,
     },
 };
@@ -134,8 +135,10 @@ impl Board {
         for x in 1..=88 {
             std::thread::sleep(std::time::Duration::from_millis(1000));
             out[Vector::new(x, 1)] = Some(Piece::Item(Item::new(None)));
-            std::thread::sleep(std::time::Duration::from_millis(1000));
-            out[Vector::new(x, 28)] = Some(Piece::Item(Item::new(None)));
+            if x % 10 == 0 {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                out[Vector::new(x, 28)] = Some(Piece::Upgrade(Upgrade::new(None)));
+            }
         }
         out
     }
@@ -747,6 +750,7 @@ pub enum Piece {
     Spell(Spell),
     Exit(Exit),
     Item(Item),
+    Upgrade(Upgrade),
 }
 impl Piece {
     fn render(&self, pos: Vector, board: &Board) -> (char, Option<Style>) {
@@ -755,7 +759,8 @@ impl Piece {
             Piece::Door(door) => door.render(pos, board),
             Piece::Spell(_) => (Spell::SYMBOL, Some(Spell::STYLE)),
             Piece::Exit(_) => Exit::render(),
-            Piece::Item(_) => Item::render(),
+            Piece::Item(item) => item.render(),
+            Piece::Upgrade(upgrade) => upgrade.render(),
         }
     }
     pub fn has_collision(&self) -> bool {
@@ -774,11 +779,9 @@ impl Piece {
     }
     pub fn enemy_collision(&self) -> bool {
         match self {
-            Piece::Wall(_) => true,
             Piece::Door(door) => door.has_collision(),
             Piece::Spell(_) => true,
-            Piece::Exit(_) => false,
-            Piece::Item(_) => false,
+            _ => self.has_collision(),
         }
     }
     fn dashable(&self) -> bool {
@@ -800,6 +803,7 @@ impl Piece {
                 false
             }
             Piece::Item(item) => item.on_step(stepper),
+            Piece::Upgrade(upgrade) => upgrade.on_step(stepper),
             _ => false,
         }
     }
@@ -810,6 +814,7 @@ impl Piece {
             Self::Spell(_) => write!(lock, "A spell").unwrap(),
             Self::Exit(_) => write!(lock, "The exit").unwrap(),
             Self::Item(item) => item.get_desc(lock),
+            Self::Upgrade(upgrade) => upgrade.get_desc(lock),
         }
     }
 }
@@ -821,6 +826,7 @@ impl std::fmt::Display for Piece {
             Piece::Spell(spell) => spell.fmt(f),
             Piece::Exit(exit) => exit.fmt(f),
             Piece::Item(item) => item.fmt(f),
+            Piece::Upgrade(upgrade) => upgrade.fmt(f),
         }
     }
 }

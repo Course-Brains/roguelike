@@ -1,3 +1,8 @@
+use crate::{Player, Style};
+
+const SCROLL: (char, Option<Style>) = ('S', Some(*Style::new().green()));
+const POTION: (char, Option<Style>) = ('P', Some(*Style::new().green()));
+
 #[derive(Clone, Copy, Debug)]
 pub enum ItemType {
     // mage sight effect 100 turns
@@ -18,7 +23,11 @@ impl ItemType {
     pub fn enact(self, state: &mut crate::State) -> bool {
         match self {
             Self::MageSight => {
-                state.player.effects.mage_sight += 100;
+                if state.player.effects.mage_sight.is_active() {
+                    state.player.effects.mage_sight += 50;
+                } else {
+                    state.player.effects.mage_sight += 100;
+                }
                 true
             }
             Self::HealthPotion => {
@@ -39,6 +48,18 @@ impl ItemType {
         match self {
             Self::MageSight => "Scroll of magical sight",
             Self::HealthPotion => "Potion of healing",
+        }
+    }
+    pub fn render(self) -> (char, Option<Style>) {
+        match self {
+            Self::MageSight => SCROLL,
+            Self::HealthPotion => POTION,
+        }
+    }
+    pub fn can_get(self, player: &mut Player) -> bool {
+        match self {
+            Self::MageSight => true,
+            Self::HealthPotion => true,
         }
     }
 }

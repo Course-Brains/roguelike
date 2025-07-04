@@ -16,6 +16,8 @@ mod generator;
 use generator::generate;
 mod items;
 use items::ItemType;
+mod upgrades;
+use upgrades::Upgrades;
 
 use std::fs::File;
 use std::io::Write;

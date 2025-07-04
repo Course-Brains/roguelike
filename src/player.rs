@@ -1,4 +1,6 @@
-use crate::{Board, Direction, ItemType, Style, Vector, commands::parse, pieces::spell::Stepper};
+use crate::{
+    Board, Direction, ItemType, Style, Upgrades, Vector, commands::parse, pieces::spell::Stepper,
+};
 use std::io::{Read, Write};
 use std::ops::Range;
 const SYMBOL: char = '@';
@@ -19,6 +21,7 @@ pub struct Player {
     pub money: usize,
     pub perception: usize,
     pub effects: Effects,
+    pub upgrades: Upgrades,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -37,6 +40,7 @@ impl Player {
             money: 0,
             perception: 10,
             effects: Effects::new(),
+            upgrades: crate::Upgrades::new(),
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -273,7 +277,7 @@ impl Focus {
 }
 #[derive(Debug, Clone, Copy)]
 pub struct Effects {
-    // self explanitory
+    // self expl anitory
     pub invincible: Duration,
     // No perception check on enemies, but aggro all mage types
     pub mage_sight: Duration,

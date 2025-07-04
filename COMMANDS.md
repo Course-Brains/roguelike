@@ -45,10 +45,13 @@ set\_piece \[x\] \[y\] [args]
             command
     No, you cannot create spells using this because they require a
     caster
+
 load\_next
     Loads the next level
+
 load\_shop
     Loads the next shop
+
 effect \[effect\] \[duration\]
     Sets the \[duration\] for the given \[effect\] for the player
     \[duration\]. Valid effects are:
@@ -63,6 +66,7 @@ effect \[effect\] \[duration\]
             \[turns\]
         infinite
             Gives the effect with no time limit
+
 give \[item\] \[slot\]
     Sets the given \[slot\] to contain the \[item\]. The slot is
     specified starting at 0 instead of 1.

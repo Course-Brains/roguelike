@@ -274,7 +274,7 @@ impl Board {
     }
     fn draw_specials(&self, lock: &mut impl Write, bounds: Range<Vector>) {
         for special in self.specials.iter() {
-            if bounds.contains(&special.pos) {
+            if self.is_visible(special.pos, bounds.clone()) {
                 crossterm::queue!(lock, (special.pos - bounds.start).to_move()).unwrap();
                 match special.style {
                     Some(style) => write!(lock, "{}{}\x1b[0m", style.enact(), special.ch).unwrap(),
@@ -887,7 +887,7 @@ impl Piece {
     }
     pub fn projectile_collision(&self) -> bool {
         match self {
-            Piece::Door(door) => door.open,
+            Piece::Door(door) => !door.open,
             Piece::Item(_) => false,
             Piece::Upgrade(_) => false,
             _ => true,

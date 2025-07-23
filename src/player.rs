@@ -27,6 +27,7 @@ pub struct Player {
     pub detect_mod: isize,
     // Gives you info on what you are hovering over
     pub inspect: bool,
+    pub aiming: bool,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -48,6 +49,7 @@ impl Player {
             upgrades: crate::Upgrades::new(),
             detect_mod: 0,
             inspect: true,
+            aiming: false,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -202,6 +204,20 @@ impl Player {
             self.health = self.max_health;
         }
     }
+    pub fn aim(&mut self, board: &mut Board) {
+        let reset_to = board.specials.len();
+        for pos in
+            crate::projectile_path(self.pos, self.selector, board, None, true, self.pos).iter()
+        {
+            board.specials.push(crate::board::Special::new(
+                *pos,
+                ' ',
+                Some(*Style::new().background_green()),
+            ));
+        }
+        board.smart_render(self);
+        board.specials.truncate(reset_to);
+    }
 }
 // Rendering
 impl Player {
@@ -314,6 +330,7 @@ impl FromBinary for Player {
             upgrades: Upgrades::from_binary(binary)?,
             detect_mod: isize::from_binary(binary)?,
             inspect: bool::from_binary(binary)?,
+            aiming: bool::from_binary(binary)?,
         })
     }
 }
@@ -338,7 +355,8 @@ impl ToBinary for Player {
         self.effects.to_binary(binary)?;
         self.upgrades.to_binary(binary)?;
         self.detect_mod.to_binary(binary)?;
-        self.inspect.to_binary(binary)
+        self.inspect.to_binary(binary)?;
+        self.aiming.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

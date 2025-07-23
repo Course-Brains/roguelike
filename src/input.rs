@@ -12,6 +12,7 @@ pub enum Input {
     Item(usize),           // Use an item(1-6)
     Convert,               // Convert energy to money
     Inspect,               // Toggle inspect mode
+    Aim,                   // Show a raytrace from the player
 }
 impl Input {
     pub fn get() -> Input {
@@ -54,6 +55,7 @@ impl Input {
                 b'6' => return Input::Item(6),
                 b'c' => return Input::Convert,
                 b'i' => return Input::Inspect,
+                b'z' => return Input::Aim,
                 _ => {}
             }
         }

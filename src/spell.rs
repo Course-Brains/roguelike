@@ -1,4 +1,4 @@
-use crate::{Board, Enemy, Entity, Player, Style, Vector, board::Special};
+use crate::{Board, Enemy, Entity, Player, Style, Vector, board::Special, projectile_path};
 use std::sync::{Arc, RwLock};
 pub struct SpellCircle {
     pub spell: Spell,
@@ -202,84 +202,6 @@ impl std::str::FromStr for NormalSpell {
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }
-}
-// Gets the list of positions a projectile travels through
-fn projectile_path(
-    from: Vector,
-    to: Vector,
-    board: &Board,
-    addr: Option<usize>,
-    end_stop: bool,
-    player: Vector,
-) -> Vec<Vector> {
-    crate::log!("calculating projectile path from {from} to {to}");
-    let x = to.x as f64 - from.x as f64;
-    let y = to.y as f64 - from.y as f64;
-    let len = (x.powi(2) + y.powi(2)).sqrt();
-    let delta_x = x / len;
-    let delta_y = y / len;
-    crate::log!("  Will move ({delta_x}, {delta_y}) per calc");
-    let mut precise_x = from.x as f64;
-    let mut precise_y = from.y as f64;
-    let mut x = from.x;
-    let mut y = from.y;
-    let mut out = Vec::new();
-    let mut last_one = false;
-    loop {
-        if end_stop {
-            if delta_x.is_sign_positive() {
-                if x > to.x {
-                    break;
-                }
-            } else {
-                if x < to.x {
-                    break;
-                }
-            }
-            if delta_y.is_sign_positive() {
-                if y > to.y {
-                    break;
-                }
-            } else {
-                if y < to.y {
-                    break;
-                }
-            }
-        }
-        crate::log!("  at ({precise_x}, {precise_y})");
-        precise_x += delta_x;
-        precise_y += delta_y;
-        x = precise_x as usize;
-        y = precise_y as usize;
-        y = (y as f64 + delta_y) as usize;
-        let pos = Vector::new(x, y);
-        if !out.last().is_some_and(|prev| *prev == pos) {
-            crate::log!("    new position, adding to output");
-            out.push(pos);
-            if last_one {
-                break;
-            }
-        }
-        if let Some(piece) = &board[pos] {
-            if piece.projectile_collision() {
-                crate::log!("    hit {piece}, stopping");
-                break;
-            }
-        }
-        if board.get_enemy(pos, addr).is_some() {
-            crate::log!("    hit enemy, stopping");
-            last_one = true;
-        }
-        if pos == player {
-            crate::log!("    hit player, stopping");
-            last_one = true;
-        }
-    }
-    debug_assert!(
-        out.len() > 0,
-        "A raytrace was made with a length of 0, which shouldn't be possible"
-    );
-    out
 }
 fn fireball(pos: Vector) -> Special {
     Special::new(pos, '●', Some(*Style::new().red().intense(true)))

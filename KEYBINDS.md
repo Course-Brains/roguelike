@@ -23,3 +23,4 @@ t: swap camera focus
 c: convert energy to money
 1-6: use item in relevant slot
 i: toggle inspect mode
+z: toggle aiming

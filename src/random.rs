@@ -19,11 +19,13 @@ pub fn random() -> u8 {
     RANDOM_TABLE[INDEX.fetch_add(1, Ordering::SeqCst) as usize]
 }
 pub fn initialize() {
-    crate::log!(
-        "Initialized with random index: {}",
-        std::process::id() & 255
-    );
-    INDEX.store((std::process::id() & 0b1111_1111) as u8, Ordering::SeqCst)
+    let init = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        & 255) as u8;
+    crate::log!("Initialized with random index: {init}",);
+    INDEX.store(init, Ordering::SeqCst)
 }
 pub fn initialize_with(index: u8) {
     INDEX.store(index, Ordering::SeqCst);
@@ -42,20 +44,14 @@ pub fn random_index(max: usize) -> Option<usize> {
         }
     }
 }
+pub fn random4() -> u8 {
+    (random() & 3) + 1
+}
 pub trait Random {
     fn random() -> Self;
 }
 impl Random for bool {
     fn random() -> Self {
         random() & 0b0000_0001 == 1
-    }
-}
-impl Random for crate::ItemType {
-    fn random() -> Self {
-        match random() & 0b0000_0001 {
-            0 => Self::MageSight,
-            1 => Self::HealthPotion,
-            _ => unreachable!("idk, not my problem"),
-        }
     }
 }

@@ -1,3 +1,4 @@
+use crate::{FromBinary, ToBinary};
 #[derive(Clone, Copy, Debug)]
 pub struct Door {
     pub open: bool,
@@ -38,5 +39,20 @@ impl std::str::FromStr for Door {
             "closed" => Ok(Door { open: false }),
             invalid => Err(format!("{invalid} is not open or closed")),
         }
+    }
+}
+impl FromBinary for Door {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Door {
+            open: bool::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Door {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.open.to_binary(binary)
     }
 }

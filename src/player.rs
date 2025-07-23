@@ -1,5 +1,6 @@
 use crate::{
-    Board, Direction, ItemType, Style, Upgrades, Vector, commands::parse, pieces::spell::Stepper,
+    Board, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
+    commands::parse,
 };
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -17,13 +18,15 @@ pub struct Player {
     pub was_hit: bool,
     pub focus: Focus,
     killer: Option<&'static str>,
-    pub items: [Option<ItemType>; 6],
+    pub items: Items,
     pub money: usize,
     pub perception: usize,
     pub effects: Effects,
     pub upgrades: Upgrades,
     // -: harder to detect, +: easier
     pub detect_mod: isize,
+    // Gives you info on what you are hovering over
+    pub inspect: bool,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -32,7 +35,7 @@ impl Player {
             selector: pos,
             health: 20,
             max_health: 50,
-            energy: 3,
+            energy: 2,
             max_energy: 3,
             blocking: false,
             was_hit: false,
@@ -44,6 +47,7 @@ impl Player {
             effects: Effects::new(),
             upgrades: crate::Upgrades::new(),
             detect_mod: 0,
+            inspect: true,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -51,10 +55,20 @@ impl Player {
         self.pos += direction;
         if let Some(piece) = &board[self.pos] {
             crate::log!("  Triggering on_step at {}", self.pos);
-            if piece.on_step(Stepper::Player(self)) {
+            if piece.on_step(Entity::Player(self)) {
                 crate::log!("    Removing piece");
                 board[self.pos] = None;
             }
+        }
+        if let Some((circle, index)) = board.contact_spell_at(self.pos) {
+            crate::log!("  Triggering spell at {}", self.pos);
+            if let Some(caster) = &circle.caster {
+                circle
+                    .spell
+                    .unwrap_contact()
+                    .cast(Entity::Player(self), Entity::Enemy(caster.clone()));
+            }
+            board.spells.swap_remove(index);
         }
     }
     // Returns whether the attack was successful(Ok) and whether the player died
@@ -75,8 +89,11 @@ impl Player {
         self.health -= damage;
         Ok(false)
     }
-    pub fn on_kill(&mut self, variant: crate::enemy::Variant) {
-        let (energy, health) = variant.kill_value();
+    pub fn on_kill(&mut self, enemy: &crate::Enemy) {
+        if !enemy.reward {
+            return;
+        }
+        let (energy, health) = enemy.variant.kill_value();
         for _ in 0..energy {
             if self.energy < self.max_energy {
                 self.energy += 1;
@@ -88,7 +105,8 @@ impl Player {
         }
         self.health = self.health.min(self.max_health);
         crate::log!(
-            "Killed {variant}, health is now: {}, energy is now: {}",
+            "Killed {}, health is now: {}, energy is now: {}",
+            enemy.variant,
             self.health,
             self.energy
         );
@@ -207,12 +225,14 @@ impl Player {
             crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 1)
         )
         .unwrap();
+        let split = (self.health * 50) / self.max_health;
         write!(
             lock,
-            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/50",
-            "#".repeat(self.health),
-            "-".repeat(self.max_health - self.health),
+            "\x1b[2K[\x1b[32m{}\x1b[31m{}\x1b[0m] {}/{}",
+            "#".repeat(split),
+            "-".repeat(50 - split),
             self.health,
+            self.max_health,
         )
         .unwrap();
     }
@@ -222,12 +242,14 @@ impl Player {
             crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 2)
         )
         .unwrap();
+        let split = (self.energy * 50) / self.max_energy;
         write!(
             lock,
-            "\x1b[2K[\x1b[96m{}\x1b[0m{}] {}/3",
-            "#".repeat(self.energy * 5),
-            "-".repeat((self.max_energy - self.energy) * 5),
-            self.energy
+            "\x1b[2K[\x1b[96m{}\x1b[0m{}] {}/{}",
+            "#".repeat(split),
+            "-".repeat(50 - split),
+            self.energy,
+            self.max_energy
         )
         .unwrap();
     }
@@ -265,6 +287,60 @@ impl Player {
         std::io::stdout().flush().unwrap();
     }
 }
+// TODO: Find a better way to do this, I couldn't figure out how to do ::methods() on an array, but
+// this works I guess?
+type Items = [Option<ItemType>; 6];
+impl FromBinary for Player {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Player {
+            pos: Vector::from_binary(binary)?,
+            selector: Vector::from_binary(binary)?,
+            health: usize::from_binary(binary)?,
+            max_health: usize::from_binary(binary)?,
+            energy: usize::from_binary(binary)?,
+            max_energy: usize::from_binary(binary)?,
+            blocking: bool::from_binary(binary)?,
+            was_hit: bool::from_binary(binary)?,
+            focus: Focus::from_binary(binary)?,
+            // the player has to be alive to save
+            killer: None,
+            items: Items::from_binary(binary)?,
+            money: usize::from_binary(binary)?,
+            perception: usize::from_binary(binary)?,
+            effects: Effects::from_binary(binary)?,
+            upgrades: Upgrades::from_binary(binary)?,
+            detect_mod: isize::from_binary(binary)?,
+            inspect: bool::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Player {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.pos.to_binary(binary)?;
+        self.selector.to_binary(binary)?;
+        self.health.to_binary(binary)?;
+        self.max_health.to_binary(binary)?;
+        self.energy.to_binary(binary)?;
+        self.max_energy.to_binary(binary)?;
+        self.blocking.to_binary(binary)?;
+        self.was_hit.to_binary(binary)?;
+        self.focus.to_binary(binary)?;
+        // skipping killer
+        self.items
+            .each_ref()
+            .map(|x| x.as_ref())
+            .to_binary(binary)?;
+        self.money.to_binary(binary)?;
+        self.perception.to_binary(binary)?;
+        self.effects.to_binary(binary)?;
+        self.upgrades.to_binary(binary)?;
+        self.detect_mod.to_binary(binary)?;
+        self.inspect.to_binary(binary)
+    }
+}
 #[derive(Debug, Clone, Copy)]
 pub enum Focus {
     Player,
@@ -278,14 +354,38 @@ impl Focus {
         }
     }
 }
+impl FromBinary for Focus {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match bool::from_binary(binary)? {
+            true => Focus::Player,
+            false => Focus::Selector,
+        })
+    }
+}
+impl ToBinary for Focus {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Focus::Player => true,
+            Focus::Selector => false,
+        }
+        .to_binary(binary)
+    }
+}
 #[derive(Debug, Clone, Copy)]
 pub struct Effects {
-    // self expl anitory
+    // self explanitory
     pub invincible: Duration,
     // No perception check on enemies, but aggro all mage types
     pub mage_sight: Duration,
     // Heal 2 health per turn
     pub regen: Duration,
+    // make enemies roll better(+2 on 1-8)
+    pub unlucky: Duration,
+    // make enemies roll even better(+4)
+    pub doomed: Duration,
 }
 impl Effects {
     // Creates an instance with no effects
@@ -294,6 +394,8 @@ impl Effects {
             invincible: Duration::None,
             mage_sight: Duration::None,
             regen: Duration::None,
+            unlucky: Duration::None,
+            doomed: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
@@ -301,6 +403,8 @@ impl Effects {
         self.invincible.decriment();
         self.mage_sight.decriment();
         self.regen.decriment();
+        self.unlucky.decriment();
+        self.doomed.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -312,12 +416,37 @@ impl Effects {
                     "invincible" => self.invincible = args.parse()?,
                     "mage_sight" => self.mage_sight = args.parse()?,
                     "regen" => self.regen = args.parse()?,
+                    "unlucky" => self.unlucky = args.parse()?,
+                    "doomed" => self.doomed = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
             None => return Err("No effect specified".to_string()),
         }
         Ok(())
+    }
+}
+impl FromBinary for Effects {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Effects {
+            invincible: Duration::from_binary(binary)?,
+            mage_sight: Duration::from_binary(binary)?,
+            regen: Duration::from_binary(binary)?,
+            unlucky: Duration::from_binary(binary)?,
+            doomed: Duration::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Effects {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.invincible.to_binary(binary)?;
+        self.mage_sight.to_binary(binary)?;
+        self.regen.to_binary(binary)?;
+        self.unlucky.to_binary(binary)?;
+        self.doomed.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -347,6 +476,9 @@ impl Duration {
             Self::Infinite => true,
         }
     }
+    pub fn remove(&mut self) {
+        *self = Duration::None;
+    }
 }
 impl std::ops::AddAssign<usize> for Duration {
     fn add_assign(&mut self, rhs: usize) {
@@ -367,6 +499,36 @@ impl std::str::FromStr for Duration {
             Some("infinite") => Ok(Duration::Infinite),
             Some(other) => Err(format!("{other} is not a valid duration")),
             None => Err("Did not get duration".to_string()),
+        }
+    }
+}
+impl FromBinary for Duration {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Duration::None,
+            1 => Duration::Turns(usize::from_binary(binary)?),
+            2 => Duration::Infinite,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get Duration from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for Duration {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Duration::None => 0_u8.to_binary(binary),
+            Duration::Turns(turns) => {
+                1_u8.to_binary(binary)?;
+                turns.to_binary(binary)
+            }
+            Duration::Infinite => 2_u8.to_binary(binary),
         }
     }
 }

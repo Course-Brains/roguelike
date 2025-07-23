@@ -1,3 +1,4 @@
+use albatrice::{FromBinary, ToBinary};
 use std::io::Read;
 pub enum Input {
     Arrow(Direction),      // move cursor
@@ -10,6 +11,7 @@ pub enum Input {
     SwapFocus,             // swap camera focus(player/selector)
     Item(usize),           // Use an item(1-6)
     Convert,               // Convert energy to money
+    Inspect,               // Toggle inspect mode
 }
 impl Input {
     pub fn get() -> Input {
@@ -51,6 +53,7 @@ impl Input {
                 b'5' => return Input::Item(5),
                 b'6' => return Input::Item(6),
                 b'c' => return Input::Convert,
+                b'i' => return Input::Inspect,
                 _ => {}
             }
         }
@@ -103,5 +106,35 @@ impl std::fmt::Display for Direction {
             Direction::Left => write!(f, "left"),
             Direction::Right => write!(f, "right"),
         }
+    }
+}
+impl FromBinary for Direction {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::Up,
+            1 => Self::Down,
+            2 => Self::Left,
+            3 => Self::Right,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get Direction from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for Direction {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::Up => 0_u8.to_binary(binary)?,
+            Self::Down => 1_u8.to_binary(binary)?,
+            Self::Left => 2_u8.to_binary(binary)?,
+            Self::Right => 3_u8.to_binary(binary)?,
+        }
+        Ok(())
     }
 }

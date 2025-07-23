@@ -1,6 +1,6 @@
 use crate::{
-    Board, Enemy, Vector, board::Piece, enemy::Variant, pieces::door::Door, pieces::wall::Wall,
-    random, random_in_range,
+    Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
+    pieces::wall::Wall, random, random_in_range,
 };
 use albatrice::debug;
 use std::cell::RefCell;
@@ -17,20 +17,14 @@ const MAXIMUM: usize = 100;
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
 pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
-pub fn generate(
-    x: usize,
-    y: usize,
-    render_x: usize,
-    render_y: usize,
-    budget: usize,
-) -> JoinHandle<Board> {
+pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
     std::thread::spawn(move || {
         let start = std::time::Instant::now();
-        let mut room = Room::new(0..(x - 1), 0..(y - 1), budget);
+        let mut room = Room::new(0..(settings.x - 1), 0..(settings.y - 1), settings.budget);
         room.subdivide();
         room.fill_leaf_adjacents(room.get_all_leafs().as_slice());
         room.remove_extra_adjacents(None);
-        let mut board = Board::new(x, y, render_x, render_y);
+        let mut board = Board::new(settings.x, settings.y, settings.render_x, settings.render_y);
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
         remove_edge_doors(&mut board);
@@ -89,6 +83,7 @@ fn promote_boss(board: &mut Board) {
         boss.try_read().unwrap().pos
     );
     board.boss = Some(Arc::downgrade(&boss));
+    board.boss_pos = boss.try_read().unwrap().pos;
     boss.try_write().unwrap().promote().unwrap()
 }
 fn delay() {

@@ -1,4 +1,4 @@
-use crate::{Board, Vector};
+use crate::{Board, FromBinary, ToBinary, Vector};
 pub const QUAD: char = '╬';
 const NOT_DOWN: char = '╩';
 const NOT_UP: char = '╦';
@@ -96,5 +96,18 @@ impl Wall {
 impl std::fmt::Display for Wall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "Wall")
+    }
+}
+impl FromBinary for Wall {
+    fn from_binary(_binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Wall {})
+    }
+}
+impl ToBinary for Wall {
+    fn to_binary(&self, _binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        Ok(())
     }
 }

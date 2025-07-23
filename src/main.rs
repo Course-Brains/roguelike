@@ -1,3 +1,6 @@
+// IDEAS:
+// password manager
+
 mod player;
 use player::Player;
 mod board;
@@ -10,7 +13,7 @@ mod enemy;
 mod pieces;
 use enemy::Enemy;
 mod random;
-use random::{Random, random, random_in_range};
+use random::{Random, random, random_in_range, random4};
 mod commands;
 mod generator;
 use generator::generate;
@@ -18,10 +21,14 @@ mod items;
 use items::ItemType;
 mod upgrades;
 use upgrades::Upgrades;
+mod spell;
+use spell::Spell;
 
 use std::fs::File;
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
+
+use albatrice::{FromBinary, ToBinary};
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 
@@ -29,6 +36,14 @@ static LOG: Mutex<Option<File>> = Mutex::new(None);
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
 // Delay between subtick animaion frames
 const PROJ_DELAY: std::time::Duration = std::time::Duration::from_millis(25);
+fn proj_delay() {
+    std::thread::sleep(PROJ_DELAY);
+}
+// The format version of the save data, different versions are incompatible and require a restart
+// of the save
+const SAVE_VERSION: u16 = 0;
+// the path to the file used for saving and loading
+const PATH: &str = "save";
 
 #[macro_export]
 macro_rules! log {
@@ -50,6 +65,8 @@ static RE_FLOOD: AtomicBool = AtomicBool::new(false);
 static LOAD_MAP: AtomicBool = AtomicBool::new(false);
 // load the shop
 static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
+// Save and quit
+static SAVE: AtomicBool = AtomicBool::new(false);
 
 fn main() {
     #[cfg(any(debug_assertions, feature = "force_log"))]
@@ -74,7 +91,9 @@ fn main() {
         }
     }
     if testing {
-        generate(501, 501, 45, 15, 1000).join().unwrap();
+        generate(MapGenSettings::new(501, 501, 45, 15, 1000))
+            .join()
+            .unwrap();
         return;
     }
 
@@ -84,21 +103,43 @@ fn main() {
         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
     )
     .unwrap();*/
-    let mut state = State {
-        player: Player::new(Vector::new(1, 1)),
-        board: generate(151, 151, 45, 15, 75).join().unwrap(),
-        turn: 0,
-        next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
-        next_shop: std::thread::spawn(|| Board::new_shop()),
-        level: 0,
+    let mut state = match std::fs::exists(PATH).unwrap() {
+        // There is a save file
+        true => State::from_binary(&mut std::fs::File::open(PATH).unwrap()).unwrap(),
+        // there is not a save file
+        false => State {
+            player: Player::new(Vector::new(1, 1)),
+            board: generate(MapGenSettings::new(151, 151, 45, 15, 75))
+                .join()
+                .unwrap(),
+            turn: 0,
+            next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
+            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
+            next_shop: std::thread::spawn(|| Board::new_shop()),
+            level: 0,
+        },
     };
+    // discourage save scumming by making it so that if it closes non-properly then the file is
+    // gone
+    let _ = std::fs::remove_file(PATH);
     generator::DO_DELAY.store(true, Ordering::SeqCst);
-    state.next_map = generate(501, 501, 45, 15, 1000);
+    state.next_map = generate(state.next_map_settings);
     let mut command_handler = commands::CommandHandler::new();
     state.board.flood(state.player.pos);
     state.render();
     loop {
         if state.player.handle_death() {
+            break;
+        }
+        if SAVE.load(Ordering::Relaxed) {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(PATH)
+                .unwrap();
+            state.to_binary(&mut file).unwrap();
+            file.sync_all().unwrap();
             break;
         }
         if LOAD_MAP.swap(false, Ordering::Relaxed) {
@@ -208,14 +249,7 @@ fn main() {
                     if enemy.try_read().unwrap().pos == state.player.selector {
                         if enemy.try_write().unwrap().attacked(1) {
                             state.player.on_kill(
-                                state
-                                    .board
-                                    .enemies
-                                    .swap_remove(index)
-                                    .try_read()
-                                    .unwrap()
-                                    .variant
-                                    .clone(),
+                                &state.board.enemies.swap_remove(index).try_read().unwrap(),
                             )
                         }
                         state.increment();
@@ -270,6 +304,16 @@ fn main() {
                 state.player.energy = 0;
                 state.increment();
             }
+            Input::Inspect => {
+                if state.player.inspect {
+                    Board::set_desc(&mut std::io::stdout(), "Inspect mode disabled");
+                } else {
+                    Board::set_desc(&mut std::io::stdout(), "Inspect mode enabled");
+                }
+                state.reposition_cursor();
+                std::io::stdout().flush().unwrap();
+                state.player.inspect ^= true;
+            }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
@@ -282,6 +326,7 @@ struct State {
     board: Board,
     turn: usize,
     next_map: std::thread::JoinHandle<Board>,
+    next_map_settings: MapGenSettings,
     next_shop: std::thread::JoinHandle<Board>,
     level: usize,
 }
@@ -294,15 +339,8 @@ impl State {
                     enemy.try_write().unwrap().apply_dashstun()
                 }
                 if enemy.try_write().unwrap().attacked(1) {
-                    self.player.on_kill(
-                        self.board
-                            .enemies
-                            .swap_remove(index)
-                            .try_read()
-                            .unwrap()
-                            .variant
-                            .clone(),
-                    );
+                    self.player
+                        .on_kill(&self.board.enemies.swap_remove(index).try_read().unwrap());
                     if redrawable {
                         self.render()
                     }
@@ -393,7 +431,9 @@ impl State {
         .join()
         .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
-        self.next_map = generate(501, 501, 45, 15, self.turn);
+        let settings = MapGenSettings::new(501, 501, 45, 15, self.turn / 10);
+        self.next_map = generate(settings);
+        self.next_map_settings = settings;
         self.level += 1;
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
@@ -407,9 +447,50 @@ impl State {
         )
         .join()
         .unwrap();
-        self.player.pos = Vector::new(1, 15);
-        self.player.selector = Vector::new(1, 15);
+        self.player.pos = Vector::new(44, 14);
+        self.player.selector = Vector::new(44, 14);
         self.render();
+    }
+    fn reposition_cursor(&mut self) {
+        self.player.reposition_cursor(
+            self.board
+                .has_background(self.player.selector, &self.player),
+            self.board.get_render_bounds(&self.player),
+        );
+    }
+}
+impl FromBinary for State {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        if u16::from_binary(binary)? != SAVE_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid save format"),
+            ));
+        }
+        generator::DO_DELAY.store(true, Ordering::SeqCst);
+        let settings = MapGenSettings::from_binary(binary)?;
+        Ok(State {
+            player: Player::from_binary(binary)?,
+            board: Board::from_binary(binary)?,
+            turn: usize::from_binary(binary)?,
+            next_map: generate(settings),
+            next_map_settings: settings,
+            next_shop: std::thread::spawn(|| Board::new_shop()),
+            level: usize::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for State {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        SAVE_VERSION.to_binary(binary)?;
+        self.next_map_settings.to_binary(binary)?;
+        self.player.to_binary(binary)?;
+        self.board.to_binary(binary)?;
+        self.turn.to_binary(binary)?;
+        self.level.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -440,6 +521,32 @@ impl Vector {
     }
     fn is_near(self, other: Vector, range: usize) -> bool {
         self.x.abs_diff(other.x) < range && self.y.abs_diff(other.y) < range
+    }
+    fn list_near(self, range: usize) -> Vec<Vector> {
+        let range = range as isize;
+        let mut out = Vec::new();
+        for x in -range..=range {
+            if x < 0 {
+                if x.abs_diff(0) > self.x {
+                    continue;
+                }
+            }
+            for y in -range..=range {
+                if y < 0 {
+                    if y.abs_diff(0) > self.y {
+                        continue;
+                    }
+                }
+                if x == 0 && y == 0 {
+                    continue;
+                }
+                out.push(Vector::new(
+                    (self.x as isize + x) as usize,
+                    (self.y as isize + y) as usize,
+                ));
+            }
+        }
+        out
     }
 }
 impl std::ops::Sub for Vector {
@@ -490,6 +597,76 @@ impl PartialOrd for Vector {
         }
     }
 }
+impl FromBinary for Vector {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Vector::new(
+            usize::from_binary(binary)?,
+            usize::from_binary(binary)?,
+        ))
+    }
+}
+impl ToBinary for Vector {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.x.to_binary(binary)?;
+        self.y.to_binary(binary)?;
+        Ok(())
+    }
+}
+enum Entity<'a> {
+    Player(&'a mut Player),
+    Enemy(Arc<RwLock<Enemy>>),
+}
+impl<'a> Entity<'a> {
+    fn unwrap_player(self) -> &'a mut Player {
+        match self {
+            Self::Player(player) => player,
+            Self::Enemy(_) => panic!("Expected player, found enemy"),
+        }
+    }
+    fn unwrap_enemy(self) -> Arc<RwLock<Enemy>> {
+        match self {
+            Self::Player(_) => panic!("Expected enemy, found player"),
+            Self::Enemy(enemy) => enemy,
+        }
+    }
+    fn get_pos(&self) -> Vector {
+        match self {
+            Entity::Enemy(arc) => arc.try_read().unwrap().pos,
+            Entity::Player(player) => player.pos,
+        }
+    }
+    fn is_within_flood(&self) -> bool {
+        match self {
+            Entity::Player(_) => true,
+            Entity::Enemy(arc) => arc.try_read().unwrap().reachable,
+        }
+    }
+    fn is_player(&self) -> bool {
+        match self {
+            Entity::Player(_) => true,
+            Entity::Enemy(_) => false,
+        }
+    }
+    fn is_entity(&self) -> bool {
+        match self {
+            Entity::Player(_) => false,
+            Entity::Enemy(_) => true,
+        }
+    }
+}
+impl<'a> From<&'a mut Player> for Entity<'a> {
+    fn from(value: &'a mut Player) -> Self {
+        Entity::Player(value)
+    }
+}
+impl From<Arc<RwLock<Enemy>>> for Entity<'_> {
+    fn from(value: Arc<RwLock<Enemy>>) -> Self {
+        Entity::Enemy(value)
+    }
+}
 struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
@@ -501,6 +678,48 @@ impl Weirdifier {
             .unwrap();
         crossterm::execute!(std::io::stdout(), crossterm::terminal::DisableLineWrap).unwrap();
         Weirdifier
+    }
+}
+#[derive(Clone, Copy, Debug)]
+struct MapGenSettings {
+    x: usize,
+    y: usize,
+    render_x: usize,
+    render_y: usize,
+    budget: usize,
+}
+impl MapGenSettings {
+    fn new(x: usize, y: usize, render_x: usize, render_y: usize, budget: usize) -> MapGenSettings {
+        Self {
+            x,
+            y,
+            render_x,
+            render_y,
+            budget,
+        }
+    }
+}
+impl FromBinary for MapGenSettings {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            x: usize::from_binary(binary)?,
+            y: usize::from_binary(binary)?,
+            render_x: usize::from_binary(binary)?,
+            render_y: usize::from_binary(binary)?,
+            budget: usize::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for MapGenSettings {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.x.to_binary(binary)?;
+        self.y.to_binary(binary)?;
+        self.render_x.to_binary(binary)?;
+        self.render_y.to_binary(binary)?;
+        self.budget.to_binary(binary)
     }
 }
 impl Drop for Weirdifier {
@@ -548,4 +767,8 @@ fn advantage_pass(pass: impl Fn() -> bool, modifier: isize) -> bool {
         }
         std::cmp::Ordering::Equal => pass(),
     }
+}
+fn set_desc(msg: &'static str) {
+    Board::set_desc(&mut std::io::stdout(), msg);
+    std::io::stdout().flush().unwrap();
 }

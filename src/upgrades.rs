@@ -1,4 +1,5 @@
-use crate::{Player, Random, Style, player::Duration, random};
+use crate::{FromBinary, Player, Random, Style, ToBinary, player::Duration, random};
+use std::io::Read;
 
 const SYMBOL: char = 'U';
 const AVAILABLE: Style = *Style::new().green();
@@ -19,11 +20,31 @@ impl Upgrades {
         }
     }
 }
+impl FromBinary for Upgrades {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Upgrades {
+            mage_eye: usize::from_binary(binary)?,
+            map: bool::from_binary(binary)?,
+            soft_shoes: bool::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Upgrades {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.mage_eye.to_binary(binary)?;
+        self.map.to_binary(binary)?;
+        self.soft_shoes.to_binary(binary)
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub enum UpgradeType {
     MageEye,
     Map,
     SoftShoes,
+    SavePint, // no corresponding upgrade field
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -42,21 +63,50 @@ impl UpgradeType {
             Self::MageEye => 200,
             Self::Map => 300,
             Self::SoftShoes => 200,
+            Self::SavePint => 0,
         }
     }
-    pub fn on_pickup(self, player: &mut Player) {
+    pub fn on_pickup(self, player: &mut Player) -> bool {
         match self {
             Self::MageEye => {
                 player.effects.mage_sight = Duration::Infinite;
                 player.upgrades.mage_eye += 1;
-                let _ = player.attacked(((random() as usize & 3) + 1) * 5, "stupidity");
+                let _ = player.attacked(
+                    ((crate::enemy::luck_roll8(player) as usize / 2) + 1) * 5,
+                    "stupidity",
+                );
+                if player.upgrades.mage_eye == 2 && player.effects.unlucky.is_active() {
+                    player.inspect = false;
+                    crate::set_desc("You feel whole");
+                    player.max_energy += 1;
+                    player.effects.unlucky.remove();
+                }
+                true
             }
             Self::Map => {
                 player.upgrades.map = true;
+                true
             }
             Self::SoftShoes => {
                 player.detect_mod -= 1;
-                player.upgrades.soft_shoes = true
+                player.upgrades.soft_shoes = true;
+                true
+            }
+            Self::SavePint => {
+                crate::set_desc("Drink the save pint? y/n");
+                let mut lock = std::io::stdin().lock();
+                let mut buf = [0];
+                loop {
+                    lock.read(&mut buf).unwrap();
+                    match buf[0] {
+                        b'y' => {
+                            crate::SAVE.store(true, std::sync::atomic::Ordering::Relaxed);
+                            break true;
+                        }
+                        b'n' => break false,
+                        _ => {}
+                    }
+                }
             }
         }
     }
@@ -65,6 +115,7 @@ impl UpgradeType {
             Self::MageEye => player.upgrades.mage_eye < 2,
             Self::Map => !player.upgrades.map,
             Self::SoftShoes => !player.upgrades.soft_shoes,
+            _ => true,
         }
     }
     pub fn get_desc(self) -> &'static str {
@@ -72,6 +123,7 @@ impl UpgradeType {
             Self::MageEye => "A mage's eye",
             Self::Map => "A map",
             Self::SoftShoes => "A pair of particularly soft shoes",
+            Self::SavePint => "A savepint",
         }
     }
 }
@@ -81,16 +133,18 @@ impl std::fmt::Display for UpgradeType {
             Self::MageEye => write!(f, "mage eye"),
             Self::Map => write!(f, "map"),
             Self::SoftShoes => write!(f, "soft shoes"),
+            Self::SavePint => write!(f, "save pint"),
         }
     }
 }
 impl std::str::FromStr for UpgradeType {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        match s.trim() {
             "mage_eye" => Ok(Self::MageEye),
             "map" => Ok(Self::Map),
             "soft_shoes" => Ok(Self::SoftShoes),
+            "save_pint" => Ok(Self::SavePint),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
@@ -100,7 +154,38 @@ impl Random for UpgradeType {
         match random() & 0b0000_0001 {
             0 => Self::MageEye,
             1 => Self::Map,
+            2 => Self::SoftShoes,
             _ => unreachable!("Le fucked is up"),
         }
+    }
+}
+impl FromBinary for UpgradeType {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::MageEye,
+            1 => Self::Map,
+            2 => Self::SoftShoes,
+            3 => Self::SavePint,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get UpgradeType from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for UpgradeType {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::MageEye => 0_u8,
+            Self::Map => 1_u8,
+            Self::SoftShoes => 2_u8,
+            Self::SavePint => 3_u8,
+        }
+        .to_binary(binary)
     }
 }

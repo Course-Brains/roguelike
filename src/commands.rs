@@ -1,4 +1,4 @@
-use crate::{ItemType, State, Vector, upgrades::UpgradeType};
+use crate::{Entity, ItemType, Spell, State, Vector, upgrades::UpgradeType};
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -10,7 +10,7 @@ enum Command {
     Redraw,
     ListEnemies,
     Kill(usize),
-    Spawn(crate::enemy::Variant, Vector),
+    Spawn(crate::enemy::Variant, Option<Vector>),
     GetEnemyData(usize),
     ForceFlood,
     WakeAll,
@@ -24,6 +24,8 @@ enum Command {
     SetMoney(usize),
     Upgrade(UpgradeType),
     SetDetectMod(isize),
+    SetPerception(usize),
+    Cast(Spell),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -38,7 +40,10 @@ impl Command {
             "kill" => Ok(Command::Kill(parse(iter.next())?)),
             "spawn" => Ok(Command::Spawn(
                 parse(iter.next())?,
-                parse_vector(iter.next(), iter.next())?,
+                match iter.next() {
+                    Some(arg) => Some(Vector::new(parse(Some(arg))?, parse(iter.next())?)),
+                    None => None,
+                },
             )),
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
@@ -56,6 +61,12 @@ impl Command {
             "set_money" => Ok(Command::SetMoney(parse(iter.next())?)),
             "upgrade" => Ok(Command::Upgrade(parse(iter.next())?)),
             "set_detect_mod" => Ok(Command::SetDetectMod(parse(iter.next())?)),
+            "set_perception" => Ok(Command::SetPerception(parse(iter.next())?)),
+            "cast" => Ok(Command::Cast(
+                iter.map(|s| s.to_string() + " ")
+                    .collect::<String>()
+                    .parse()?,
+            )),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -93,7 +104,7 @@ impl Command {
                     .board
                     .enemies
                     .push(std::sync::Arc::new(std::sync::RwLock::new(
-                        crate::enemy::Enemy::new(pos, variant),
+                        crate::enemy::Enemy::new(pos.unwrap_or(state.player.selector), variant),
                     )));
             }
             Command::GetEnemyData(index) => {
@@ -136,8 +147,22 @@ impl Command {
             }
             Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
             Command::SetMoney(money) => state.player.money = money,
-            Command::Upgrade(upgrade_type) => upgrade_type.on_pickup(&mut state.player),
+            Command::Upgrade(upgrade_type) => {
+                upgrade_type.on_pickup(&mut state.player);
+            }
             Command::SetDetectMod(modifier) => state.player.detect_mod = modifier,
+            Command::SetPerception(perception) => state.player.perception = perception,
+            Command::Cast(spell) => match spell {
+                Spell::Normal(spell) => {
+                    let target = state.player.selector;
+                    spell.cast(None, &mut state.player, &mut state.board, Some(target));
+                }
+                Spell::Contact(spell) => {
+                    if let Some(enemy) = state.board.get_enemy(state.player.selector, None) {
+                        spell.cast(Entity::Enemy(enemy), Entity::Player(&mut state.player));
+                    }
+                }
+            },
         }
     }
 }

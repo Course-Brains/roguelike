@@ -1,15 +1,10 @@
 use crate::{
-    Enemy, Player, Random, Style, Vector,
+    Enemy, Entity, Player, Random, Style, Vector,
     input::Direction,
-    pieces::{
-        door::Door,
-        exit::Exit,
-        item::Item,
-        spell::{Spell, Stepper},
-        upgrade::Upgrade,
-        wall::Wall,
-    },
+    pieces::{door::Door, exit::Exit, item::Item, upgrade::Upgrade, wall::Wall},
+    spell::{Spell, SpellCircle},
 };
+use albatrice::{FromBinary, ToBinary};
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::ops::Range;
@@ -23,9 +18,10 @@ pub struct Board {
     pub inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Arc<RwLock<Enemy>>>,
+    pub spells: Vec<SpellCircle>,
     // Stuff that doesn't get calculated but does get drawn
     pub specials: Vec<Special>,
-    boss_pos: Vector,
+    pub boss_pos: Vector,
     pub boss: Option<Weak<RwLock<Enemy>>>,
     visible: Vec<bool>,
 }
@@ -43,6 +39,7 @@ impl Board {
             render_y,
             inner,
             enemies: Vec::new(),
+            spells: Vec::new(),
             backtraces,
             specials: Vec::new(),
             boss_pos: Vector::new(0, 0),
@@ -120,8 +117,13 @@ impl Board {
         }
         crate::random::random_index(candidates.len()).map(|index| candidates.swap_remove(index))
     }
-    pub fn get_enemy(&self, pos: Vector) -> Option<Arc<RwLock<Enemy>>> {
+    pub fn get_enemy(&self, pos: Vector, addr: Option<usize>) -> Option<Arc<RwLock<Enemy>>> {
         for enemy in self.enemies.iter() {
+            if let Some(addr) = addr {
+                if Arc::as_ptr(enemy).addr() == addr {
+                    continue;
+                }
+            }
             if enemy.try_read().unwrap().pos == pos {
                 return Some(enemy.clone());
             }
@@ -140,7 +142,41 @@ impl Board {
                 out[Vector::new(x, 28)] = Some(Piece::Upgrade(Upgrade::new(None)));
             }
         }
+        out[Vector::new(1, 14)] = Some(Piece::Upgrade(Upgrade::new(Some(
+            crate::upgrades::UpgradeType::SavePint,
+        ))));
         out
+    }
+    pub fn contact_spell_at<'a>(&'a self, pos: Vector) -> Option<(&'a SpellCircle, usize)> {
+        for (index, circle) in self.spells.iter().enumerate() {
+            if circle.pos == pos {
+                if let Spell::Contact(_) = circle.spell {
+                    return Some((circle, index));
+                }
+            }
+        }
+        None
+    }
+    pub fn contains_literally_anything(&self, pos: Vector, addr: Option<usize>) -> bool {
+        if self[pos].is_some() {
+            return true;
+        }
+        for enemy in self.enemies.iter() {
+            if let Some(addr) = addr {
+                if Arc::as_ptr(enemy).addr() == addr {
+                    continue;
+                }
+            }
+            if enemy.try_read().unwrap().pos == pos {
+                return true;
+            }
+        }
+        for circle in self.spells.iter() {
+            if circle.pos == pos {
+                return true;
+            }
+        }
+        false
     }
 }
 // Rendering
@@ -289,6 +325,9 @@ impl Board {
         base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
     }
     pub fn draw_desc(&self, player: &Player, lock: &mut impl Write) {
+        if !player.inspect {
+            return;
+        }
         Board::go_to_desc(lock);
         crossterm::queue!(
             lock,
@@ -301,7 +340,7 @@ impl Board {
             // Player -> Enemies -> Map elements
             if player.pos == player.selector {
                 write!(lock, "You").unwrap();
-            } else if let Some(enemy) = self.get_enemy(player.selector) {
+            } else if let Some(enemy) = self.get_enemy(player.selector, None) {
                 write!(lock, "{}", enemy.try_read().unwrap().variant.kill_name()).unwrap()
             } else {
                 match &self[player.selector] {
@@ -311,7 +350,7 @@ impl Board {
             }
         } else {
             if player.effects.mage_sight.is_active() {
-                if let Some(enemy) = self.get_enemy(player.selector) {
+                if let Some(enemy) = self.get_enemy(player.selector, None) {
                     if enemy.try_read().unwrap().reachable {
                         write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name())
                             .unwrap();
@@ -736,6 +775,48 @@ impl std::ops::IndexMut<Vector> for Board {
         &mut self.inner[index.y * self.x + index.x]
     }
 }
+impl FromBinary for Board {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Board {
+            x: usize::from_binary(binary)?,
+            y: usize::from_binary(binary)?,
+            render_x: usize::from_binary(binary)?,
+            render_y: usize::from_binary(binary)?,
+            inner: Vec::from_binary(binary)?,
+            backtraces: Vec::from_binary(binary)?,
+            // cannot save outside of shop
+            enemies: Vec::new(),
+            // spells just can't be saved
+            spells: Vec::new(),
+            specials: Vec::from_binary(binary)?,
+            boss_pos: Vector::from_binary(binary)?,
+            boss: None,
+            visible: Vec::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Board {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.x.to_binary(binary)?;
+        self.y.to_binary(binary)?;
+        self.render_x.to_binary(binary)?;
+        self.render_y.to_binary(binary)?;
+        self.inner
+            .iter()
+            .map(|x| x.as_ref())
+            .collect::<Vec<Option<&Piece>>>()
+            .to_binary(binary)?;
+        self.backtraces.to_binary(binary)?;
+        // skipping enemies
+        self.specials.to_binary(binary)?;
+        self.boss_pos.to_binary(binary)?;
+        // skipping boss because skipping enemies
+        self.visible.to_binary(binary)
+    }
+}
 #[derive(Copy, Clone)]
 pub struct BackTrace {
     from: crate::Direction,
@@ -749,11 +830,27 @@ impl BackTrace {
         }
     }
 }
+impl FromBinary for BackTrace {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            from: crate::Direction::from_binary(binary)?,
+            cost: Option::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for BackTrace {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.from.to_binary(binary)?;
+        self.cost.as_ref().to_binary(binary)
+    }
+}
 #[derive(Clone, Debug)]
 pub enum Piece {
     Wall(Wall),
     Door(Door),
-    Spell(Spell),
     Exit(Exit),
     Item(Item),
     Upgrade(Upgrade),
@@ -763,7 +860,6 @@ impl Piece {
         match self {
             Piece::Wall(_) => (Wall::render(pos, board), None),
             Piece::Door(door) => door.render(pos, board),
-            Piece::Spell(_) => (Spell::SYMBOL, Some(Spell::STYLE)),
             Piece::Exit(_) => Exit::render(),
             Piece::Item(item) => item.render(player),
             Piece::Upgrade(upgrade) => upgrade.render(player),
@@ -786,8 +882,15 @@ impl Piece {
     pub fn enemy_collision(&self) -> bool {
         match self {
             Piece::Door(door) => door.has_collision(),
-            Piece::Spell(_) => true,
             _ => self.has_collision(),
+        }
+    }
+    pub fn projectile_collision(&self) -> bool {
+        match self {
+            Piece::Door(door) => door.open,
+            Piece::Item(_) => false,
+            Piece::Upgrade(_) => false,
+            _ => true,
         }
     }
     fn dashable(&self) -> bool {
@@ -798,12 +901,8 @@ impl Piece {
         }
     }
     // returns whether or not the piece should be deleted
-    pub fn on_step(&self, stepper: Stepper<'_>) -> bool {
+    pub fn on_step(&self, stepper: Entity<'_>) -> bool {
         match self {
-            Piece::Spell(spell) => {
-                spell.on_step(stepper);
-                true
-            }
             Piece::Exit(exit) => {
                 exit.on_step(stepper);
                 false
@@ -817,7 +916,6 @@ impl Piece {
         match self {
             Self::Wall(_) => write!(lock, "A wall").unwrap(),
             Self::Door(door) => door.get_desc(lock),
-            Self::Spell(_) => write!(lock, "A spell").unwrap(),
             Self::Exit(_) => write!(lock, "The exit").unwrap(),
             Self::Item(item) => item.get_desc(lock),
             Self::Upgrade(upgrade) => upgrade.get_desc(lock),
@@ -836,7 +934,6 @@ impl std::fmt::Display for Piece {
         match self {
             Piece::Wall(wall) => wall.fmt(f),
             Piece::Door(door) => door.fmt(f),
-            Piece::Spell(spell) => spell.fmt(f),
             Piece::Exit(exit) => exit.fmt(f),
             Piece::Item(item) => item.fmt(f),
             Piece::Upgrade(upgrade) => upgrade.fmt(f),
@@ -856,11 +953,56 @@ impl std::str::FromStr for Piece {
                     "exit" => Ok(Piece::Exit(args.parse()?)),
                     "item" => Ok(Piece::Item(args.parse()?)),
                     "upgrade" => Ok(Piece::Upgrade(args.parse()?)),
-                    "spell" => Err("Spells cannot be created like this".to_string()),
                     invalid => Err(format!("{invalid} is not a valid piece type")),
                 }
             }
             None => Err("You have to specify a piece type".to_string()),
+        }
+    }
+}
+impl FromBinary for Piece {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::Wall(Wall::from_binary(binary)?),
+            1 => Self::Door(Door::from_binary(binary)?),
+            2 => Self::Exit(Exit::from_binary(binary)?),
+            3 => Self::Item(Item::from_binary(binary)?),
+            4 => Self::Upgrade(Upgrade::from_binary(binary)?),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get Piece from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for Piece {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::Wall(wall) => {
+                0_u8.to_binary(binary)?;
+                wall.to_binary(binary)
+            }
+            Self::Door(door) => {
+                1_u8.to_binary(binary)?;
+                door.to_binary(binary)
+            }
+            Self::Exit(exit) => {
+                2_u8.to_binary(binary)?;
+                exit.to_binary(binary)
+            }
+            Self::Item(item) => {
+                3_u8.to_binary(binary)?;
+                item.to_binary(binary)
+            }
+            Self::Upgrade(upgrade) => {
+                4_u8.to_binary(binary)?;
+                upgrade.to_binary(binary)
+            }
         }
     }
 }
@@ -977,5 +1119,24 @@ pub struct Special {
 impl Special {
     pub fn new(pos: Vector, ch: char, style: Option<Style>) -> Special {
         Special { pos, ch, style }
+    }
+}
+impl FromBinary for Special {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Special {
+            pos: Vector::from_binary(binary)?,
+            ch: char::from_binary(binary)?,
+            style: Option::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Special {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.pos.to_binary(binary)?;
+        self.ch.to_binary(binary)?;
+        self.style.as_ref().to_binary(binary)
     }
 }

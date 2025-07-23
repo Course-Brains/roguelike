@@ -1,4 +1,4 @@
-use crate::{Random, Style, pieces::spell::Stepper};
+use crate::{Entity, FromBinary, Random, Style, ToBinary};
 use std::fmt::Display;
 #[derive(Clone, Copy, Debug)]
 pub struct Item {
@@ -13,9 +13,9 @@ impl Item {
     pub fn render(&self, player: &crate::Player) -> (char, Option<Style>) {
         self.item_type.render(player)
     }
-    pub fn on_step(&self, stepper: Stepper<'_>) -> bool {
+    pub fn on_step(&self, stepper: Entity<'_>) -> bool {
         crate::log!("Item({self}) was stepped on");
-        if let Stepper::Player(player) = stepper {
+        if let Entity::Player(player) = stepper {
             crate::log!("  Attempting pickup");
             if player.money >= self.item_type.price() {
                 crate::log!("    Pickup is valid");
@@ -51,5 +51,20 @@ impl std::str::FromStr for Item {
         Ok(Item {
             item_type: s.parse()?,
         })
+    }
+}
+impl FromBinary for Item {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Item {
+            item_type: crate::ItemType::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Item {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.item_type.to_binary(binary)
     }
 }

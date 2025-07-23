@@ -1,3 +1,4 @@
+use crate::{FromBinary, ToBinary};
 #[derive(Clone, Copy)]
 pub struct Style {
     color: Color,
@@ -80,6 +81,27 @@ impl Style {
     color!(background_white, white, White);
     color!(background_default, default, Default);
 }
+impl FromBinary for Style {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Style {
+            color: Color::from_binary(binary)?,
+            intense: bool::from_binary(binary)?,
+            background: Color::from_binary(binary)?,
+            intense_background: bool::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Style {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.color.to_binary(binary)?;
+        self.intense.to_binary(binary)?;
+        self.background.to_binary(binary)?;
+        self.intense_background.to_binary(binary)
+    }
+}
 #[derive(Clone, Copy)]
 pub enum Color {
     Black,
@@ -105,5 +127,45 @@ impl Color {
             Color::White => Some(37),
             Color::Default => None,
         }
+    }
+}
+impl FromBinary for Color {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Color::Black,
+            1 => Color::Red,
+            2 => Color::Green,
+            3 => Color::Yellow,
+            4 => Color::Blue,
+            5 => Color::Purple,
+            6 => Color::Cyan,
+            7 => Color::White,
+            8 => Color::Default,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get Color from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for Color {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        match self {
+            Color::Black => 0_u8,
+            Color::Red => 1_u8,
+            Color::Green => 2_u8,
+            Color::Yellow => 3_u8,
+            Color::Blue => 4_u8,
+            Color::Purple => 5_u8,
+            Color::Cyan => 6_u8,
+            Color::White => 7_u8,
+            Color::Default => 8_u8,
+        }
+        .to_binary(binary)
     }
 }

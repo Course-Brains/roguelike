@@ -1,12 +1,12 @@
 use crate::{
-    Board, Direction, Player, Style, Vector, advantage_pass, board::Special, pieces::spell,
+    Board, Direction, Player, Vector, advantage_pass,
+    spell::{ContactSpell, NormalSpell, Spell, SpellCircle},
     style::Color,
 };
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
 const MAGE_BOSS_PROMOTE_RANGE: usize = 10;
-const MAGE_BOSS_SWAP_RANGE: usize = 20;
 const MAGE_BOSS_SWAP_THRESH: usize = 10;
 #[derive(Clone, Debug)]
 pub struct Enemy {
@@ -19,6 +19,8 @@ pub struct Enemy {
     pub reachable: bool,
     pub attacking: bool,
     pub dead: bool,
+    // If it should give rewards when killed
+    pub reward: bool,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -32,6 +34,7 @@ impl Enemy {
             reachable: false,
             attacking: false,
             dead: false,
+            reward: true,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -83,87 +86,94 @@ impl Enemy {
     }
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
-        let mut this = arc.try_write().unwrap();
+        let mut this = Some(arc.try_write().unwrap());
         let addr = Arc::as_ptr(&arc).addr();
-        if !this.active {
-            if this.variant.mage_aggro() && player.effects.mage_sight.is_active() {
-                if this.reachable {
-                    this.active = true;
+        if !this.as_ref().unwrap().active {
+            if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
+            {
+                if this.as_ref().unwrap().reachable {
+                    this.as_mut().unwrap().active = true;
                 }
-            } else if this.variant.detect(&this, board, player) {
-                this.active = true;
+            } else if this
+                .as_ref()
+                .unwrap()
+                .variant
+                .detect(this.as_ref().unwrap(), board, player)
+            {
+                this.as_mut().unwrap().active = true;
             } else {
                 return false;
             }
         }
-        if this.stun != 0 {
-            this.stun -= 1;
+        if this.as_ref().unwrap().stun != 0 {
+            this.as_mut().unwrap().stun -= 1;
             return false;
         }
-        match this.variant.clone() {
+        match this.as_ref().unwrap().variant.clone() {
             Variant::Basic => {
-                if player.pos.x.abs_diff(this.pos.x) < 2 && player.pos.y.abs_diff(this.pos.y) < 2 {
-                    this.attacking = true;
-                    if this.windup == 0 {
-                        this.windup = 3;
+                if player.pos.x.abs_diff(this.as_ref().unwrap().pos.x) < 2
+                    && player.pos.y.abs_diff(this.as_ref().unwrap().pos.y) < 2
+                {
+                    this.as_mut().unwrap().attacking = true;
+                    if this.as_ref().unwrap().windup == 0 {
+                        this.as_mut().unwrap().windup = 3;
                         return true;
                     }
-                    this.windup -= 1;
-                    if this.windup == 0 {
-                        if let Err(_) = player.attacked(
-                            (crate::random() & 0b0000_0011) as usize + 3,
-                            Variant::Basic.kill_name(),
-                        ) {
-                            this.stun = this.variant.parry_stun();
+                    this.as_mut().unwrap().windup -= 1;
+                    if this.as_ref().unwrap().windup == 0 {
+                        if let Err(_) = player
+                            .attacked(luck_roll8(player) as usize + 3, Variant::Basic.kill_name())
+                        {
+                            this.as_mut().unwrap().stun =
+                                this.as_ref().unwrap().variant.parry_stun();
                         }
                         return true;
                     }
                     false
                 } else {
-                    this.attacking = false;
-                    this.windup = 0;
+                    this.as_mut().unwrap().attacking = false;
+                    this.as_mut().unwrap().windup = 0;
                     false
                 }
             }
             Variant::Mage(spell) => {
-                if this.is_near(player.pos, MAGE_RANGE) {
-                    this.attacking = true;
+                if this.as_ref().unwrap().is_near(player.pos, MAGE_RANGE) {
+                    this.as_mut().unwrap().attacking = true;
                 } else {
-                    this.attacking = false;
-                    this.windup = 0;
+                    this.as_mut().unwrap().attacking = false;
+                    this.as_mut().unwrap().windup = 0;
                 }
-                if this.windup > 1 {
-                    this.windup -= 1;
+                if this.as_ref().unwrap().windup > 1 {
+                    this.as_mut().unwrap().windup -= 1;
                     return false;
                 }
-                if this.windup == 1 {
+                if this.as_ref().unwrap().windup == 1 {
                     // cast time BAYBEEE
                     match spell {
                         MageSpell::Circle(cast_pos) => {
-                            if board[cast_pos].is_none() {
-                                board[cast_pos] = Some(crate::board::Piece::Spell(
-                                    spell::Spell::new(Arc::downgrade(&arc)),
-                                ));
+                            if !board.contains_literally_anything(cast_pos, Some(addr)) {
+                                board.spells.push(SpellCircle {
+                                    spell: Spell::Contact(ContactSpell::DrainHealth),
+                                    pos: cast_pos,
+                                    caster: Some(arc.clone()),
+                                });
                             }
-                            this.windup = 0;
+                            this.as_mut().unwrap().windup = 0;
                         }
                         MageSpell::Teleport => {
-                            if let Some(target) = board
-                                .pick_near(Some(addr), this.pos, MAGE_RANGE)
-                                .map(|weak| weak.upgrade().unwrap())
-                            {
-                                std::mem::swap(&mut target.try_write().unwrap().pos, &mut this.pos);
-                                crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
-                            }
-                            this.windup = 0;
+                            this.take();
+                            NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
+                            this = Some(arc.try_write().unwrap());
+                            this.as_mut().unwrap().windup = 0;
                         }
                     }
                 }
+                let mut this = this.unwrap();
                 match crate::random() & 0b0000_0011 {
                     0 => {
                         // teleport
                         if this.is_near(player.pos, TELE_THRESH) {
-                            this.windup = 3;
+                            this.windup = NormalSpell::Swap.cast_time();
                             this.variant = Variant::Mage(MageSpell::Teleport);
                             return true;
                         }
@@ -184,7 +194,7 @@ impl Enemy {
                     2 => {
                         // spell time
                         if board[player.pos].is_none() {
-                            this.windup = 3;
+                            this.windup = ContactSpell::DrainHealth.cast_time();
                             this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
                         true
@@ -197,11 +207,10 @@ impl Enemy {
                 }
             }
             Variant::BasicBoss(direction) => {
-                if this.windup > 0 {
-                    if this.windup == 1 {
+                if this.as_ref().unwrap().windup > 0 {
+                    if this.as_ref().unwrap().windup == 1 {
                         // charge time
-                        let mut pos = this.pos;
-                        let mut this = Some(this);
+                        let mut pos = this.as_ref().unwrap().pos;
                         // Explained lower
                         loop {
                             pos += direction;
@@ -248,127 +257,54 @@ impl Enemy {
                         this.attacking = false;
                         true
                     } else {
-                        this.windup -= 1;
+                        this.as_mut().unwrap().windup -= 1;
                         false
                     }
-                } else if this.is_near(player.pos, 2) {
+                } else if this.as_ref().unwrap().is_near(player.pos, 2) {
                     // smack 'em
                     let _ = player.attacked(
-                        (crate::random() & 0b11) as usize + 3,
+                        luck_roll8(player) as usize / 2 + 3,
                         Variant::BasicBoss(Direction::Up).kill_name(),
                     );
                     true
-                } else if this.pos.x == player.pos.x {
+                } else if this.as_ref().unwrap().pos.x == player.pos.x {
                     // charge up a vertical charge
-                    if this.pos.y > player.pos.y {
-                        this.variant = Variant::BasicBoss(Direction::Up)
+                    if this.as_ref().unwrap().pos.y > player.pos.y {
+                        this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Up)
                     } else {
-                        this.variant = Variant::BasicBoss(Direction::Down)
+                        this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Down)
                     }
-                    this.windup = 2;
-                    this.attacking = true;
+                    this.as_mut().unwrap().windup = 2;
+                    this.as_mut().unwrap().attacking = true;
                     true
-                } else if this.pos.y == player.pos.y {
+                } else if this.as_ref().unwrap().pos.y == player.pos.y {
                     // charge up a horizontal charge
-                    if this.pos.x > player.pos.x {
-                        this.variant = Variant::BasicBoss(Direction::Left)
+                    if this.as_ref().unwrap().pos.x > player.pos.x {
+                        this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Left)
                     } else {
-                        this.variant = Variant::BasicBoss(Direction::Right)
+                        this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Right)
                     }
-                    this.windup = 2;
-                    this.attacking = true;
+                    this.as_mut().unwrap().windup = 2;
+                    this.as_mut().unwrap().attacking = true;
                     true
                 } else {
                     false
                 }
             }
             Variant::MageBoss(spell) => {
-                if this.windup > 0 {
-                    let mut this = Some(this);
+                if this.as_ref().unwrap().windup > 0 {
                     if this.as_ref().unwrap().windup == 1 {
                         // casting time
                         this.as_mut().unwrap().attacking = false;
                         match spell {
                             MageBossSpell::Obamehameha(direction) => {
-                                let mut pos = this.as_ref().unwrap().pos;
-                                crate::log!("firing obamehameha from {pos} to {direction}");
-                                this.take();
-                                'outer: loop {
-                                    pos += direction;
-                                    crate::log!("\tchecking {pos}");
-                                    if let Some(piece) = &board[pos] {
-                                        crate::log!("\t\thit piece: {piece}");
-                                        if piece.has_collision() {
-                                            break;
-                                        }
-                                    }
-                                    if player.pos == pos {
-                                        crate::log!("\t\thit player");
-                                        break;
-                                    }
-                                    for enemy in board.enemies.iter() {
-                                        if Arc::as_ptr(enemy).addr() == addr {
-                                            continue;
-                                        }
-                                        if enemy.try_read().unwrap().pos == pos {
-                                            crate::log!("\t\thit enemy");
-                                            break 'outer;
-                                        }
-                                    }
-                                    board.specials.push(Special::new(
-                                        pos,
-                                        '●',
-                                        Some(*Style::new().red().intense(true)),
-                                    ));
-                                    board.smart_render(player);
-                                    board.specials.pop();
-                                    std::thread::sleep(crate::PROJ_DELAY);
-                                }
-                                pos = pos - direction;
-
-                                let restore_to = board.specials.len();
-                                board.specials.push(Special::new(
-                                    pos,
-                                    ' ',
-                                    Some(*Style::new().background_red()),
-                                ));
-                                board.smart_render(player);
-                                board.specials.pop();
-                                std::thread::sleep(crate::DELAY * 2);
-                                for x in -1..=1 {
-                                    for y in -1..=1 {
-                                        board.specials.push(Special::new(
-                                            Vector::new(
-                                                (pos.x as isize + x) as usize,
-                                                (pos.y as isize + y) as usize,
-                                            ),
-                                            ' ',
-                                            Some(*Style::new().background_red()),
-                                        ));
-                                    }
-                                }
-                                board.smart_render(player);
-                                board.specials.truncate(restore_to);
-
-                                std::thread::sleep(crate::DELAY * 2);
-
-                                for enemy in board
-                                    .get_near(None, pos, 3)
-                                    .iter()
-                                    .map(|enemy| enemy.upgrade().unwrap())
-                                {
-                                    enemy
-                                        .try_write()
-                                        .unwrap()
-                                        .attacked((crate::random() as usize & 3) + 1);
-                                }
-                                if player.pos.is_near(pos, 3) {
-                                    let damage = (((crate::random() & 3) + 1) * 10) as usize;
-                                    crate::log!("\tDamaging player for {damage}");
-                                    let _ =
-                                        player.attacked(damage, Variant::mage_boss().kill_name());
-                                }
-                                this = Some(arc.try_write().unwrap());
+                                let aim = arc.try_read().unwrap().pos + direction;
+                                NormalSpell::BidenBlast.cast(
+                                    Some(arc.clone()),
+                                    player,
+                                    board,
+                                    Some(aim),
+                                );
                             }
                             MageBossSpell::Promote(enemy) => {
                                 if let Some(enemy) = enemy.upgrade() {
@@ -394,23 +330,16 @@ impl Enemy {
                                             continue 'outer;
                                         }
                                     }
-                                    board.enemies.push(Arc::new(RwLock::new(Enemy::new(
-                                        *pos,
-                                        Variant::Basic,
-                                    ))));
+                                    board.enemies.push(Arc::new(RwLock::new(
+                                        Enemy::new(*pos, Variant::Basic).set_reward(false),
+                                    )));
                                     crate::RE_FLOOD
                                         .store(true, std::sync::atomic::Ordering::Relaxed);
                                     break;
                                 }
                             }
-                            MageBossSpell::Swap(enemy) => {
-                                if let Some(enemy) = enemy.upgrade() {
-                                    std::mem::swap(
-                                        &mut this.as_mut().unwrap().pos,
-                                        &mut enemy.try_write().unwrap().pos,
-                                    );
-                                }
-                                crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
+                            MageBossSpell::Swap => {
+                                NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
                             }
                         }
                     }
@@ -420,28 +349,30 @@ impl Enemy {
                 }
                 // Deciding what to do
                 else {
-                    if (this.pos.x == player.pos.x || this.pos.y == player.pos.y)
-                        && this.is_near(player.pos, 15)
+                    if (this.as_ref().unwrap().pos.x == player.pos.x
+                        || this.as_ref().unwrap().pos.y == player.pos.y)
+                        && this.as_ref().unwrap().is_near(player.pos, 15)
                     {
                         // Obamehameha
                         if crate::random() & 3 == 0 {
                             let dir;
-                            if this.pos.x == player.pos.x {
-                                if this.pos.y > player.pos.y {
+                            if this.as_ref().unwrap().pos.x == player.pos.x {
+                                if this.as_ref().unwrap().pos.y > player.pos.y {
                                     dir = Direction::Up;
                                 } else {
                                     dir = Direction::Down
                                 }
                             } else {
-                                if this.pos.x > player.pos.x {
+                                if this.as_ref().unwrap().pos.x > player.pos.x {
                                     dir = Direction::Left
                                 } else {
                                     dir = Direction::Right
                                 }
                             }
-                            this.variant = Variant::MageBoss(MageBossSpell::Obamehameha(dir));
-                            this.windup = 4;
-                            this.attacking = true;
+                            this.as_mut().unwrap().variant =
+                                Variant::MageBoss(MageBossSpell::Obamehameha(dir));
+                            this.as_mut().unwrap().windup = 4;
+                            this.as_mut().unwrap().attacking = true;
                             return true;
                         }
                         false
@@ -455,11 +386,10 @@ impl Enemy {
                                         continue;
                                     }
                                     if let Variant::Basic = enemy.try_read().unwrap().variant {
-                                        if enemy
-                                            .try_read()
-                                            .unwrap()
-                                            .is_near(this.pos, MAGE_BOSS_PROMOTE_RANGE)
-                                        {
+                                        if enemy.try_read().unwrap().is_near(
+                                            this.as_ref().unwrap().pos,
+                                            MAGE_BOSS_PROMOTE_RANGE,
+                                        ) {
                                             candidates.push(Arc::downgrade(enemy))
                                         }
                                     }
@@ -467,35 +397,36 @@ impl Enemy {
                                 if let Some(chosen) = crate::random::random_index(candidates.len())
                                     .map(|index| candidates.swap_remove(index))
                                 {
-                                    this.variant =
+                                    this.as_mut().unwrap().variant =
                                         Variant::MageBoss(MageBossSpell::Promote(chosen));
-                                    this.windup = 5;
-                                    this.attacking = true;
+                                    this.as_mut().unwrap().windup = 5;
+                                    this.as_mut().unwrap().attacking = true;
                                     return true;
                                 }
                                 false
                             }
                             1 => {
                                 // Create
-                                this.variant = Variant::MageBoss(MageBossSpell::Create);
-                                this.windup = 5;
-                                this.attacking = true;
+                                this.as_mut().unwrap().variant =
+                                    Variant::MageBoss(MageBossSpell::Create);
+                                this.as_mut().unwrap().windup = 5;
+                                this.as_mut().unwrap().attacking = true;
                                 true
                             }
                             2 => {
                                 // Swap
-                                if !this.is_near(player.pos, MAGE_BOSS_SWAP_THRESH) {
+                                if !this
+                                    .as_ref()
+                                    .unwrap()
+                                    .is_near(player.pos, MAGE_BOSS_SWAP_THRESH)
+                                {
                                     return false;
                                 }
-                                if let Some(chosen) =
-                                    board.pick_near(Some(addr), this.pos, MAGE_BOSS_SWAP_RANGE)
-                                {
-                                    this.variant = Variant::MageBoss(MageBossSpell::Swap(chosen));
-                                    this.windup = 5;
-                                    this.attacking = true;
-                                    return true;
-                                }
-                                false
+                                this.as_mut().unwrap().variant =
+                                    Variant::MageBoss(MageBossSpell::Swap);
+                                this.as_mut().unwrap().windup = 5;
+                                this.as_mut().unwrap().attacking = true;
+                                true
                             }
                             3 => false,
                             _ => unreachable!("Shit -> Fan"),
@@ -528,6 +459,10 @@ impl Enemy {
             }
         }
     }
+    fn set_reward(mut self, state: bool) -> Self {
+        self.reward = state;
+        self
+    }
 }
 #[derive(Clone, Debug)]
 pub enum Variant {
@@ -540,15 +475,14 @@ impl Variant {
     fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
         match self {
             Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => advantage_pass(
-                    || cost < (crate::random() & 0b0000_0111) as usize,
-                    player.detect_mod,
-                ),
+                Some(cost) => {
+                    advantage_pass(|| cost < luck_roll8(player) as usize, player.detect_mod)
+                }
                 None => false,
             },
             Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
                 Some(cost) => advantage_pass(
-                    || cost < (((crate::random() & 0b0000_0111) + 1) << 2) as usize,
+                    || cost < ((luck_roll8(player) + 1) << 2) as usize,
                     player.detect_mod,
                 ),
                 None => false,
@@ -685,5 +619,14 @@ pub enum MageBossSpell {
     // create new basic (10 turns)
     Create,
     // swap places with another enemy (5 turns)
-    Swap(Weak<RwLock<Enemy>>),
+    Swap,
+}
+pub fn luck_roll8(player: &Player) -> u8 {
+    let base = crate::random() & 7;
+    if player.effects.doomed.is_active() {
+        return (base + 4).min(7);
+    } else if player.effects.unlucky.is_active() {
+        return (base + 2).min(7);
+    }
+    base
 }

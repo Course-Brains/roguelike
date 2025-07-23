@@ -1,4 +1,4 @@
-use crate::{Style, pieces::spell::Stepper};
+use crate::{Entity, FromBinary, Style, ToBinary};
 use std::sync::atomic::Ordering;
 pub const SYMBOL: char = 'Π';
 pub const STYLE: Style = Style::new();
@@ -11,8 +11,8 @@ impl Exit {
     pub const fn render() -> (char, Option<Style>) {
         (SYMBOL, Some(STYLE))
     }
-    pub fn on_step(self, stepper: Stepper<'_>) {
-        if let Stepper::Player(_) = stepper {
+    pub fn on_step(self, stepper: Entity<'_>) {
+        if let Entity::Player(_) = stepper {
             match self {
                 Exit::Shop => crate::LOAD_SHOP.store(true, Ordering::Relaxed),
                 Exit::Level => crate::LOAD_MAP.store(true, Ordering::Relaxed),
@@ -35,6 +35,25 @@ impl std::str::FromStr for Exit {
             "shop" => Ok(Exit::Shop),
             "level" => Ok(Exit::Level),
             invalid => Err(format!("{invalid} is not shop or level")),
+        }
+    }
+}
+impl FromBinary for Exit {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match bool::from_binary(binary)? {
+            true => Exit::Shop,
+            false => Exit::Level,
+        })
+    }
+}
+impl ToBinary for Exit {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        match self {
+            Exit::Shop => true.to_binary(binary),
+            Exit::Level => false.to_binary(binary),
         }
     }
 }

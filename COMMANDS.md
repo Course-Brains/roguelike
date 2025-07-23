@@ -16,6 +16,23 @@ redraw
 list\_enemies
     Lists out all enemies with their index, position, and type
 
+kill \[index\]
+    Kills the enemy at the given \[index\], if you want to find out the
+    index, see list\_enemies
+
+spawn \[variant\] \[x\] \[y\]
+    Spawns an enemy at the given \[x\] and \[y\] coordinates, or the
+    selector if not given.
+    Valid variants are:
+        basic
+        basic\_boss
+        mage
+        mage\_boss
+
+get\_enemy\_data \[index\]
+    Gets the date of the enemy at the given \[index\], if you want to
+    find out the index, see list\_enemies
+
 force\_flood
     Forcefully refloods the map
 
@@ -61,6 +78,8 @@ effect \[effect\] \[duration\]
         invincible
         mage\_sight
         regen
+        unlucky
+        doomed
     Valid durations are:
         none
             Disables the effect
@@ -76,12 +95,30 @@ give \[item\] \[slot\]
     valid items are:
         mage\_sight
         health\_potion
+        boss\_finder
+        gamba
+
+set\_money \[amount\]
+    Sets the money to the given \[amount\]
 
 upgrade \[upgrade\]
     Gives the specified \[upgrade\]
     Valid upgrades are:
         mage\_eye
-            The mage's eye
+        map
+        soft\_shoes
 
 set\_detect\_mod \[mod\]
     Sets the detection modifier to the given \[mod\]
+
+set\_perception \[perception\]
+    Sets the player's perception to the given \[perception\]
+
+cast \[spell type\] \[spell\]
+    Casts the given \[spell\] at the selector, the spells(and the type
+    they are in are as follows):
+        normal
+            swap
+            biden\_blast
+        contact
+            drain\_health

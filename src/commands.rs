@@ -4,8 +4,8 @@ use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
 enum Command {
     GetPlayerData,
-    SetHealth(usize),
-    SetEnergy(usize),
+    SetHealth(Option<usize>),
+    SetEnergy(Option<usize>),
     SetPos(Vector),
     Redraw,
     ListEnemies,
@@ -20,7 +20,7 @@ enum Command {
     LoadNext,
     LoadShop,
     Effect(String),
-    Give(ItemType, usize),
+    Give(ItemType, Option<usize>),
     SetMoney(usize),
     Upgrade(UpgradeType),
     SetDetectMod(isize),
@@ -32,8 +32,14 @@ impl Command {
         let mut iter = string.split(' ');
         match iter.next().unwrap() {
             "get_player_data" => Ok(Command::GetPlayerData),
-            "set_health" => Ok(Command::SetHealth(parse(iter.next())?)),
-            "set_energy" => Ok(Command::SetEnergy(parse(iter.next())?)),
+            "set_health" => Ok(Command::SetHealth(match iter.next() {
+                Some(arg) => Some(parse(Some(arg))?),
+                None => None,
+            })),
+            "set_energy" => Ok(Command::SetEnergy(match iter.next() {
+                Some(arg) => Some(parse(Some(arg))?),
+                None => None,
+            })),
             "set_pos" => Ok(Command::SetPos(parse_vector(iter.next(), iter.next())?)),
             "redraw" => Ok(Command::Redraw),
             "list_enemies" => Ok(Command::ListEnemies),
@@ -57,7 +63,13 @@ impl Command {
             "load_next" => Ok(Command::LoadNext),
             "load_shop" => Ok(Command::LoadShop),
             "effect" => Ok(Command::Effect(iter.map(|s| s.to_string() + " ").collect())),
-            "give" => Ok(Command::Give(parse(iter.next())?, parse(iter.next())?)),
+            "give" => Ok(Command::Give(
+                parse(iter.next())?,
+                match iter.next() {
+                    Some(arg) => Some(parse(Some(arg))?),
+                    None => None,
+                },
+            )),
             "set_money" => Ok(Command::SetMoney(parse(iter.next())?)),
             "upgrade" => Ok(Command::Upgrade(parse(iter.next())?)),
             "set_detect_mod" => Ok(Command::SetDetectMod(parse(iter.next())?)),
@@ -74,10 +86,10 @@ impl Command {
         match self {
             Command::GetPlayerData => out.send(format!("{:#?}", state.player)).unwrap(),
             Command::SetHealth(health) => {
-                state.player.health = health;
+                state.player.health = health.unwrap_or(state.player.max_health);
             }
             Command::SetEnergy(energy) => {
-                state.player.energy = energy;
+                state.player.energy = energy.unwrap_or(state.player.max_energy);
             }
             Command::SetPos(new_pos) => {
                 state.player.pos = new_pos;
@@ -145,7 +157,23 @@ impl Command {
                     out.send(msg).unwrap()
                 }
             }
-            Command::Give(item_type, slot) => state.player.items[slot] = Some(item_type),
+            Command::Give(item_type, slot) => {
+                let slot = match slot {
+                    Some(slot) => slot,
+                    None => {
+                        // if no slots are open and one hasn't been specified, then use slot zero
+                        // and overwrite what is in it
+                        let mut out = 0;
+                        for slot in 0..6 {
+                            if state.player.items[slot].is_none() {
+                                out = slot
+                            }
+                        }
+                        out
+                    }
+                };
+                state.player.items[slot] = Some(item_type)
+            }
             Command::SetMoney(money) => state.player.money = money,
             Command::Upgrade(upgrade_type) => {
                 upgrade_type.on_pickup(&mut state.player);

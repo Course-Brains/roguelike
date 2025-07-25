@@ -1,4 +1,4 @@
-use crate::{Board, Enemy, Entity, Player, Style, Vector, board::Special, projectile_path};
+use crate::{Board, Enemy, Entity, Player, Style, Vector, board::Special, ray_cast};
 use std::sync::{Arc, RwLock};
 pub struct SpellCircle {
     pub spell: Spell,
@@ -18,7 +18,7 @@ impl Spell {
             Spell::Normal(_) => panic!("Called unwrap_contact on a normal spell"),
         }
     }
-    pub fn unwrap_normal<'a>(&'a self) -> &'a NormalSpell {
+    /*pub fn unwrap_normal<'a>(&'a self) -> &'a NormalSpell {
         match self {
             Self::Contact(_) => panic!("Called unwrap_normal on a contact spell"),
             Self::Normal(normal) => normal,
@@ -29,7 +29,7 @@ impl Spell {
             Spell::Contact(spell) => spell.cast_time(),
             Spell::Normal(spell) => spell.cast_time(),
         }
-    }
+    }*/
 }
 impl std::str::FromStr for Spell {
     type Err = String;
@@ -135,14 +135,15 @@ impl NormalSpell {
             }
             Self::BidenBlast => {
                 let aim = aim.unwrap();
-                let path = projectile_path(
+                let path = ray_cast(
                     get_pos(&caster, player),
                     aim,
                     board,
                     None,
                     false,
                     player.pos,
-                );
+                )
+                .0;
                 let last_pos = *path.last().unwrap();
                 let reset_to = board.specials.len();
                 // drawing projectile

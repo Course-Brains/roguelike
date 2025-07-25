@@ -206,8 +206,9 @@ impl Player {
     }
     pub fn aim(&mut self, board: &mut Board) {
         let reset_to = board.specials.len();
-        for pos in
-            crate::projectile_path(self.pos, self.selector, board, None, true, self.pos).iter()
+        for pos in crate::ray_cast(self.pos, self.selector, board, None, true, self.pos)
+            .0
+            .iter()
         {
             board.specials.push(crate::board::Special::new(
                 *pos,

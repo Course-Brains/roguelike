@@ -87,6 +87,7 @@ impl Enemy {
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
         let mut this = Some(arc.try_write().unwrap());
+        crate::log!("Thinking for: {}", this.as_ref().unwrap().variant);
         let addr = Arc::as_ptr(&arc).addr();
         if !this.as_ref().unwrap().active {
             if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
@@ -109,6 +110,7 @@ impl Enemy {
             this.as_mut().unwrap().stun -= 1;
             return false;
         }
+        crate::log!("  Active enemy");
         match this.as_ref().unwrap().variant.clone() {
             Variant::Basic => {
                 if player.pos.x.abs_diff(this.as_ref().unwrap().pos.x) < 2
@@ -151,6 +153,7 @@ impl Enemy {
                     // cast time BAYBEEE
                     match spell {
                         MageSpell::Circle(cast_pos) => {
+                            crate::log!("  Casting circle");
                             if !board.contains_literally_anything(cast_pos, Some(addr)) {
                                 board.spells.push(SpellCircle {
                                     spell: Spell::Contact(ContactSpell::DrainHealth),
@@ -161,7 +164,10 @@ impl Enemy {
                             this.as_mut().unwrap().windup = 0;
                         }
                         MageSpell::Teleport => {
+                            crate::log!("  Casting swap");
+                            assert!(arc.try_write().is_err(), "RUH ROH RAGGY");
                             this.take();
+                            assert!(arc.try_write().is_ok(), "AR NAWR");
                             NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
                             this = Some(arc.try_write().unwrap());
                             this.as_mut().unwrap().windup = 0;
@@ -298,13 +304,15 @@ impl Enemy {
                         this.as_mut().unwrap().attacking = false;
                         match spell {
                             MageBossSpell::Obamehameha(direction) => {
-                                let aim = arc.try_read().unwrap().pos + direction;
+                                let aim = this.as_ref().unwrap().pos + direction;
+                                this.take();
                                 NormalSpell::BidenBlast.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     Some(aim),
                                 );
+                                this = Some(arc.try_write().unwrap());
                             }
                             MageBossSpell::Promote(enemy) => {
                                 if let Some(enemy) = enemy.upgrade() {
@@ -339,7 +347,9 @@ impl Enemy {
                                 }
                             }
                             MageBossSpell::Swap => {
+                                this.take();
                                 NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
+                                this = Some(arc.try_write().unwrap());
                             }
                         }
                     }

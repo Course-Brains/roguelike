@@ -2,10 +2,12 @@ get\_player\_data
     Gets the full player data as printed by pretty debug
 
 set\_health \[health\]
-    Sets the player's health to [health]
+    Sets the player's health to [health], or full health if \[health\]
+    is not given
 
 set\_energy \[energy\]
-    Sets the player's energy to [energy]
+    Sets the player's energy to [energy], or full energy if \[energy\]
+    is not given
 
 set\_pos \[x\] \[y\]
     Sets the player's position to (\[x\], \[y\])
@@ -97,6 +99,8 @@ give \[item\] \[slot\]
         health\_potion
         boss\_finder
         gamba
+        ender\_pearl
+        warp
 
 set\_money \[amount\]
     Sets the money to the given \[amount\]

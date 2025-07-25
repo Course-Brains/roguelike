@@ -15,6 +15,10 @@ pub enum ItemType {
     BossFinder,
     // Half or double money
     Gamba,
+    // It teleports you to where you throw it
+    EnderPearl,
+    // Teleport to wherever you want, assuming no enemies and no collision
+    Warp,
 }
 impl ItemType {
     // What is listed in the inventory
@@ -22,8 +26,10 @@ impl ItemType {
         match self {
             Self::MageSight => write!(out, "Scroll of magical sight").unwrap(),
             Self::HealthPotion => write!(out, "Potion of healing").unwrap(),
-            Self::BossFinder => write!(out, "Scroll of locate target").unwrap(),
+            Self::BossFinder => write!(out, "Scroll of seeking").unwrap(),
             Self::Gamba => write!(out, "Scroll of chance").unwrap(),
+            Self::EnderPearl => write!(out, "Scroll of teleportation").unwrap(),
+            Self::Warp => write!(out, "Scroll of warping").unwrap(),
         }
     }
     // What happens when it is used
@@ -135,6 +141,39 @@ impl ItemType {
                 }
                 true
             }
+            Self::EnderPearl => {
+                let path = crate::ray_cast(
+                    state.player.pos,
+                    state.player.selector,
+                    &state.board,
+                    None,
+                    true,
+                    state.player.pos,
+                )
+                .0;
+                if path.len() >= 2 {
+                    state.player.pos = path[path.len() - 2];
+                }
+                true
+            }
+            Self::Warp => {
+                if state.board[state.player.selector]
+                    .as_ref()
+                    .is_none_or(|piece| !piece.has_collision())
+                    && state.board.get_enemy(state.player.selector, None).is_none()
+                {
+                    state.player.pos = state.player.selector;
+                    crate::re_flood();
+                    return true;
+                }
+                crate::Board::set_desc(
+                    &mut std::io::stdout(),
+                    "Failed to warp to the target location",
+                );
+                state.reposition_cursor();
+                crate::bell(None);
+                false
+            }
         }
     }
     // The price to pick up
@@ -144,6 +183,8 @@ impl ItemType {
             Self::HealthPotion => 10,
             Self::BossFinder => 30,
             Self::Gamba => 15,
+            Self::EnderPearl => 15,
+            Self::Warp => 30,
         }
     }
     // What is said when on the ground
@@ -151,17 +192,22 @@ impl ItemType {
         match self {
             Self::MageSight => "Scroll of magical sight",
             Self::HealthPotion => "Potion of healing",
-            Self::BossFinder => "Scroll of locate target",
+            Self::BossFinder => "Scroll of seeking",
             Self::Gamba => "Scroll of chance",
+            Self::EnderPearl => "Scroll of teleportation",
+            Self::Warp => "Scroll of warping",
         }
     }
     pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {
         (
             match self {
-                Self::MageSight => SCROLL,
+                Self::MageSight
+                | Self::BossFinder
+                | Self::Gamba
+                | Self::EnderPearl
+                | Self::Warp => SCROLL,
+
                 Self::HealthPotion => POTION,
-                Self::BossFinder => SCROLL,
-                Self::Gamba => SCROLL,
             },
             Some(match self.price() <= player.money {
                 true => *Style::new().green(),
@@ -178,6 +224,8 @@ impl std::str::FromStr for ItemType {
             "health_potion" => Ok(Self::HealthPotion),
             "boss_finder" => Ok(Self::BossFinder),
             "gamba" => Ok(Self::Gamba),
+            "ender_pearl" => Ok(Self::EnderPearl),
+            "warp" => Ok(Self::Warp),
             other => Err(format!("{other} is not an item type")),
         }
     }
@@ -189,16 +237,20 @@ impl std::fmt::Display for ItemType {
             Self::HealthPotion => write!(f, "health potion"),
             Self::BossFinder => write!(f, "boss finder"),
             Self::Gamba => write!(f, "gamba"),
+            Self::EnderPearl => write!(f, "ender pearl"),
+            Self::Warp => write!(f, "warp"),
         }
     }
 }
 impl crate::Random for crate::ItemType {
     fn random() -> Self {
-        match crate::random() & 0b0000_0011 {
+        match crate::random() % 6 {
             0 => Self::MageSight,
             1 => Self::HealthPotion,
             2 => Self::BossFinder,
             3 => Self::Gamba,
+            4 => Self::EnderPearl,
+            5 => Self::Warp,
             _ => unreachable!("idk, not my problem"),
         }
     }
@@ -213,6 +265,8 @@ impl FromBinary for ItemType {
             1 => Self::HealthPotion,
             2 => Self::BossFinder,
             3 => Self::Gamba,
+            4 => Self::EnderPearl,
+            5 => Self::Warp,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -225,10 +279,13 @@ impl FromBinary for ItemType {
 impl ToBinary for ItemType {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         match self {
-            Self::MageSight => 0_u8.to_binary(binary),
-            Self::HealthPotion => 1_u8.to_binary(binary),
-            Self::BossFinder => 2_u8.to_binary(binary),
-            Self::Gamba => 3_u8.to_binary(binary),
+            Self::MageSight => 0_u8,
+            Self::HealthPotion => 1,
+            Self::BossFinder => 2,
+            Self::Gamba => 3,
+            Self::EnderPearl => 4,
+            Self::Warp => 5,
         }
+        .to_binary(binary)
     }
 }

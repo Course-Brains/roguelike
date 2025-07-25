@@ -61,6 +61,9 @@ fn log(string: String) {
 use std::sync::atomic::{AtomicBool, Ordering};
 // Trigger the enemies to be rechecked for reachability
 static RE_FLOOD: AtomicBool = AtomicBool::new(false);
+fn re_flood() {
+    RE_FLOOD.store(true, Ordering::Relaxed);
+}
 // Load the next level
 static LOAD_MAP: AtomicBool = AtomicBool::new(false);
 // load the shop
@@ -291,9 +294,10 @@ fn main() {
             }
             Input::Item(index) => {
                 debug_assert!(index < 7);
-                if let Some(item) = state.player.items[index - 1].take() {
+                if let Some(item) = state.player.items[index - 1] {
                     if item.enact(&mut state) {
-                        state.increment()
+                        state.player.items[index - 1] = None;
+                        state.increment();
                     }
                 } else {
                     bell(None);
@@ -316,6 +320,9 @@ fn main() {
             }
             Input::Aim => {
                 state.player.aiming ^= true;
+                if !state.player.aiming {
+                    state.render();
+                }
             }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
@@ -626,19 +633,19 @@ enum Entity<'a> {
     Enemy(Arc<RwLock<Enemy>>),
 }
 impl<'a> Entity<'a> {
-    fn unwrap_player(self) -> &'a mut Player {
+    /*fn unwrap_player(self) -> &'a mut Player {
         match self {
             Self::Player(player) => player,
             Self::Enemy(_) => panic!("Expected player, found enemy"),
         }
-    }
+    }*/
     fn unwrap_enemy(self) -> Arc<RwLock<Enemy>> {
         match self {
             Self::Player(_) => panic!("Expected enemy, found player"),
             Self::Enemy(enemy) => enemy,
         }
     }
-    fn get_pos(&self) -> Vector {
+    /*fn get_pos(&self) -> Vector {
         match self {
             Entity::Enemy(arc) => arc.try_read().unwrap().pos,
             Entity::Player(player) => player.pos,
@@ -661,7 +668,7 @@ impl<'a> Entity<'a> {
             Entity::Player(_) => false,
             Entity::Enemy(_) => true,
         }
-    }
+    }*/
 }
 impl<'a> From<&'a mut Player> for Entity<'a> {
     fn from(value: &'a mut Player) -> Self {
@@ -778,28 +785,28 @@ fn set_desc(msg: &'static str) {
     Board::set_desc(&mut std::io::stdout(), msg);
     std::io::stdout().flush().unwrap();
 }
-// Gets the list of positions a projectile travels through
-fn projectile_path(
+// Gets the list of positions a projectile travels through and what it hit
+fn ray_cast(
     from: Vector,
     to: Vector,
     board: &Board,
     addr: Option<usize>,
     end_stop: bool,
     player: Vector,
-) -> Vec<Vector> {
+) -> (Vec<Vector>, Option<Collision>) {
     crate::log!("calculating projectile path from {from} to {to}");
     let x = to.x as f64 - from.x as f64;
     let y = to.y as f64 - from.y as f64;
     let len = (x.powi(2) + y.powi(2)).sqrt();
-    let delta_x = x / len;
-    let delta_y = y / len;
+    let delta_x = (x / len) / 2.0;
+    let delta_y = (y / len) / 2.0;
     crate::log!("  Will move ({delta_x}, {delta_y}) per calc");
     let mut precise_x = from.x as f64;
     let mut precise_y = from.y as f64;
     let mut x = from.x;
     let mut y = from.y;
     let mut out = Vec::new();
-    let mut last_one = false;
+    let mut collision = None;
     loop {
         if end_stop {
             if x == to.x && y == to.y {
@@ -829,32 +836,57 @@ fn projectile_path(
         precise_y += delta_y;
         x = precise_x as usize;
         y = precise_y as usize;
-        y = (y as f64 + delta_y) as usize;
         let pos = Vector::new(x, y);
-        if !out.last().is_some_and(|prev| *prev == pos) {
-            crate::log!("    new position, adding to output");
-            out.push(pos);
-            if last_one {
-                break;
-            }
+
+        if !out.last().is_some_and(|prev| *prev == Vector::new(x, y)) {
+            crate::log!("  new position, adding to output");
+            out.push(Vector::new(x, y));
         }
+
         if pos == from {
             continue;
         }
         if let Some(piece) = &board[pos] {
             if piece.projectile_collision() {
                 crate::log!("    hit {piece}, stopping");
+                collision = Some(pos.into());
                 break;
             }
         }
-        if board.get_enemy(pos, addr).is_some() {
+        if let Some(enemy) = board.get_enemy(pos, addr) {
             crate::log!("    hit enemy, stopping");
-            last_one = true;
+            collision = Some(enemy.into());
+            break;
         }
         if pos == player {
             crate::log!("    hit player, stopping");
-            last_one = true;
+            collision = Some(Collision::Player);
+            break;
         }
     }
-    out
+    (out, collision)
+}
+enum Collision {
+    Player,
+    Enemy(Arc<RwLock<Enemy>>),
+    Piece(Vector),
+}
+impl Collision {
+    fn to_entity<'a>(self, player: &'a mut Player) -> Option<Entity<'a>> {
+        match self {
+            Self::Player => Some(Entity::Player(player)),
+            Self::Enemy(arc) => Some(Entity::Enemy(arc)),
+            Self::Piece(_) => None,
+        }
+    }
+}
+impl From<Arc<RwLock<Enemy>>> for Collision {
+    fn from(value: Arc<RwLock<Enemy>>) -> Self {
+        Collision::Enemy(value)
+    }
+}
+impl From<Vector> for Collision {
+    fn from(value: Vector) -> Self {
+        Collision::Piece(value)
+    }
 }

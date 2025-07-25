@@ -233,6 +233,7 @@ impl Board {
         .unwrap();
         self.generate_visible(player);
         self.render(bounds.clone(), &mut lock, player);
+        self.draw_spells(&mut lock, bounds.clone());
         self.draw_enemies(&mut lock, bounds.clone(), player);
         self.draw_specials(&mut lock, bounds.clone());
         self.draw_desc(player, &mut lock);
@@ -280,6 +281,14 @@ impl Board {
                     Some(style) => write!(lock, "{}{}\x1b[0m", style.enact(), special.ch).unwrap(),
                     None => write!(lock, "{}", special.ch).unwrap(),
                 }
+            }
+        }
+    }
+    fn draw_spells(&self, lock: &mut impl Write, bounds: Range<Vector>) {
+        for spell in self.spells.iter() {
+            if self.visible[self.to_index(spell.pos)] {
+                crossterm::queue!(lock, (spell.pos - bounds.start).to_move()).unwrap();
+                write!(lock, "{}∆\x1b[0m", Style::new().purple().enact()).unwrap();
             }
         }
     }

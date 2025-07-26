@@ -5,6 +5,11 @@ pub struct Style {
     intense: bool,
     background: Color,
     intense_background: bool,
+    bold: bool,
+    dim: bool,
+    italic: bool,
+    underline: bool,
+    strike: bool,
 }
 macro_rules! color {
     ($background: ident, $name:ident, $variant:ident) => {
@@ -18,6 +23,14 @@ macro_rules! color {
         }
     };
 }
+macro_rules! set {
+    ($name: ident) => {
+        pub const fn $name(&mut self, $name: bool) -> &mut Self {
+            self.$name = $name;
+            self
+        }
+    };
+}
 impl Style {
     pub const fn new() -> Style {
         Style {
@@ -25,28 +38,11 @@ impl Style {
             intense: false,
             background: Color::Default,
             intense_background: false,
-        }
-    }
-    // assumes we start from [0m
-    pub fn enact(&self) -> String {
-        let mut color = 0;
-        if let Some(num) = self.color.to_num() {
-            color = num;
-            if self.intense {
-                color += 60;
-            }
-        }
-        match self.background.to_num() {
-            Some(mut background) => {
-                if self.intense_background {
-                    background += 60
-                }
-                background += 10;
-                format!("\x1b[0;{};{}m", color, background)
-            }
-            None => {
-                format!("\x1b[0;{}m", color)
-            }
+            bold: false,
+            dim: false,
+            italic: false,
+            underline: false,
+            strike: false,
         }
     }
     pub const fn set_color(&mut self, color: Color) -> &mut Self {
@@ -63,14 +59,15 @@ impl Style {
         }
         true
     }
-    pub const fn intense(&mut self, intense: bool) -> &mut Self {
-        self.intense = intense;
-        self
-    }
-    pub const fn intense_background(&mut self, intense: bool) -> &mut Self {
-        self.intense_background = intense;
-        self
-    }
+
+    set!(intense);
+    set!(intense_background);
+    set!(bold);
+    set!(dim);
+    set!(italic);
+    set!(underline);
+    set!(strike);
+
     color!(background_black, black, Black);
     color!(background_red, red, Red);
     color!(background_green, green, Green);
@@ -80,6 +77,44 @@ impl Style {
     color!(background_cyan, cyan, Cyan);
     color!(background_white, white, White);
     color!(background_default, default, Default);
+}
+impl std::fmt::Display for Style {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut color = 0;
+        if let Some(num) = self.color.to_num() {
+            color = num;
+            if self.intense {
+                color += 60;
+            }
+        }
+        if self.bold {
+            write!(f, "\x1b[1m")?;
+        }
+        if self.dim {
+            write!(f, "\x1b[2m")?;
+        }
+        if self.italic {
+            write!(f, "\x1b[3m")?;
+        }
+        if self.underline {
+            write!(f, "\x1b[4m")?;
+        }
+        if self.strike {
+            write!(f, "\x1b[9m")?;
+        }
+        match self.background.to_num() {
+            Some(mut background) => {
+                if self.intense_background {
+                    background += 60
+                }
+                background += 10;
+                write!(f, "\x1b[0;{};{}m", color, background)
+            }
+            None => {
+                write!(f, "\x1b[0;{}m", color)
+            }
+        }
+    }
 }
 impl FromBinary for Style {
     fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
@@ -91,6 +126,11 @@ impl FromBinary for Style {
             intense: bool::from_binary(binary)?,
             background: Color::from_binary(binary)?,
             intense_background: bool::from_binary(binary)?,
+            bold: bool::from_binary(binary)?,
+            dim: bool::from_binary(binary)?,
+            italic: bool::from_binary(binary)?,
+            underline: bool::from_binary(binary)?,
+            strike: bool::from_binary(binary)?,
         })
     }
 }
@@ -99,7 +139,12 @@ impl ToBinary for Style {
         self.color.to_binary(binary)?;
         self.intense.to_binary(binary)?;
         self.background.to_binary(binary)?;
-        self.intense_background.to_binary(binary)
+        self.intense_background.to_binary(binary)?;
+        self.bold.to_binary(binary)?;
+        self.dim.to_binary(binary)?;
+        self.italic.to_binary(binary)?;
+        self.underline.to_binary(binary)?;
+        self.strike.to_binary(binary)
     }
 }
 #[derive(Clone, Copy)]

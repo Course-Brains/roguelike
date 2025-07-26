@@ -13,6 +13,7 @@ left: move selector left
 down: move selector down
 right: move selector right
 r: return selector to player
+f: toggle fast selector movement
 ===========COMBAT===========
 q: attack selected enemy
 e: block

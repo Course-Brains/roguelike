@@ -140,7 +140,7 @@ impl NormalSpell {
                     aim,
                     board,
                     None,
-                    false,
+                    caster.is_none(),
                     player.pos,
                 )
                 .0;

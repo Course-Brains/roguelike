@@ -1,6 +1,3 @@
-// IDEAS:
-// password manager
-
 mod player;
 use player::Player;
 mod board;
@@ -219,8 +216,30 @@ fn main() {
                 }
             },
             Input::Arrow(direction) => {
-                if state.is_on_board(state.player.selector, direction) {
-                    state.player.selector += direction;
+                let new_pos = {
+                    match state.player.fast {
+                        true => {
+                            let mut pos = state.player.selector;
+                            for _ in 0..5 {
+                                if state.is_on_board(pos, direction) {
+                                    pos += direction;
+                                } else {
+                                    break;
+                                }
+                            }
+                            pos
+                        }
+                        false => {
+                            if state.is_on_board(state.player.selector, direction) {
+                                state.player.selector + direction
+                            } else {
+                                state.player.selector
+                            }
+                        }
+                    }
+                };
+                if new_pos != state.player.selector {
+                    state.player.selector = new_pos;
                     state.board.draw_desc(&state.player, &mut std::io::stdout());
                     state.player.reposition_cursor(
                         state
@@ -234,8 +253,10 @@ fn main() {
                 }
             }
             Input::Attack => {
-                let fail_msg = Style::new().red().enact()
-                    + "You can only attack in the 3 by 3 around you\x1b[0m";
+                let fail_msg = format!(
+                    "{}You can only attack in the 3 by 3 around you\x1b[0m",
+                    Style::new().red()
+                );
                 if state.player.pos.x.abs_diff(state.player.selector.x) > 1 {
                     Board::set_desc(&mut std::io::stdout(), &fail_msg);
                     bell(None);
@@ -323,6 +344,18 @@ fn main() {
                 if !state.player.aiming {
                     state.render();
                 }
+            }
+            Input::Fast => {
+                state.player.fast ^= true;
+                Board::set_desc(
+                    &mut std::io::stdout(),
+                    match state.player.fast {
+                        true => "Fast selector movement enabled",
+                        false => "Fast selector movement disabled",
+                    },
+                );
+                state.reposition_cursor();
+                std::io::stdout().flush().unwrap();
             }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {

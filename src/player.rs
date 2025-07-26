@@ -28,6 +28,8 @@ pub struct Player {
     // Gives you info on what you are hovering over
     pub inspect: bool,
     pub aiming: bool,
+    // Whether or not the selector should move faster
+    pub fast: bool,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -50,6 +52,7 @@ impl Player {
             detect_mod: 0,
             inspect: true,
             aiming: false,
+            fast: false,
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -126,7 +129,7 @@ impl Player {
                 write!(
                     std::io::stdout(),
                     "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.\n",
-                    Style::new().green().intense(true).enact(),
+                    Style::new().green().intense(true),
                     killer
                 )
                 .unwrap();
@@ -145,7 +148,7 @@ impl Player {
                 write!(
                     std::io::stdout(),
                     "\nPress {}Enter\x1b[0m to exit.",
-                    Style::new().cyan().enact()
+                    Style::new().cyan()
                 )
                 .unwrap();
                 std::io::stdout().flush().unwrap();
@@ -234,7 +237,7 @@ impl Player {
             return;
         }
         crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
-        write!(lock, "{}{}\x1b[0m", STYLE.enact(), SYMBOL).unwrap();
+        write!(lock, "{}{}\x1b[0m", STYLE, SYMBOL).unwrap();
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
         crossterm::queue!(
@@ -332,6 +335,7 @@ impl FromBinary for Player {
             detect_mod: isize::from_binary(binary)?,
             inspect: bool::from_binary(binary)?,
             aiming: bool::from_binary(binary)?,
+            fast: bool::from_binary(binary)?,
         })
     }
 }
@@ -357,7 +361,8 @@ impl ToBinary for Player {
         self.upgrades.to_binary(binary)?;
         self.detect_mod.to_binary(binary)?;
         self.inspect.to_binary(binary)?;
-        self.aiming.to_binary(binary)
+        self.aiming.to_binary(binary)?;
+        self.fast.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

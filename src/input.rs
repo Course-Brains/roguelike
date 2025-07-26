@@ -13,6 +13,7 @@ pub enum Input {
     Convert,               // Convert energy to money
     Inspect,               // Toggle inspect mode
     Aim,                   // Show a raytrace from the player
+    Fast,                  // Toggle fast selector movement
 }
 impl Input {
     pub fn get() -> Input {
@@ -56,6 +57,7 @@ impl Input {
                 b'c' => return Input::Convert,
                 b'i' => return Input::Inspect,
                 b'z' => return Input::Aim,
+                b'f' => return Input::Fast,
                 _ => {}
             }
         }

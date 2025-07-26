@@ -20,9 +20,9 @@ impl Upgrade {
         write!(
             out,
             "Upgrade: {}{}\x1b[0m, cost {}{}\x1b[0m",
-            crate::Style::new().green().enact(),
+            crate::Style::new().green(),
             self.0.get_desc(),
-            crate::Style::new().red().enact(),
+            crate::Style::new().red(),
             self.0.cost()
         )
         .unwrap()

@@ -32,9 +32,9 @@ impl Item {
         write!(
             lock,
             "item: {}{}\x1b[0m. price: {}{}\x1b[0m",
-            crate::Style::new().green().intense(true).enact(),
+            crate::Style::new().green().intense(true),
             self.item_type.get_desc(),
-            crate::Style::new().red().enact(),
+            crate::Style::new().red(),
             self.item_type.price()
         )
         .unwrap();

@@ -213,7 +213,7 @@ impl Board {
                     )
                     .unwrap();
                     if let Some(style) = style {
-                        lock.write_fmt(format_args!("{}{}\x1b[0m", style.enact(), ch))
+                        lock.write_fmt(format_args!("{}{}\x1b[0m", style, ch))
                             .unwrap()
                     } else {
                         lock.write_fmt(format_args!("{}", ch)).unwrap();
@@ -262,7 +262,7 @@ impl Board {
             }
             crossterm::queue!(lock, (pos - bounds.start).to_move()).unwrap();
             match enemy.try_read().unwrap().render() {
-                (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style.enact()).unwrap(),
+                (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style).unwrap(),
                 (ch, None) => write!(lock, "{ch}").unwrap(),
             }
         }
@@ -278,7 +278,7 @@ impl Board {
             if self.is_visible(special.pos, bounds.clone()) {
                 crossterm::queue!(lock, (special.pos - bounds.start).to_move()).unwrap();
                 match special.style {
-                    Some(style) => write!(lock, "{}{}\x1b[0m", style.enact(), special.ch).unwrap(),
+                    Some(style) => write!(lock, "{}{}\x1b[0m", style, special.ch).unwrap(),
                     None => write!(lock, "{}", special.ch).unwrap(),
                 }
             }
@@ -288,7 +288,7 @@ impl Board {
         for spell in self.spells.iter() {
             if self.visible[self.to_index(spell.pos)] {
                 crossterm::queue!(lock, (spell.pos - bounds.start).to_move()).unwrap();
-                write!(lock, "{}∆\x1b[0m", Style::new().purple().enact()).unwrap();
+                write!(lock, "{}∆\x1b[0m", Style::new().purple()).unwrap();
             }
         }
     }

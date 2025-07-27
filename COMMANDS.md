@@ -1,5 +1,3 @@
-GENERAL
-
 RELATIVE POSITIONS:
 The relative position format is used when specifying positions. The
 format applies to each number individually instead of the position as
@@ -157,3 +155,12 @@ cast \[spell type\] \[spell\]
             biden\_blast
         contact
             drain\_health
+
+create\_circle \[spell type\] \[spell\] \[pos x\] \[pos y\] \[target x\] \[targety\]
+    Creates a spell circle at the given (relative) position. Uses the
+    same spell selection rules as cast. The target position is not
+    always needed by spells, so it can be ignored for those spells.
+
+get\_data \[x\] \[y\]
+    Gets all data at the given position(except backtrace data >:}), it
+    does use relative positioning

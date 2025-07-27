@@ -439,6 +439,7 @@ impl State {
             self.board
                 .move_and_think(&mut self.player, enemy.clone(), bounds.clone());
         }
+        self.board.update_spells(&mut self.player);
         self.board.place_exit();
     }
     fn render(&mut self) {

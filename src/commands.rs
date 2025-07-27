@@ -1,4 +1,7 @@
-use crate::{Entity, ItemType, Player, Spell, State, Vector, upgrades::UpgradeType};
+use crate::{
+    Entity, ItemType, Player, Spell, State, Style, Vector, spell::SpellCircle,
+    upgrades::UpgradeType,
+};
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -26,6 +29,8 @@ enum Command {
     SetDetectMod(isize),
     SetPerception(usize),
     Cast(Spell),
+    CreateCircle(Spell, SmartVector, SmartVector),
+    GetData(SmartVector),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -40,13 +45,17 @@ impl Command {
                 Some(arg) => Some(parse(Some(arg))?),
                 None => None,
             })),
-            "set_pos" => Ok(Command::SetPos(SmartVector::new(iter.next(), iter.next())?)),
+            "set_pos" => Ok(Command::SetPos(SmartVector::new(
+                iter.next(),
+                iter.next(),
+                true,
+            )?)),
             "redraw" => Ok(Command::Redraw),
             "list_enemies" => Ok(Command::ListEnemies),
             "kill" => Ok(Command::Kill(parse(iter.next())?)),
             "spawn" => Ok(Command::Spawn(
                 parse(iter.next())?,
-                SmartVector::new(iter.next(), iter.next())?,
+                SmartVector::new(iter.next(), iter.next(), true)?,
             )),
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
@@ -76,6 +85,16 @@ impl Command {
                     .collect::<String>()
                     .parse()?,
             )),
+            "create_circle" => Ok(Command::CreateCircle(
+                (arg(iter.next())?.to_string() + " " + arg(iter.next())?).parse()?,
+                SmartVector::new(iter.next(), iter.next(), false)?,
+                SmartVector::new(iter.next(), iter.next(), true)?,
+            )),
+            "get_data" => Ok(Command::GetData(SmartVector::new(
+                iter.next(),
+                iter.next(),
+                true,
+            )?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -181,7 +200,13 @@ impl Command {
             Command::Cast(spell) => match spell {
                 Spell::Normal(spell) => {
                     let target = state.player.selector;
-                    spell.cast(None, &mut state.player, &mut state.board, Some(target));
+                    spell.cast(
+                        None,
+                        &mut state.player,
+                        &mut state.board,
+                        None,
+                        Some(target),
+                    );
                 }
                 Spell::Contact(spell) => {
                     if let Some(enemy) = state.board.get_enemy(state.player.selector, None) {
@@ -189,6 +214,41 @@ impl Command {
                     }
                 }
             },
+            Command::CreateCircle(spell, pos, aim) => state.board.spells.push(SpellCircle {
+                spell,
+                pos: pos.to_absolute(&state.player),
+                caster: None,
+                aim: Some(aim.to_absolute(&state.player)),
+            }),
+            Command::GetData(pos) => {
+                let pos = pos.to_absolute(&state.player);
+                if let Some(piece) = &state.board[pos] {
+                    out.send(format!("It is a {}", piece)).unwrap();
+                }
+                if state.player.pos == pos {
+                    out.send(format!("It contains the player")).unwrap();
+                }
+                for (index, enemy) in state.board.enemies.iter().enumerate() {
+                    if enemy.try_read().unwrap().pos == pos {
+                        out.send(format!(
+                            "It contains enemy {}, which is a {}",
+                            index,
+                            enemy.try_read().unwrap().variant
+                        ))
+                        .unwrap();
+                    }
+                }
+                for special in state.board.specials.iter() {
+                    if special.pos == pos {
+                        out.send(format!(
+                            "It has a special with visuals: {}{}\x1b0m",
+                            special.style.unwrap_or(Style::new()),
+                            special.ch
+                        ))
+                        .unwrap();
+                    }
+                }
+            }
         }
     }
 }
@@ -293,7 +353,7 @@ struct SmartVector {
     y: Pos,
 }
 impl SmartVector {
-    fn new(x: Option<&str>, y: Option<&str>) -> Result<SmartVector, String> {
+    fn new(x: Option<&str>, y: Option<&str>, allow_none: bool) -> Result<SmartVector, String> {
         match x {
             Some(x) => {
                 if y.is_none() {
@@ -304,10 +364,13 @@ impl SmartVector {
                     y: y.unwrap().parse()?,
                 })
             }
-            None => Ok(SmartVector {
-                x: Pos::RelativeSelector(0),
-                y: Pos::RelativeSelector(0),
-            }),
+            None => match allow_none {
+                true => Ok(SmartVector {
+                    x: Pos::RelativeSelector(0),
+                    y: Pos::RelativeSelector(0),
+                }),
+                false => Err(format!("Missing arguments")),
+            },
         }
     }
     fn to_absolute(self, player: &Player) -> Vector {
@@ -315,5 +378,11 @@ impl SmartVector {
             x: self.x.to_absolute(player.pos.x, player.selector.x),
             y: self.y.to_absolute(player.pos.y, player.selector.y),
         }
+    }
+}
+fn arg(src: Option<&str>) -> Result<&str, String> {
+    match src {
+        Some(arg) => Ok(arg),
+        None => Err(format!("Missing argument")),
     }
 }

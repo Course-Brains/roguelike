@@ -267,7 +267,7 @@ impl Board {
             }
         }
     }
-    fn is_visible(&self, pos: Vector, bounds: Range<Vector>) -> bool {
+    pub fn is_visible(&self, pos: Vector, bounds: Range<Vector>) -> bool {
         if !bounds.contains(&pos) {
             return false;
         }
@@ -1132,9 +1132,9 @@ impl Adj {
     }
 }
 pub struct Special {
-    pos: Vector,
-    ch: char,
-    style: Option<Style>,
+    pub pos: Vector,
+    pub ch: char,
+    pub style: Option<Style>,
 }
 impl Special {
     pub fn new(pos: Vector, ch: char, style: Option<Style>) -> Special {

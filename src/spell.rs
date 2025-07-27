@@ -13,7 +13,7 @@ impl SpellCircle {
     pub fn update(&self, board: &mut Board, player: &mut Player) -> bool {
         match &self.spell {
             Spell::Normal(spell) => {
-                spell.cast(self.caster.clone(), player, board, self.aim);
+                spell.cast(self.caster.clone(), player, board, Some(self.pos), self.aim);
                 true
             }
             Spell::Contact(spell) => {
@@ -129,11 +129,13 @@ pub enum NormalSpell {
 }
 impl NormalSpell {
     // aim is position not direction
+    // origin of None means to get it from the caster(including the player)
     pub fn cast(
         &self,
         caster: Option<Arc<RwLock<Enemy>>>,
         player: &mut Player,
         board: &mut Board,
+        origin: Option<Vector>,
         aim: Option<Vector>,
     ) -> bool {
         match self {
@@ -154,35 +156,33 @@ impl NormalSpell {
             }
             Self::BidenBlast => {
                 let aim = aim.unwrap();
-                let path = ray_cast(
-                    get_pos(&caster, player),
-                    aim,
-                    board,
-                    None,
-                    caster.is_none(),
-                    player.pos,
-                )
-                .0;
+                let origin = origin.unwrap_or(get_pos(&caster, player));
+                let path = ray_cast(origin, aim, board, None, caster.is_none(), player.pos).0;
                 let last_pos = *path.last().unwrap();
                 let reset_to = board.specials.len();
+                let render_bounds = board.get_render_bounds(player);
                 // drawing projectile
                 for pos in path.iter() {
                     board.specials.push(fireball(*pos));
-                    board.smart_render(player);
-                    crate::proj_delay();
+                    if board.is_visible(*pos, render_bounds.clone()) {
+                        board.smart_render(player);
+                        crate::proj_delay();
+                    }
                     board.specials.pop();
                 }
                 // drawing explosion
-                board.specials.push(explosion(last_pos));
-                board.smart_render(player);
-                std::thread::sleep(crate::PROJ_DELAY * 4);
-                for pos in last_pos.list_near(2).iter() {
-                    board.specials.push(explosion(*pos));
+                if board.is_visible(last_pos, render_bounds) {
+                    board.specials.push(explosion(last_pos));
+                    board.smart_render(player);
+                    std::thread::sleep(crate::PROJ_DELAY * 4);
+                    for pos in last_pos.list_near(2).iter() {
+                        board.specials.push(explosion(*pos));
+                    }
+                    board.smart_render(player);
+                    std::thread::sleep(crate::PROJ_DELAY * 4);
+                    board.specials.truncate(reset_to);
+                    board.smart_render(player);
                 }
-                board.smart_render(player);
-                std::thread::sleep(crate::PROJ_DELAY * 4);
-                board.specials.truncate(reset_to);
-                board.smart_render(player);
                 // dealing damage
                 let near = board.get_near(None, last_pos, 3);
                 for enemy in near.iter() {

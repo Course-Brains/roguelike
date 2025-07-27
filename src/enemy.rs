@@ -169,7 +169,7 @@ impl Enemy {
                             assert!(arc.try_write().is_err(), "RUH ROH RAGGY");
                             this.take();
                             assert!(arc.try_write().is_ok(), "AR NAWR");
-                            NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
+                            NormalSpell::Swap.cast(Some(arc.clone()), player, board, None, None);
                             this = Some(arc.try_write().unwrap());
                             this.as_mut().unwrap().windup = 0;
                         }
@@ -311,6 +311,7 @@ impl Enemy {
                                     Some(arc.clone()),
                                     player,
                                     board,
+                                    None,
                                     Some(aim),
                                 );
                                 this = Some(arc.try_write().unwrap());
@@ -349,7 +350,13 @@ impl Enemy {
                             }
                             MageBossSpell::Swap => {
                                 this.take();
-                                NormalSpell::Swap.cast(Some(arc.clone()), player, board, None);
+                                NormalSpell::Swap.cast(
+                                    Some(arc.clone()),
+                                    player,
+                                    board,
+                                    None,
+                                    None,
+                                );
                                 this = Some(arc.try_write().unwrap());
                             }
                         }

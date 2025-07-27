@@ -83,7 +83,7 @@ impl ContactSpell {
                         // player which can't happen
                         let binding = caster.unwrap_enemy();
                         let mut caster = binding.try_write().unwrap();
-                        let damage = crate::enemy::luck_roll8(player) as usize / 2;
+                        let damage = (crate::enemy::luck_roll8(player) as usize / 2) + 1;
                         let _ = player.attacked(damage * 5, caster.variant.kill_name());
                         caster.health += damage;
                     }
@@ -93,7 +93,7 @@ impl ContactSpell {
                                 return;
                             }
                         }
-                        let damage = (crate::random() as usize * 3) + 1;
+                        let damage = (crate::random() as usize & 3) + 1;
                         target.try_write().unwrap().attacked(damage);
                         match caster {
                             Entity::Player(player) => player.heal(damage * 5),

@@ -5,8 +5,27 @@ pub struct SpellCircle {
     pub pos: Vector,
     // None is player
     pub caster: Option<Arc<RwLock<Enemy>>>,
+    // Needed for normal spells, not contact
+    pub aim: Option<Vector>,
 }
-impl SpellCircle {}
+impl SpellCircle {
+    // returns true if the circle should be kept (false = removal)
+    pub fn update(&self, board: &mut Board, player: &mut Player) -> bool {
+        match &self.spell {
+            Spell::Normal(spell) => {
+                spell.cast(self.caster.clone(), player, board, self.aim);
+                true
+            }
+            Spell::Contact(spell) => {
+                if let Some(enemy) = board.get_enemy(self.pos, None) {
+                    spell.cast(enemy.into(), Entity::new(self.caster.clone(), player));
+                    return false;
+                }
+                true
+            }
+        }
+    }
+}
 pub enum Spell {
     Contact(ContactSpell),
     Normal(NormalSpell),

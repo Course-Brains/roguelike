@@ -772,6 +772,17 @@ impl Board {
             }
         }
     }
+    pub fn update_spells(&mut self, player: &mut Player) {
+        let reset_to = self.specials.len();
+        for circle in self.spells.iter() {
+            self.specials
+                .push(Special::new(circle.pos, '∆', Some(*Style::new().purple())));
+        }
+        let mut circles = std::mem::replace(&mut self.spells, Vec::new());
+        circles.retain(|circle| circle.update(self, player));
+        self.spells = circles;
+        self.specials.truncate(reset_to);
+    }
 }
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;

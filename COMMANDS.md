@@ -1,3 +1,33 @@
+GENERAL
+
+RELATIVE POSITIONS:
+The relative position format is used when specifying positions. The
+format applies to each number individually instead of the position as
+a whole. The format is as follows:
+    #: absolute position
+    p#: relative to the player
+    s#: relative to the selector
+Because it does this logic per number, the following are valid
+positions in this format:
+    5 10
+    p5 p10
+    p-5 p-10
+    s5 s10
+    s-5 s-10
+    5 p10
+    5 p-10
+    p5 10
+    ... you get the idea, the relative ones can be negative, the
+    absolutes cannot.
+Finally, if no position is specified(when able, this is only possible
+if the position is the last argument to the command), it will default
+to the position of the selector. However, this is done for both axis,
+meaning that you cannot just skip one and have it be relative to the
+selector for that axis alone. If you need to, simply use "s0" for that
+axis.
+
+==============================================================================
+
 get\_player\_data
     Gets the full player data as printed by pretty debug
 
@@ -10,7 +40,8 @@ set\_energy \[energy\]
     is not given
 
 set\_pos \[x\] \[y\]
-    Sets the player's position to (\[x\], \[y\])
+    Sets the player's position to (\[x\], \[y\]) this uses relative
+    positions
 
 redraw
     Redraws the screen manually
@@ -23,8 +54,8 @@ kill \[index\]
     index, see list\_enemies
 
 spawn \[variant\] \[x\] \[y\]
-    Spawns an enemy at the given \[x\] and \[y\] coordinates, or the
-    selector if not given.
+    Spawns an enemy at the given \[x\] and \[y\] coordinates, using
+    relative positions.
     Valid variants are:
         basic
         basic\_boss

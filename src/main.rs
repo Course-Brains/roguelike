@@ -37,7 +37,8 @@ fn proj_delay() {
     std::thread::sleep(PROJ_DELAY);
 }
 // The format version of the save data, different versions are incompatible and require a restart
-// of the save
+// of the save, but the version will only change on releases, so if the user is not going by
+// release, then they could end up with two incompatible save files.
 const SAVE_VERSION: u16 = 0;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
@@ -54,7 +55,7 @@ fn log(string: String) {
     write!(LOG.lock().unwrap().as_ref().unwrap(), "{string}\n").unwrap();
 }
 
-// Global flags
+// Global trigger flags
 use std::sync::atomic::{AtomicBool, Ordering};
 // Trigger the enemies to be rechecked for reachability
 static RE_FLOOD: AtomicBool = AtomicBool::new(false);
@@ -666,6 +667,12 @@ enum Entity<'a> {
     Enemy(Arc<RwLock<Enemy>>),
 }
 impl<'a> Entity<'a> {
+    fn new(src: Option<Arc<RwLock<Enemy>>>, player: &'a mut Player) -> Self {
+        match src {
+            Some(enemy) => enemy.into(),
+            None => player.into(),
+        }
+    }
     /*fn unwrap_player(self) -> &'a mut Player {
         match self {
             Self::Player(player) => player,

@@ -159,6 +159,7 @@ impl Enemy {
                                     spell: Spell::Contact(ContactSpell::DrainHealth),
                                     pos: cast_pos,
                                     caster: Some(arc.clone()),
+                                    aim: None,
                                 });
                             }
                             this.as_mut().unwrap().windup = 0;

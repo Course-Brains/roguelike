@@ -1,4 +1,4 @@
-use crate::{Entity, ItemType, Spell, State, Vector, upgrades::UpgradeType};
+use crate::{Entity, ItemType, Player, Spell, State, Vector, upgrades::UpgradeType};
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -6,11 +6,11 @@ enum Command {
     GetPlayerData,
     SetHealth(Option<usize>),
     SetEnergy(Option<usize>),
-    SetPos(Vector),
+    SetPos(SmartVector),
     Redraw,
     ListEnemies,
     Kill(usize),
-    Spawn(crate::enemy::Variant, Option<Vector>),
+    Spawn(crate::enemy::Variant, SmartVector),
     GetEnemyData(usize),
     ForceFlood,
     WakeAll,
@@ -40,16 +40,13 @@ impl Command {
                 Some(arg) => Some(parse(Some(arg))?),
                 None => None,
             })),
-            "set_pos" => Ok(Command::SetPos(parse_vector(iter.next(), iter.next())?)),
+            "set_pos" => Ok(Command::SetPos(SmartVector::new(iter.next(), iter.next())?)),
             "redraw" => Ok(Command::Redraw),
             "list_enemies" => Ok(Command::ListEnemies),
             "kill" => Ok(Command::Kill(parse(iter.next())?)),
             "spawn" => Ok(Command::Spawn(
                 parse(iter.next())?,
-                match iter.next() {
-                    Some(arg) => Some(Vector::new(parse(Some(arg))?, parse(iter.next())?)),
-                    None => None,
-                },
+                SmartVector::new(iter.next(), iter.next())?,
             )),
             "get_enemy_data" => Ok(Command::GetEnemyData(parse(iter.next())?)),
             "force_flood" => Ok(Command::ForceFlood),
@@ -92,7 +89,7 @@ impl Command {
                 state.player.energy = energy.unwrap_or(state.player.max_energy);
             }
             Command::SetPos(new_pos) => {
-                state.player.pos = new_pos;
+                state.player.pos = new_pos.to_absolute(&state.player);
             }
             Command::Redraw => {
                 state.render();
@@ -116,8 +113,9 @@ impl Command {
                     .board
                     .enemies
                     .push(std::sync::Arc::new(std::sync::RwLock::new(
-                        crate::enemy::Enemy::new(pos.unwrap_or(state.player.selector), variant),
+                        crate::enemy::Enemy::new(pos.to_absolute(&state.player), variant),
                     )));
+                crate::re_flood();
             }
             Command::GetEnemyData(index) => {
                 out.send(format!("{:#?}", state.board.enemies[index]))
@@ -249,4 +247,73 @@ where
 }
 fn parse_vector(x: Option<&str>, y: Option<&str>) -> Result<Vector, String> {
     Ok(Vector::new(parse(x)?, parse(y)?))
+}
+#[derive(Clone, Copy)]
+enum Pos {
+    Absolute(usize),
+    RelativePlayer(isize),
+    RelativeSelector(isize),
+}
+impl Pos {
+    fn to_absolute(self, player: usize, selector: usize) -> usize {
+        match self {
+            Pos::Absolute(pos) => pos,
+            Pos::RelativePlayer(offset) => (player as isize + offset) as usize,
+            Pos::RelativeSelector(offset) => (selector as isize + offset) as usize,
+        }
+    }
+}
+impl std::str::FromStr for Pos {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // relative to player
+        if s.starts_with('p') {
+            Ok(Pos::RelativePlayer(err_to_string(
+                s.trim_start_matches('p').parse(),
+            )?))
+        }
+        // relative to selector
+        else if s.starts_with('s') {
+            Ok(Pos::RelativeSelector(err_to_string(
+                s.trim_start_matches('s').parse(),
+            )?))
+        }
+        // absolute
+        else {
+            Ok(Pos::Absolute(err_to_string(s.parse())?))
+        }
+    }
+}
+fn err_to_string<T, E: ToString>(item: Result<T, E>) -> Result<T, String> {
+    item.map_err(|error| error.to_string())
+}
+#[derive(Clone, Copy)]
+struct SmartVector {
+    x: Pos,
+    y: Pos,
+}
+impl SmartVector {
+    fn new(x: Option<&str>, y: Option<&str>) -> Result<SmartVector, String> {
+        match x {
+            Some(x) => {
+                if y.is_none() {
+                    return Err(format!("Missing arguments"));
+                }
+                Ok(SmartVector {
+                    x: x.parse()?,
+                    y: y.unwrap().parse()?,
+                })
+            }
+            None => Ok(SmartVector {
+                x: Pos::RelativeSelector(0),
+                y: Pos::RelativeSelector(0),
+            }),
+        }
+    }
+    fn to_absolute(self, player: &Player) -> Vector {
+        Vector {
+            x: self.x.to_absolute(player.pos.x, player.selector.x),
+            y: self.y.to_absolute(player.pos.y, player.selector.y),
+        }
+    }
 }

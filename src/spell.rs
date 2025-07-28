@@ -159,28 +159,29 @@ impl NormalSpell {
                 let origin = origin.unwrap_or(get_pos(&caster, player));
                 let path = ray_cast(origin, aim, board, None, caster.is_none(), player.pos).0;
                 let last_pos = *path.last().unwrap();
-                let reset_to = board.specials.len();
                 let render_bounds = board.get_render_bounds(player);
+
                 // drawing projectile
                 for pos in path.iter() {
-                    board.specials.push(fireball(*pos));
+                    let special = board.add_special(fireball(*pos));
                     if board.is_visible(*pos, render_bounds.clone()) {
                         board.smart_render(player);
                         crate::proj_delay();
                     }
-                    board.specials.pop();
+                    std::mem::drop(special);
                 }
                 // drawing explosion
                 if board.is_visible(last_pos, render_bounds) {
-                    board.specials.push(explosion(last_pos));
+                    let mut specials = Vec::new();
+                    specials.push(board.add_special(explosion(last_pos)));
                     board.smart_render(player);
                     std::thread::sleep(crate::PROJ_DELAY * 4);
                     for pos in last_pos.list_near(2).iter() {
-                        board.specials.push(explosion(*pos));
+                        specials.push(board.add_special(explosion(*pos)));
                     }
                     board.smart_render(player);
                     std::thread::sleep(crate::PROJ_DELAY * 4);
-                    board.specials.truncate(reset_to);
+                    std::mem::drop(specials);
                     board.smart_render(player);
                 }
                 // dealing damage

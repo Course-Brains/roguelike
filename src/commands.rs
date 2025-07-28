@@ -239,13 +239,15 @@ impl Command {
                     }
                 }
                 for special in state.board.specials.iter() {
-                    if special.pos == pos {
-                        out.send(format!(
-                            "It has a special with visuals: {}{}\x1b0m",
-                            special.style.unwrap_or(Style::new()),
-                            special.ch
-                        ))
-                        .unwrap();
+                    if let Some(special) = special.upgrade() {
+                        if special.pos == pos {
+                            out.send(format!(
+                                "It has a special with visuals: {}{}\x1b0m",
+                                special.style.unwrap_or(Style::new()),
+                                special.ch
+                            ))
+                            .unwrap();
+                        }
                     }
                 }
             }

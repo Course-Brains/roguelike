@@ -20,7 +20,7 @@ pub struct Board {
     pub enemies: Vec<Arc<RwLock<Enemy>>>,
     pub spells: Vec<SpellCircle>,
     // Stuff that doesn't get calculated but does get drawn
-    pub specials: Vec<Special>,
+    pub specials: Vec<Weak<Special>>,
     pub boss_pos: Vector,
     pub boss: Option<Weak<RwLock<Enemy>>>,
     visible: Vec<bool>,
@@ -273,8 +273,10 @@ impl Board {
         }
         self.visible[self.to_index(pos)]
     }
-    fn draw_specials(&self, lock: &mut impl Write, bounds: Range<Vector>) {
+    fn draw_specials(&mut self, lock: &mut impl Write, bounds: Range<Vector>) {
+        self.specials.retain(|special| special.upgrade().is_some());
         for special in self.specials.iter() {
+            let special = special.upgrade().unwrap();
             if self.is_visible(special.pos, bounds.clone()) {
                 crossterm::queue!(lock, (special.pos - bounds.start).to_move()).unwrap();
                 match special.style {
@@ -422,6 +424,11 @@ impl Board {
             elapsed.as_millis(),
             elapsed.as_nanos()
         );
+    }
+    pub fn add_special(&mut self, special: Special) -> Arc<Special> {
+        let arc = Arc::new(special);
+        self.specials.push(Arc::downgrade(&arc));
+        arc
     }
 }
 // Enemy logic
@@ -773,15 +780,16 @@ impl Board {
         }
     }
     pub fn update_spells(&mut self, player: &mut Player) {
-        let reset_to = self.specials.len();
+        let mut specials = Vec::new();
         for circle in self.spells.iter() {
-            self.specials
-                .push(Special::new(circle.pos, '∆', Some(*Style::new().purple())));
+            let arc = Arc::new(Special::new(circle.pos, '∆', Some(*Style::new().purple())));
+            self.specials.push(Arc::downgrade(&arc));
+            specials.push(arc);
         }
         let mut circles = std::mem::replace(&mut self.spells, Vec::new());
         circles.retain(|circle| circle.update(self, player));
         self.spells = circles;
-        self.specials.truncate(reset_to);
+        std::mem::drop(specials);
     }
 }
 impl std::ops::Index<Vector> for Board {
@@ -811,7 +819,8 @@ impl FromBinary for Board {
             enemies: Vec::new(),
             // spells just can't be saved
             spells: Vec::new(),
-            specials: Vec::from_binary(binary)?,
+            // Specials do not get maintained
+            specials: Vec::new(),
             boss_pos: Vector::from_binary(binary)?,
             boss: None,
             visible: Vec::from_binary(binary)?,
@@ -831,7 +840,7 @@ impl ToBinary for Board {
             .to_binary(binary)?;
         self.backtraces.to_binary(binary)?;
         // skipping enemies
-        self.specials.to_binary(binary)?;
+        // specials do not get saved
         self.boss_pos.to_binary(binary)?;
         // skipping boss because skipping enemies
         self.visible.to_binary(binary)

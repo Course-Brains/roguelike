@@ -208,19 +208,19 @@ impl Player {
         }
     }
     pub fn aim(&mut self, board: &mut Board) {
-        let reset_to = board.specials.len();
+        let mut specials = Vec::new();
         for pos in crate::ray_cast(self.pos, self.selector, board, None, true, self.pos)
             .0
             .iter()
         {
-            board.specials.push(crate::board::Special::new(
+            specials.push(board.add_special(crate::board::Special::new(
                 *pos,
                 ' ',
                 Some(*Style::new().background_green()),
-            ));
+            )));
         }
         board.smart_render(self);
-        board.specials.truncate(reset_to);
+        std::mem::drop(specials);
     }
 }
 // Rendering

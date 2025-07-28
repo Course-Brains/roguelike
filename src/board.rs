@@ -24,6 +24,7 @@ pub struct Board {
     pub boss_pos: Vector,
     pub boss: Option<Weak<RwLock<Enemy>>>,
     visible: Vec<bool>,
+    seen: Vec<bool>,
 }
 // General use
 impl Board {
@@ -32,6 +33,7 @@ impl Board {
         inner.resize_with(x * y, || None);
         let backtraces = vec![BackTrace::new(); x * y];
         let visible = vec![false; x * y];
+        let seen = vec![false; x * y];
         Board {
             x,
             y,
@@ -45,6 +47,7 @@ impl Board {
             boss_pos: Vector::new(0, 0),
             boss: None,
             visible,
+            seen,
         }
     }
     pub fn to_index(&self, pos: Vector) -> usize {
@@ -194,16 +197,22 @@ impl Board {
             write!(lock, "\x1b[2K").unwrap();
             for x in x_bound.clone() {
                 if let Some(piece) = &self[Vector::new(x, y)] {
+                    let index = self.to_index(Vector::new(x, y));
+                    let mut memory = false;
                     if player.upgrades.map && piece.on_map() {
                         if !bounds.contains(&Vector::new(x, y)) {
                             continue;
                         }
                     } else {
-                        if !self.visible[self.to_index(Vector::new(x, y))] {
-                            continue;
+                        if !self.visible[index] {
+                            if self.seen[index] {
+                                memory = true;
+                            } else {
+                                continue;
+                            }
                         }
                     }
-                    let (ch, style) = piece.render(Vector::new(x, y), self, player);
+                    let (ch, mut style) = piece.render(Vector::new(x, y), self, player);
                     crossterm::queue!(
                         lock,
                         crossterm::cursor::MoveTo(
@@ -212,6 +221,12 @@ impl Board {
                         )
                     )
                     .unwrap();
+                    if memory {
+                        match style {
+                            Some(prev) => style = Some(*prev.clone().dim(true)),
+                            None => style = Some(*Style::new().dim(true)),
+                        }
+                    }
                     if let Some(style) = style {
                         lock.write_fmt(format_args!("{}{}\x1b[0m", style, ch))
                             .unwrap()
@@ -409,6 +424,7 @@ impl Board {
                         (pos.y as isize + y) as usize,
                     ));
                     self.visible[index] = true;
+                    self.seen[index] = true;
                 }
             }
             for pos in self.get_adjacent(pos, None, false).to_vec(pos).iter() {
@@ -824,6 +840,7 @@ impl FromBinary for Board {
             boss_pos: Vector::from_binary(binary)?,
             boss: None,
             visible: Vec::from_binary(binary)?,
+            seen: Vec::from_binary(binary)?,
         })
     }
 }
@@ -843,7 +860,8 @@ impl ToBinary for Board {
         // specials do not get saved
         self.boss_pos.to_binary(binary)?;
         // skipping boss because skipping enemies
-        self.visible.to_binary(binary)
+        self.visible.to_binary(binary)?;
+        self.seen.to_binary(binary)
     }
 }
 #[derive(Copy, Clone)]

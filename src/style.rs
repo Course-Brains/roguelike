@@ -1,5 +1,5 @@
 use crate::{FromBinary, ToBinary};
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Style {
     color: Color,
     intense: bool,
@@ -87,20 +87,42 @@ impl std::fmt::Display for Style {
                 color += 60;
             }
         }
+        let mut first = true;
+        write!(f, "\x1b[")?;
         if self.bold {
-            write!(f, "\x1b[1m")?;
+            if !first {
+                write!(f, ";")?;
+            }
+            write!(f, "1")?;
+            first = false;
         }
         if self.dim {
-            write!(f, "\x1b[2m")?;
+            if !first {
+                write!(f, ";")?;
+            }
+            write!(f, "2")?;
+            first = false;
         }
         if self.italic {
-            write!(f, "\x1b[3m")?;
+            if !first {
+                write!(f, ";")?;
+            }
+            write!(f, "3")?;
+            first = false;
         }
         if self.underline {
-            write!(f, "\x1b[4m")?;
+            if !first {
+                write!(f, ";")?;
+            }
+            write!(f, "4")?;
+            first = false;
         }
         if self.strike {
-            write!(f, "\x1b[9m")?;
+            if !first {
+                write!(f, ";")?;
+            }
+            write!(f, "9")?;
+            first = false;
         }
         match self.background.to_num() {
             Some(mut background) => {
@@ -108,12 +130,25 @@ impl std::fmt::Display for Style {
                     background += 60
                 }
                 background += 10;
-                write!(f, "\x1b[0;{};{}m", color, background)
+                if !first {
+                    write!(f, ";")?;
+                }
+                if color != 0 {
+                    write!(f, "{};{}", color, background)?;
+                } else {
+                    write!(f, "{}", background)?;
+                }
             }
             None => {
-                write!(f, "\x1b[0;{}m", color)
+                if color != 0 {
+                    if !first {
+                        write!(f, ";")?;
+                    }
+                    write!(f, "{}", color)?;
+                }
             }
         }
+        write!(f, "m")
     }
 }
 impl FromBinary for Style {
@@ -147,7 +182,7 @@ impl ToBinary for Style {
         self.strike.to_binary(binary)
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Color {
     Black,
     Red,

@@ -21,13 +21,20 @@ use upgrades::Upgrades;
 mod spell;
 use spell::Spell;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use albatrice::{FromBinary, ToBinary};
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
+static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
+fn stats<'a>() -> std::sync::MutexGuard<'a, Stats> {
+    STATS.lock().unwrap()
+}
+// Whether or not the console was used
+static CHEATS: AtomicBool = AtomicBool::new(false);
 
 // Delay between moves/applicable thinks
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
@@ -42,6 +49,8 @@ fn proj_delay() {
 const SAVE_VERSION: u16 = 0;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
+// The path to the file of stats for previous runs
+const STAT_PATH: &str = "stats";
 
 #[macro_export]
 macro_rules! log {
@@ -88,6 +97,7 @@ fn main() {
                 log!("TESTING MAP GEN");
                 testing = true
             }
+            "stats" => view_stats(),
             _ => {}
         }
     }
@@ -104,7 +114,8 @@ fn main() {
         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
     )
     .unwrap();*/
-    let mut state = match std::fs::exists(PATH).unwrap() {
+    let save_file = std::fs::exists(PATH).unwrap();
+    let mut state = match save_file {
         // There is a save file
         true => State::from_binary(&mut std::fs::File::open(PATH).unwrap()).unwrap(),
         // there is not a save file
@@ -130,6 +141,8 @@ fn main() {
     state.render();
     loop {
         if state.player.handle_death() {
+            stats().collect_death(&state);
+            save_stats();
             break;
         }
         if SAVE.load(Ordering::Relaxed) {
@@ -141,6 +154,7 @@ fn main() {
                 .unwrap();
             state.to_binary(&mut file).unwrap();
             file.sync_all().unwrap();
+            stats().num_saves += 1;
             break;
         }
         if LOAD_MAP.swap(false, Ordering::Relaxed) {
@@ -186,17 +200,14 @@ fn main() {
                     }
                     let mut checking = state.player.pos + direction;
                     if !state.board.dashable(checking) {
-                        bell(None);
                         continue;
                     }
                     checking += direction;
                     if !state.board.dashable(checking) {
-                        bell(None);
                         continue;
                     }
                     checking += direction;
                     if state.board.has_collision(checking) {
-                        bell(None);
                         continue;
                     }
                     state.attack_enemy(state.player.pos + direction, false, true);
@@ -211,8 +222,6 @@ fn main() {
                     if state.is_valid_move(direction) {
                         state.player.do_move(direction, &mut state.board);
                         state.increment()
-                    } else {
-                        bell(None)
                     }
                 }
             },
@@ -277,6 +286,7 @@ fn main() {
                                 &state.board.enemies.swap_remove(index).try_read().unwrap(),
                             )
                         }
+                        stats().damage_dealt += 1;
                         state.increment();
                         break;
                     }
@@ -326,7 +336,7 @@ fn main() {
                 }
             }
             Input::Convert => {
-                state.player.money += state.player.energy;
+                state.player.give_money(state.player.energy);
                 state.player.energy = 0;
                 state.increment();
             }
@@ -461,7 +471,9 @@ impl State {
         .unwrap();
         print!(
             "turn: {}\x1b[30Glayer: {}\x1b[60Gmoney: {}",
-            self.turn, self.level, self.player.money
+            self.turn,
+            self.level,
+            self.player.get_money()
         );
     }
     fn increment(&mut self) {
@@ -486,6 +498,7 @@ impl State {
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
         self.board.flood(self.player.pos);
+        stats().turn_count.push(self.turn);
         self.render();
     }
     fn load_shop(&mut self) {
@@ -497,6 +510,7 @@ impl State {
         .unwrap();
         self.player.pos = Vector::new(44, 14);
         self.player.selector = Vector::new(44, 14);
+        stats().shop_money.push(self.player.get_money());
         self.render();
     }
     fn reposition_cursor(&mut self) {
@@ -518,6 +532,7 @@ impl FromBinary for State {
                 format!("Invalid save format"),
             ));
         }
+        CHEATS.store(bool::from_binary(binary)?, Ordering::Relaxed);
         generator::DO_DELAY.store(true, Ordering::SeqCst);
         let settings = MapGenSettings::from_binary(binary)?;
         Ok(State {
@@ -534,6 +549,7 @@ impl FromBinary for State {
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         SAVE_VERSION.to_binary(binary)?;
+        CHEATS.load(Ordering::Relaxed).to_binary(binary)?;
         self.next_map_settings.to_binary(binary)?;
         self.player.to_binary(binary)?;
         self.board.to_binary(binary)?;
@@ -929,5 +945,238 @@ impl From<Arc<RwLock<Enemy>>> for Collision {
 impl From<Vector> for Collision {
     fn from(value: Vector) -> Self {
         Collision::Piece(value)
+    }
+}
+#[derive(Clone, Debug)]
+struct Stats {
+    // The amount of money when entering each shop
+    shop_money: Vec<usize>,
+    // The total amount of money gained in a run
+    total_money: usize,
+    // how far down you go
+    depth: usize,
+    // How often each item was bought
+    buy_list: HashMap<ItemType, usize>,
+    // What upgrades were held at death
+    upgrades: Upgrades,
+    // How many turns have passed when loading into a new level
+    turn_count: Vec<usize>,
+    // How much damage was taken in total
+    damage_taken: usize,
+    // How much damage was blocked in total
+    damage_blocked: usize,
+    // How much damage was avoided by invulnerability
+    damage_invulned: usize,
+    // How much damage was directly dealt by the player
+    damage_dealt: usize,
+    // How much health was healed
+    damage_healed: usize,
+    // What turn it was when the player died
+    death_turn: usize,
+    // How many of each spell was cast
+    spell_list: HashMap<Spell, usize>,
+    // How many saves were made
+    num_saves: usize,
+    // how many enemies were killed
+    kills: usize,
+}
+impl Stats {
+    fn new() -> Stats {
+        Stats {
+            shop_money: Vec::new(),
+            total_money: 0,
+            depth: 0,
+            buy_list: HashMap::new(),
+            upgrades: Upgrades::new(),
+            turn_count: Vec::new(),
+            damage_taken: 0,
+            damage_blocked: 0,
+            damage_invulned: 0,
+            damage_dealt: 0,
+            damage_healed: 0,
+            death_turn: 0,
+            spell_list: HashMap::new(),
+            num_saves: 0,
+            kills: 0,
+        }
+    }
+    fn collect_death(&mut self, state: &State) {
+        self.depth = state.level;
+        self.upgrades = state.player.upgrades;
+        self.death_turn = state.turn;
+    }
+    fn add_item(&mut self, item: ItemType) {
+        self.buy_list
+            .insert(item, self.buy_list.get(&item).unwrap_or(&0) + 1);
+    }
+    fn add_spell(&mut self, spell: Spell) {
+        self.spell_list
+            .insert(spell, self.spell_list.get(&spell).unwrap_or(&0) + 1);
+    }
+}
+impl FromBinary for Stats {
+    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Stats {
+            shop_money: Vec::from_binary(binary)?,
+            total_money: usize::from_binary(binary)?,
+            depth: usize::from_binary(binary)?,
+            buy_list: HashMap::from_binary(binary)?,
+            upgrades: Upgrades::from_binary(binary)?,
+            turn_count: Vec::from_binary(binary)?,
+            damage_taken: usize::from_binary(binary)?,
+            damage_blocked: usize::from_binary(binary)?,
+            damage_invulned: usize::from_binary(binary)?,
+            damage_dealt: usize::from_binary(binary)?,
+            damage_healed: usize::from_binary(binary)?,
+            death_turn: usize::from_binary(binary)?,
+            spell_list: HashMap::from_binary(binary)?,
+            num_saves: usize::from_binary(binary)?,
+            kills: usize::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Stats {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.shop_money.to_binary(binary)?;
+        self.total_money.to_binary(binary)?;
+        self.depth.to_binary(binary)?;
+        self.buy_list.to_binary(binary)?;
+        self.upgrades.to_binary(binary)?;
+        self.turn_count.to_binary(binary)?;
+        self.damage_taken.to_binary(binary)?;
+        self.damage_blocked.to_binary(binary)?;
+        self.damage_invulned.to_binary(binary)?;
+        self.damage_dealt.to_binary(binary)?;
+        self.damage_healed.to_binary(binary)?;
+        self.death_turn.to_binary(binary)?;
+        self.spell_list.to_binary(binary)?;
+        self.num_saves.to_binary(binary)?;
+        self.kills.to_binary(binary)
+    }
+}
+fn save_stats() {
+    let mut stats_saves: Vec<Stats> = Vec::new();
+    match std::fs::exists(STAT_PATH).unwrap() {
+        true => {
+            log!("Stats file exists, checking version");
+            let mut file = std::fs::File::open(STAT_PATH).unwrap();
+            if u16::from_binary(&mut file).unwrap() != SAVE_VERSION {
+                log!("!!! Save version mismatch!!!");
+                crossterm::queue!(
+                    std::io::stdout(),
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+                )
+                .unwrap();
+                println!(
+                    "{}The save format in the stats file is different than the current\
+                    save format, if you leave the stats file where it is, it will be\
+                    deleted, I recommend moving it.\n\x1b[0mPress enter to continue",
+                    Style::new().red().bold(true).underline(true).intense(true)
+                );
+                std::io::stdout().flush().unwrap();
+                std::io::stdin().read_line(&mut String::new()).unwrap();
+            }
+            stats_saves = Vec::from_binary(&mut file).unwrap();
+        }
+        false => {
+            log!("Creating new stats file")
+        }
+    }
+    stats_saves.push(stats().clone());
+    let mut file = std::fs::File::create(STAT_PATH).unwrap();
+    SAVE_VERSION.to_binary(&mut file).unwrap();
+    stats_saves.to_binary(&mut file).unwrap();
+    log!("Saving stats");
+}
+fn view_stats() {
+    log!("Entering stats viewer");
+    let mut input = String::new();
+    let mut file = std::fs::File::open(STAT_PATH).unwrap();
+    assert_eq!(
+        SAVE_VERSION,
+        u16::from_binary(&mut file).unwrap(),
+        "Invalid save format"
+    );
+    let stats = Vec::<Stats>::from_binary(&mut file).unwrap();
+    let mut index = 0;
+    macro_rules! list {
+        ($field: ident) => {
+            for stat in stats.iter() {
+                println!("{:?}", stat.$field);
+            }
+        };
+    }
+    loop {
+        println!("What would you like to do?");
+        input.truncate(0);
+        std::io::stdin().read_line(&mut input).unwrap();
+        let mut split = input.trim().split(' ');
+        match split.next().unwrap() {
+            "help" => println!("{}", include_str!("stat_help.txt")),
+            "next" => {
+                if let Ok(offset) = split.next().unwrap_or("1").parse::<usize>() {
+                    let new_index = index + offset;
+                    if new_index < stats.len() {
+                        index = new_index;
+                        println!("now at {index}");
+                    } else {
+                        println!("{new_index} is not a valid index");
+                    }
+                } else {
+                    println!("Expected number, found not number");
+                }
+            }
+            "prev" => {
+                if let Ok(offset) = split.next().unwrap_or("1").parse::<usize>() {
+                    if offset > index {
+                        println!("Attempted to go to negative index");
+                    } else {
+                        index -= offset;
+                        println!("now at {index}");
+                    }
+                }
+            }
+            "jump" => {
+                if let Some(s) = split.next() {
+                    if let Ok(new_index) = s.parse() {
+                        if stats.get(new_index).is_some() {
+                            index = new_index;
+                        } else {
+                            println!("{new_index} is not a valid index");
+                        }
+                    } else {
+                        println!("Failed to get index");
+                    }
+                } else {
+                    println!("Expected index to jump to")
+                }
+            }
+            "list" => match split.next() {
+                Some(field) => match field {
+                    "shop_money" => list!(shop_money),
+                    "total_money" => list!(total_money),
+                    "depth" => list!(depth),
+                    "buy_list" => list!(buy_list),
+                    "upgrades" => list!(upgrades),
+                    "turn_count" => list!(turn_count),
+                    "damage_taken" => list!(damage_taken),
+                    "damage_blocked" => list!(damage_blocked),
+                    "damage_invulned" => list!(damage_invulned),
+                    "damage_dealt" => list!(damage_dealt),
+                    "damage_healed" => list!(damage_healed),
+                    "death_turn" => list!(death_turn),
+                    "spell_list" => list!(spell_list),
+                    "num_saves" => list!(num_saves),
+                    "kills" => list!(kills),
+                    other => println!("{other} is not a valid field"),
+                },
+                None => println!("{index} out of {}:\n{:#?}", stats.len() - 1, stats[index]),
+            },
+            "quit" => break,
+            other => println!("\"{other}\" is not a valid command"),
+        }
     }
 }

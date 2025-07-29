@@ -17,11 +17,11 @@ impl Item {
         crate::log!("Item({self}) was stepped on");
         if let Entity::Player(player) = stepper {
             crate::log!("  Attempting pickup");
-            if player.money >= self.item_type.price() {
+            if player.have_money(self.item_type.price()) {
                 crate::log!("    Pickup is valid");
                 if player.add_item(self.item_type) {
-                    player.money -= self.item_type.price();
-                    crate::log!("      Picked up item, money is now {}", player.money);
+                    player.take_money(self.item_type.price());
+                    crate::log!("      Picked up item, money is now {}", player.get_money());
                     return true;
                 }
             }

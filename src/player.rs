@@ -19,7 +19,7 @@ pub struct Player {
     pub focus: Focus,
     killer: Option<&'static str>,
     pub items: Items,
-    pub money: usize,
+    money: usize,
     pub perception: usize,
     pub effects: Effects,
     pub upgrades: Upgrades,
@@ -81,20 +81,25 @@ impl Player {
     // false: alive
     pub fn attacked(&mut self, damage: usize, attacker: &'static str) -> Result<bool, ()> {
         if self.effects.invincible.is_active() {
+            crate::stats().damage_invulned += damage;
             return Err(());
         }
         self.was_hit = true;
         if self.blocking {
+            crate::stats().damage_blocked += damage;
             return Err(());
         }
         if self.health <= damage {
             self.killer = Some(attacker);
+            crate::stats().damage_taken += self.health;
             return Ok(true);
         }
+        crate::stats().damage_taken += damage;
         self.health -= damage;
         Ok(false)
     }
     pub fn on_kill(&mut self, enemy: &crate::Enemy) {
+        crate::stats().kills += 1;
         if !enemy.reward {
             return;
         }
@@ -190,6 +195,7 @@ impl Player {
             Some(index) => {
                 crate::log!("  Putting item in slot {index}");
                 self.items[index] = Some(item);
+                crate::stats().add_item(item);
                 true
             }
             None => {
@@ -203,7 +209,9 @@ impl Player {
     }
     pub fn heal(&mut self, amount: usize) {
         self.health += amount;
+        crate::stats().damage_healed += amount;
         if self.health > self.max_health {
+            crate::stats().damage_healed -= self.health - self.max_health;
             self.health = self.max_health;
         }
     }
@@ -221,6 +229,22 @@ impl Player {
         }
         board.smart_render(self);
         std::mem::drop(specials);
+    }
+    pub fn give_money(&mut self, amount: usize) {
+        self.money += amount;
+        crate::stats().total_money += amount;
+    }
+    pub fn have_money(&mut self, amount: usize) -> bool {
+        self.money >= amount
+    }
+    pub fn take_money(&mut self, amount: usize) {
+        self.money -= amount;
+    }
+    pub fn get_money(&self) -> usize {
+        self.money
+    }
+    pub unsafe fn mut_money(&mut self) -> &mut usize {
+        &mut self.money
     }
 }
 // Rendering
@@ -449,6 +473,46 @@ impl Effects {
         }
         Ok(())
     }
+    pub fn list(&self) {
+        if self.invincible.is_active() {
+            println!("    and is invincible for ");
+            self.invincible.list();
+        }
+        if self.mage_sight.is_active() {
+            println!("    and has mage sight for ");
+            self.mage_sight.list();
+        }
+        if self.regen.is_active() {
+            println!("    and is regenerating for ");
+            self.regen.list();
+        }
+        if self.unlucky.is_active() {
+            println!("    and is unlucky for ");
+            self.unlucky.list();
+        }
+        if self.doomed.is_active() {
+            println!("    and is doomed for");
+            self.doomed.list()
+        }
+    }
+    pub fn has_none(&self) -> bool {
+        if self.invincible.is_active() {
+            return false;
+        }
+        if self.mage_sight.is_active() {
+            return false;
+        }
+        if self.regen.is_active() {
+            return false;
+        }
+        if self.unlucky.is_active() {
+            return false;
+        }
+        if self.doomed.is_active() {
+            return false;
+        }
+        true
+    }
 }
 impl FromBinary for Effects {
     fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
@@ -502,6 +566,28 @@ impl Duration {
     }
     pub fn remove(&mut self) {
         *self = Duration::None;
+    }
+    pub fn increase_to(&mut self, increment: usize, max: usize) {
+        match self {
+            Self::None => *self = Self::Turns(increment),
+            Self::Turns(current) => {
+                if *current > max {
+                    return;
+                }
+                *current += increment;
+                if *current > max {
+                    *current = max
+                }
+            }
+            Self::Infinite => {}
+        }
+    }
+    fn list(&self) {
+        match self {
+            Self::None => unreachable!(),
+            Self::Turns(turns) => print!("{turns} turns"),
+            Self::Infinite => print!("forever"),
+        }
     }
 }
 impl std::ops::AddAssign<usize> for Duration {

@@ -51,7 +51,7 @@ impl UpgradeType {
         (
             SYMBOL,
             Some(
-                match self.cost() <= player.money && self.can_pickup(player) {
+                match self.cost() <= player.get_money() && self.can_pickup(player) {
                     true => AVAILABLE,
                     false => UNAVAILABLE,
                 },

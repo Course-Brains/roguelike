@@ -153,6 +153,7 @@ cast \[spell type\] \[spell\]
         normal
             swap
             biden\_blast
+            identify
         contact
             drain\_health
 

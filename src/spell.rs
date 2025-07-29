@@ -1,4 +1,7 @@
-use crate::{Board, Enemy, Entity, Player, Style, Vector, board::Special, ray_cast};
+use crate::{
+    Board, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special, ray_cast,
+};
+use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
 pub struct SpellCircle {
     pub spell: Spell,
@@ -26,6 +29,7 @@ impl SpellCircle {
         }
     }
 }
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Spell {
     Contact(ContactSpell),
     Normal(NormalSpell),
@@ -67,14 +71,43 @@ impl std::str::FromStr for Spell {
         }
     }
 }
+impl FromBinary for Spell {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match bool::from_binary(binary)? {
+            true => Spell::Contact(ContactSpell::from_binary(binary)?),
+            false => Spell::Normal(NormalSpell::from_binary(binary)?),
+        })
+    }
+}
+impl ToBinary for Spell {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::Contact(spell) => {
+                true.to_binary(binary)?;
+                spell.to_binary(binary)
+            }
+            Self::Normal(spell) => {
+                false.to_binary(binary)?;
+                spell.to_binary(binary)
+            }
+        }
+    }
+}
 // requires you to be able to touch the target(aka within the 3 by 3 around you) or in the case of
 // spell circles, requires them to stand on it, then it triggers
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ContactSpell {
     // Take health from the target
     DrainHealth,
 }
 impl ContactSpell {
     pub fn cast(&self, target: Entity<'_>, caster: Entity<'_>) {
+        if let Entity::Player(_) = caster {
+            crate::stats().add_spell(Spell::Contact(*self));
+        }
         match self {
             Self::DrainHealth => {
                 match target {
@@ -119,13 +152,35 @@ impl std::str::FromStr for ContactSpell {
         }
     }
 }
+impl FromBinary for ContactSpell {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::DrainHealth,
+            _ => unreachable!("Failed to get ContactSpell from binary"),
+        })
+    }
+}
+impl ToBinary for ContactSpell {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::DrainHealth => 0_u8,
+        }
+        .to_binary(binary)
+    }
+}
 // Cast by you normally, might have their own activation conditions, in the case of spell circles,
 // they will cast repeatedly until they don't have enough mana
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum NormalSpell {
     // swap position with a random enemy within a 30 radius square
     Swap,
     // A fireball, has AOE
     BidenBlast,
+    // Get information about the target(eg. health)
+    Identify,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -138,6 +193,9 @@ impl NormalSpell {
         origin: Option<Vector>,
         aim: Option<Vector>,
     ) -> bool {
+        if caster.is_none() {
+            crate::stats().add_spell(Spell::Normal(*self));
+        }
         match self {
             Self::Swap => {
                 let addr = caster.as_ref().map(|arc| Arc::as_ptr(arc).addr());
@@ -205,12 +263,43 @@ impl NormalSpell {
                 }
                 true
             }
+            Self::Identify => {
+                assert!(caster.is_none(), "Identify can only be cast by the player");
+                let aim = aim.unwrap();
+                crossterm::queue!(
+                    std::io::stdout(),
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+                )
+                .unwrap();
+                println!("At position: {}", aim);
+                if let Some(piece) = &board[aim] {
+                    println!("  There is a piece: {piece}");
+                }
+                if let Some(enemy) = board.get_enemy(aim, None) {
+                    let enemy = enemy.try_read().unwrap();
+                    println!(
+                        "  There is an enemy: {} with {} health",
+                        enemy.variant.kill_name(),
+                        enemy.health
+                    );
+                }
+                if player.pos == aim {
+                    println!("  The player is there:");
+                    if player.effects.has_none() {
+                        println!("    and has no effects");
+                    } else {
+                        player.effects.list();
+                    }
+                }
+                true
+            }
         }
     }
     pub fn cast_time(&self) -> usize {
         match self {
             Self::Swap => 3,
             Self::BidenBlast => 4,
+            Self::Identify => 1,
         }
     }
 }
@@ -220,8 +309,32 @@ impl std::str::FromStr for NormalSpell {
         match s.trim() {
             "swap" => Ok(Self::Swap),
             "biden_blast" => Ok(Self::BidenBlast),
+            "identify" => Ok(Self::Identify),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
+    }
+}
+impl FromBinary for NormalSpell {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::Swap,
+            1 => Self::BidenBlast,
+            2 => Self::Identify,
+            _ => unreachable!("Failed to get NormalSpell from binary"),
+        })
+    }
+}
+impl ToBinary for NormalSpell {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::Swap => 0_u8,
+            Self::BidenBlast => 1,
+            Self::Identify => 2,
+        }
+        .to_binary(binary)
     }
 }
 fn fireball(pos: Vector) -> Special {

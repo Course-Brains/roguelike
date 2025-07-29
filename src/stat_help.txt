@@ -1,0 +1,7 @@
+The valid commands are:
+    help
+	Displays this message
+    next
+	Moves to the next game's stats
+    prev
+	Moves to the previous game's stats

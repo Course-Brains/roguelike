@@ -191,7 +191,7 @@ impl Command {
                 };
                 state.player.items[slot] = Some(item_type)
             }
-            Command::SetMoney(money) => state.player.money = money,
+            Command::SetMoney(money) => unsafe { *state.player.mut_money() = money },
             Command::Upgrade(upgrade_type) => {
                 upgrade_type.on_pickup(&mut state.player);
             }
@@ -265,6 +265,7 @@ impl CommandHandler {
     }
     pub fn handle(&mut self, state: &mut State) {
         while let Ok(command) = self.rx.try_recv() {
+            crate::CHEATS.store(true, crate::Ordering::Relaxed);
             command.enact(state, &mut self.tx)
         }
     }

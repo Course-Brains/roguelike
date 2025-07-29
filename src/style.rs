@@ -45,10 +45,10 @@ impl Style {
             strike: false,
         }
     }
-    pub const fn set_color(&mut self, color: Color) -> &mut Self {
+    /*pub const fn set_color(&mut self, color: Color) -> &mut Self {
         self.color = color;
         self
-    }
+    }*/
     pub const fn set_background(&mut self, color: Color) -> &mut Self {
         self.background = color;
         self

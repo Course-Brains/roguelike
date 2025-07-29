@@ -5,3 +5,43 @@ The valid commands are:
 	Moves to the next game's stats
     prev
 	Moves to the previous game's stats
+    jump [index]
+	sets the current index to [index]
+    list [field]
+	If no field is specified, then it will display the entire
+	stats for the current index. But if a field is specified then
+	it will show the data for that field in all the saves.
+	Valid fields are:
+	    shop_money
+		The amount of money when entering each shop
+	    total_money
+		The amount of money gained
+	    depth
+		The final layer that was reached
+	    buy_list
+		How many of each item was bought
+	    upgrades
+		The upgrades owned by the player
+	    turn_count
+		The turn count when entering each layer
+	    damage_taken
+		The amount of damage taken
+	    damage_blocked
+		The amount of damage blocked
+	    damage_invulned
+		The amount of damage negated by being invincible
+	    damage_dealt
+		you get it by now
+	    damage_healed
+		it does not matter what I put here
+	    death_turn
+		The turn you died at
+	    spell_list
+		How many of each spell you cast
+	    num_saves
+		The number of times you saved
+	    kills
+		The number of enemies you killed
+    quit
+	quits the stat viewer, but it doesn't really matter that you
+	can do this because you can just ^C to leave anyway.

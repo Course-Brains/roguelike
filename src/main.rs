@@ -103,9 +103,26 @@ fn main() {
         }
     }
     if testing {
-        generate(MapGenSettings::new(501, 501, 45, 15, 1000))
-            .join()
-            .unwrap();
+        let mut count = 0;
+        for index in 0..u8::max_value() {
+            random::initialize_with(index);
+            let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
+                .join()
+                .unwrap();
+            if let enemy::Variant::BasicBoss(_) = board
+                .boss
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .try_read()
+                .unwrap()
+                .variant
+            {
+                print!("{index}, ");
+                count += 1;
+            }
+        }
+        println!("\n{count} out of 256 have the basic boss");
         return;
     }
 

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+if [ "--update" = "$1" ]; then
+    git pull
+fi
 BACKTRACE_RESET=$RUST_BACKTRACE
 export RUST_BACKTRACE=1
 cargo run 2> error.txt

@@ -42,6 +42,9 @@ The valid commands are:
 		The number of times you saved
 	    kills
 		The number of enemies you killed
+	    energy_used
+		The amount of energy used by the player for
+		abilities(not including conversion)
     quit
 	quits the stat viewer, but it doesn't really matter that you
 	can do this because you can just ^C to leave anyway.

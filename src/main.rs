@@ -216,6 +216,7 @@ fn main() {
                     state.player.do_move(direction, &mut state.board);
                     state.player.do_move(direction, &mut state.board);
                     state.player.do_move(direction, &mut state.board);
+                    stats().energy_used += 1;
                     state.increment()
                 }
                 false => {
@@ -294,6 +295,7 @@ fn main() {
             }
             Input::Block => {
                 if state.player.energy != 0 {
+                    stats().energy_used += 1;
                     state.player.was_hit = false;
                     state.player.blocking = true;
                     state.think();
@@ -979,6 +981,8 @@ struct Stats {
     num_saves: usize,
     // how many enemies were killed
     kills: usize,
+    // total energy used
+    energy_used: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -998,6 +1002,7 @@ impl Stats {
             spell_list: HashMap::new(),
             num_saves: 0,
             kills: 0,
+            energy_used: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1035,6 +1040,7 @@ impl FromBinary for Stats {
             spell_list: HashMap::from_binary(binary)?,
             num_saves: usize::from_binary(binary)?,
             kills: usize::from_binary(binary)?,
+            energy_used: usize::from_binary(binary)?,
         })
     }
 }
@@ -1054,7 +1060,8 @@ impl ToBinary for Stats {
         self.death_turn.to_binary(binary)?;
         self.spell_list.to_binary(binary)?;
         self.num_saves.to_binary(binary)?;
-        self.kills.to_binary(binary)
+        self.kills.to_binary(binary)?;
+        self.energy_used.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1171,6 +1178,7 @@ fn view_stats() {
                     "spell_list" => list!(spell_list),
                     "num_saves" => list!(num_saves),
                     "kills" => list!(kills),
+                    "energy_used" => list!(energy_used),
                     other => println!("{other} is not a valid field"),
                 },
                 None => println!("{index} out of {}:\n{:#?}", stats.len() - 1, stats[index]),

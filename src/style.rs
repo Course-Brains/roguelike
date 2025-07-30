@@ -9,7 +9,6 @@ pub struct Style {
     dim: bool,
     italic: bool,
     underline: bool,
-    strike: bool,
 }
 macro_rules! color {
     ($background: ident, $name:ident, $variant:ident) => {
@@ -66,7 +65,6 @@ impl Style {
     set!(dim);
     set!(italic);
     set!(underline);
-    set!(strike);
 
     color!(background_black, black, Black);
     color!(background_red, red, Red);
@@ -115,13 +113,6 @@ impl std::fmt::Display for Style {
                 write!(f, ";")?;
             }
             write!(f, "4")?;
-            first = false;
-        }
-        if self.strike {
-            if !first {
-                write!(f, ";")?;
-            }
-            write!(f, "9")?;
             first = false;
         }
         match self.background.to_num() {

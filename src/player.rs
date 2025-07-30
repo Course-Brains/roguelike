@@ -138,18 +138,7 @@ impl Player {
                     killer
                 )
                 .unwrap();
-                write!(
-                    std::io::stdout(),
-                    "{}",
-                    match crate::random() & 3 {
-                        0 => "Do better next time.",
-                        1 => "With enough luck you'll eventually win even without skill.",
-                        2 => "You CAN prevail.",
-                        3 => "You ever heard of the definition of insanity?",
-                        _ => unreachable!("Ain't my problem"),
-                    }
-                )
-                .unwrap();
+                Player::death_message();
                 write!(
                     std::io::stdout(),
                     "\nPress {}Enter\x1b[0m to exit.",
@@ -166,6 +155,20 @@ impl Player {
             }
             None => false,
         }
+    }
+    pub fn death_message() {
+        let mut out = std::io::stdout().lock();
+        match crate::random() % 4 {
+            0 => write!(out, "Do better next time."),
+            1 => write!(
+                out,
+                "With enough luck you'll eventually with even without skill."
+            ),
+            2 => write!(out, "You CAN prevail."),
+            3 => write!(out, "Have you ever heard of the definition of insanity?"),
+            _ => unreachable!("Fuckity wuckity someone is bad at math"),
+        }
+        .unwrap();
     }
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {

@@ -46,7 +46,8 @@ fn proj_delay() {
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: u16 = 0;
+const SAVE_VERSION: Version = 0;
+type Version = u32;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
 // The path to the file of stats for previous runs
@@ -528,7 +529,7 @@ impl FromBinary for State {
     where
         Self: Sized,
     {
-        if u16::from_binary(binary)? != SAVE_VERSION {
+        if Version::from_binary(binary)? != SAVE_VERSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid save format"),
@@ -1070,7 +1071,7 @@ fn save_stats() {
         true => {
             log!("Stats file exists, checking version");
             let mut file = std::fs::File::open(STAT_PATH).unwrap();
-            if u16::from_binary(&mut file).unwrap() != SAVE_VERSION {
+            if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
                 log!("!!! Save version mismatch!!!");
                 crossterm::queue!(
                     std::io::stdout(),
@@ -1104,7 +1105,7 @@ fn view_stats() {
     let mut file = std::fs::File::open(STAT_PATH).unwrap();
     assert_eq!(
         SAVE_VERSION,
-        u16::from_binary(&mut file).unwrap(),
+        Version::from_binary(&mut file).unwrap(),
         "Invalid save format"
     );
     let stats = Vec::<Stats>::from_binary(&mut file).unwrap();

@@ -98,7 +98,10 @@ fn main() {
                 log!("TESTING MAP GEN");
                 testing = true
             }
-            "stats" => view_stats(),
+            "stats" => {
+                view_stats();
+                return;
+            }
             _ => {}
         }
     }

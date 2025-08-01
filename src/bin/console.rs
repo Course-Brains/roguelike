@@ -6,7 +6,7 @@ fn main() {
         .split()
         .unwrap();
     println!("Connection made");
-    std::thread::spawn(move || while let Ok(_) = input().to_binary(&mut write) {});
+    std::thread::spawn(move || while input().to_binary(&mut write).is_ok() {});
     while let Ok(string) = String::from_binary(&mut read) {
         println!("{string}");
     }

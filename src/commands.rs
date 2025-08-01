@@ -149,8 +149,8 @@ impl Command {
                 }
             }
             Command::OpenAllDoors => {
-                for piece in state.board.inner.iter_mut() {
-                    if let Some(crate::board::Piece::Door(door)) = piece {
+                for piece in state.board.inner.iter_mut().flatten() {
+                    if let crate::board::Piece::Door(door) = piece {
                         door.open = true;
                     }
                 }
@@ -223,10 +223,10 @@ impl Command {
             Command::GetData(pos) => {
                 let pos = pos.to_absolute(&state.player);
                 if let Some(piece) = &state.board[pos] {
-                    out.send(format!("It is a {}", piece)).unwrap();
+                    out.send(format!("It is a {piece}")).unwrap();
                 }
                 if state.player.pos == pos {
-                    out.send(format!("It contains the player")).unwrap();
+                    out.send("It contains the player".to_string()).unwrap();
                 }
                 for (index, enemy) in state.board.enemies.iter().enumerate() {
                     if enemy.try_read().unwrap().pos == pos {
@@ -360,7 +360,7 @@ impl SmartVector {
         match x {
             Some(x) => {
                 if y.is_none() {
-                    return Err(format!("Missing arguments"));
+                    return Err("Missing arguments".to_string());
                 }
                 Ok(SmartVector {
                     x: x.parse()?,
@@ -372,7 +372,7 @@ impl SmartVector {
                     x: Pos::RelativeSelector(0),
                     y: Pos::RelativeSelector(0),
                 }),
-                false => Err(format!("Missing arguments")),
+                false => Err("Missing arguments".to_string()),
             },
         }
     }
@@ -386,6 +386,6 @@ impl SmartVector {
 fn arg(src: Option<&str>) -> Result<&str, String> {
     match src {
         Some(arg) => Ok(arg),
-        None => Err(format!("Missing argument")),
+        None => Err("Missing argument".to_string()),
     }
 }

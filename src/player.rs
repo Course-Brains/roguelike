@@ -131,20 +131,13 @@ impl Player {
     pub fn handle_death(&self) -> bool {
         match self.killer {
             Some(killer) => {
-                write!(
-                    std::io::stdout(),
-                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.\n",
+                println!(
+                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
                     Style::new().green().intense(true),
                     killer
-                )
-                .unwrap();
+                );
                 Player::death_message();
-                write!(
-                    std::io::stdout(),
-                    "\nPress {}Enter\x1b[0m to exit.",
-                    Style::new().cyan()
-                )
-                .unwrap();
+                print!("\nPress {}Enter\x1b[0m to exit.", Style::new().cyan());
                 std::io::stdout().flush().unwrap();
                 loop {
                     if let crate::input::Input::Enter = crate::input::Input::get() {
@@ -181,7 +174,7 @@ impl Player {
         );
         std::io::stdout().flush().unwrap();
         let selected = loop {
-            lock.read(&mut buf).unwrap();
+            lock.read_exact(&mut buf).unwrap();
             crate::log!("  recieved {}", buf[0].to_string());
             match buf[0] {
                 b'1' => break Some(0),
@@ -264,7 +257,7 @@ impl Player {
             return;
         }
         crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
-        write!(lock, "{}{}\x1b[0m", STYLE, SYMBOL).unwrap();
+        write!(lock, "{STYLE}{SYMBOL}\x1b[0m").unwrap();
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
         crossterm::queue!(

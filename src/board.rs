@@ -115,7 +115,7 @@ impl Board {
         range: usize,
     ) -> Option<Weak<RwLock<Enemy>>> {
         let mut candidates = self.get_near(addr, pos, range);
-        if candidates.len() == 0 {
+        if candidates.is_empty() {
             return None;
         }
         crate::random::random_index(candidates.len()).map(|index| candidates.swap_remove(index))
@@ -150,7 +150,7 @@ impl Board {
         ))));
         out
     }
-    pub fn contact_spell_at<'a>(&'a self, pos: Vector) -> Option<(&'a SpellCircle, usize)> {
+    pub fn contact_spell_at(&self, pos: Vector) -> Option<(&SpellCircle, usize)> {
         for (index, circle) in self.spells.iter().enumerate() {
             if circle.pos == pos {
                 if let Spell::Contact(_) = circle.spell {
@@ -203,13 +203,11 @@ impl Board {
                         if !bounds.contains(&Vector::new(x, y)) {
                             continue;
                         }
-                    } else {
-                        if !self.visible[index] {
-                            if self.seen[index] {
-                                memory = true;
-                            } else {
-                                continue;
-                            }
+                    } else if !self.visible[index] {
+                        if self.seen[index] {
+                            memory = true;
+                        } else {
+                            continue;
                         }
                     }
                     let (ch, mut style) = piece.render(Vector::new(x, y), self, player);
@@ -228,10 +226,9 @@ impl Board {
                         }
                     }
                     if let Some(style) = style {
-                        lock.write_fmt(format_args!("{}{}\x1b[0m", style, ch))
-                            .unwrap()
+                        lock.write_fmt(format_args!("{style}{ch}\x1b[0m")).unwrap()
                     } else {
-                        lock.write_fmt(format_args!("{}", ch)).unwrap();
+                        lock.write_fmt(format_args!("{ch}")).unwrap();
                     }
                 }
             }
@@ -277,7 +274,7 @@ impl Board {
             }
             crossterm::queue!(lock, (pos - bounds.start).to_move()).unwrap();
             match enemy.try_read().unwrap().render() {
-                (ch, Some(style)) => write!(lock, "{}{ch}\x1b[0m", style).unwrap(),
+                (ch, Some(style)) => write!(lock, "{style}{ch}\x1b[0m").unwrap(),
                 (ch, None) => write!(lock, "{ch}").unwrap(),
             }
         }
@@ -374,13 +371,10 @@ impl Board {
                     None => write!(lock, "Nothing").unwrap(),
                 }
             }
-        } else {
-            if player.effects.mage_sight.is_active() {
-                if let Some(enemy) = self.get_enemy(player.selector, None) {
-                    if enemy.try_read().unwrap().reachable {
-                        write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name())
-                            .unwrap();
-                    }
+        } else if player.effects.mage_sight.is_active() {
+            if let Some(enemy) = self.get_enemy(player.selector, None) {
+                if enemy.try_read().unwrap().reachable {
+                    write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
                 }
             }
         }
@@ -450,7 +444,7 @@ impl Board {
 // Enemy logic
 impl Board {
     pub fn generate_nav_data(&mut self, player: Vector) {
-        if self.enemies.len() == 0 {
+        if self.enemies.is_empty() {
             return;
         }
         let start = std::time::Instant::now();
@@ -562,18 +556,15 @@ impl Board {
                 if piece.enemy_collision() {
                     out.up = false
                 }
-            } else {
-                if piece.has_collision() {
-                    out.up = false
-                }
+            } else if piece.has_collision() {
+                out.up = false
             }
         } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Up).x) < 2 {
-                if player.y.abs_diff((pos + Direction::Up).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Up, None) {
-                        out.up = false
-                    }
-                }
+            if player.x.abs_diff((pos + Direction::Up).x) < 2
+                && player.y.abs_diff((pos + Direction::Up).y) < 2
+                && self.contains_enemy(pos + Direction::Up, None)
+            {
+                out.up = false
             }
         }
 
@@ -584,18 +575,15 @@ impl Board {
                 if piece.enemy_collision() {
                     out.down = false
                 }
-            } else {
-                if piece.has_collision() {
-                    out.down = false
-                }
+            } else if piece.has_collision() {
+                out.down = false
             }
         } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Down).x) < 2 {
-                if player.y.abs_diff((pos + Direction::Down).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Down, None) {
-                        out.down = false
-                    }
-                }
+            if player.x.abs_diff((pos + Direction::Down).x) < 2
+                && player.y.abs_diff((pos + Direction::Down).y) < 2
+                && self.contains_enemy(pos + Direction::Down, None)
+            {
+                out.down = false
             }
         }
 
@@ -606,18 +594,15 @@ impl Board {
                 if piece.enemy_collision() {
                     out.left = false
                 }
-            } else {
-                if piece.has_collision() {
-                    out.left = false
-                }
+            } else if piece.has_collision() {
+                out.left = false
             }
         } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Left).x) < 2 {
-                if player.y.abs_diff((pos + Direction::Left).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Left, None) {
-                        out.left = false
-                    }
-                }
+            if player.x.abs_diff((pos + Direction::Left).x) < 2
+                && player.y.abs_diff((pos + Direction::Left).y) < 2
+                && self.contains_enemy(pos + Direction::Left, None)
+            {
+                out.left = false
             }
         }
 
@@ -628,18 +613,15 @@ impl Board {
                 if piece.enemy_collision() {
                     out.right = false
                 }
-            } else {
-                if piece.has_collision() {
-                    out.right = false
-                }
+            } else if piece.has_collision() {
+                out.right = false
             }
         } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Right).x) < 2 {
-                if player.y.abs_diff((pos + Direction::Right).y) < 2 {
-                    if self.contains_enemy(pos + Direction::Right, None) {
-                        out.right = false
-                    }
-                }
+            if player.x.abs_diff((pos + Direction::Right).x) < 2
+                && player.y.abs_diff((pos + Direction::Right).y) < 2
+                && self.contains_enemy(pos + Direction::Right, None)
+            {
+                out.right = false
             }
         }
 
@@ -802,7 +784,7 @@ impl Board {
             self.specials.push(Arc::downgrade(&arc));
             specials.push(arc);
         }
-        let mut circles = std::mem::replace(&mut self.spells, Vec::new());
+        let mut circles = std::mem::take(&mut self.spells);
         circles.retain(|circle| circle.update(self, player));
         self.spells = circles;
         std::mem::drop(specials);
@@ -920,11 +902,7 @@ impl Piece {
         }
     }
     pub fn wall_connectable(&self) -> bool {
-        match self {
-            Piece::Wall(_) => true,
-            Piece::Door(_) => true,
-            _ => false,
-        }
+        matches!(self, Piece::Wall(_) | Piece::Door(_))
     }
     pub fn enemy_collision(&self) -> bool {
         match self {
@@ -969,11 +947,7 @@ impl Piece {
         }
     }
     pub fn on_map(&self) -> bool {
-        match self {
-            Self::Wall(_) => true,
-            Self::Door(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Wall(_) | Self::Door(_))
     }
 }
 impl std::fmt::Display for Piece {
@@ -1073,9 +1047,6 @@ impl PartialEq for PathData {
     fn eq(&self, other: &Self) -> bool {
         self.heur == other.heur
     }
-    fn ne(&self, other: &Self) -> bool {
-        self.heur != other.heur
-    }
 }
 impl Eq for PathData {}
 impl PartialOrd for PathData {
@@ -1092,20 +1063,18 @@ impl PartialOrd for PathData {
         self.heur.le(&other.heur)
     }
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self < other {
-            Some(std::cmp::Ordering::Less)
-        } else if self > other {
-            Some(std::cmp::Ordering::Greater)
-        } else if self == other {
-            Some(std::cmp::Ordering::Equal)
-        } else {
-            None
-        }
+        Some(self.cmp(other))
     }
 }
 impl Ord for PathData {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+        if self < other {
+            std::cmp::Ordering::Less
+        } else if self > other {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Equal
+        }
     }
     fn max(self, other: Self) -> Self
     where
@@ -1126,6 +1095,7 @@ impl Ord for PathData {
         unimplemented!("don't")
     }
 }
+#[derive(Clone, Copy)]
 pub struct Adj {
     up: bool,
     down: bool,

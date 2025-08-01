@@ -57,12 +57,12 @@ const STAT_PATH: &str = "stats";
 macro_rules! log {
     ($($arg:tt)*) => {
         #[cfg(any(debug_assertions, feature = "force_log"))]
-        crate::log(format!($($arg)*))
+        $crate::log(format!($($arg)*))
     }
 }
 #[cfg(any(debug_assertions, feature = "force_log"))]
 fn log(string: String) {
-    write!(LOG.lock().unwrap().as_ref().unwrap(), "{string}\n").unwrap();
+    writeln!(LOG.lock().unwrap().as_ref().unwrap(), "{string}").unwrap();
 }
 
 // Global trigger flags
@@ -107,7 +107,7 @@ fn main() {
     }
     if testing {
         let mut count = 0;
-        for index in 0..u8::max_value() {
+        for index in 0..u8::MAX {
             random::initialize_with(index);
             let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
                 .join()
@@ -148,7 +148,7 @@ fn main() {
             turn: 0,
             next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
             next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
-            next_shop: std::thread::spawn(|| Board::new_shop()),
+            next_shop: std::thread::spawn(Board::new_shop),
             level: 0,
         },
     };
@@ -187,7 +187,7 @@ fn main() {
         }
         command_handler.handle(&mut state);
         match Input::get() {
-            Input::WASD(direction, sprint) => match sprint {
+            Input::Wasd(direction, sprint) => match sprint {
                 true => {
                     match direction {
                         Direction::Up => {
@@ -525,12 +525,9 @@ impl State {
         self.render();
     }
     fn load_shop(&mut self) {
-        self.board = std::mem::replace(
-            &mut self.next_shop,
-            std::thread::spawn(|| Board::new_shop()),
-        )
-        .join()
-        .unwrap();
+        self.board = std::mem::replace(&mut self.next_shop, std::thread::spawn(Board::new_shop))
+            .join()
+            .unwrap();
         self.player.pos = Vector::new(44, 14);
         self.player.selector = Vector::new(44, 14);
         stats().shop_money.push(self.player.get_money());
@@ -552,7 +549,7 @@ impl FromBinary for State {
         if Version::from_binary(binary)? != SAVE_VERSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid save format"),
+                "Invalid save format".to_string(),
             ));
         }
         CHEATS.store(bool::from_binary(binary)?, Ordering::Relaxed);
@@ -564,7 +561,7 @@ impl FromBinary for State {
             turn: usize::from_binary(binary)?,
             next_map: generate(settings),
             next_map_settings: settings,
-            next_shop: std::thread::spawn(|| Board::new_shop()),
+            next_shop: std::thread::spawn(Board::new_shop),
             level: usize::from_binary(binary)?,
         })
     }
@@ -613,18 +610,11 @@ impl Vector {
         let range = range as isize;
         let mut out = Vec::new();
         for x in -range..=range {
-            if x < 0 {
-                if x.abs_diff(0) > self.x {
-                    continue;
-                }
+            if x < 0 && x.abs_diff(0) > self.x {
+                continue;
             }
             for y in -range..=range {
-                if y < 0 {
-                    if y.abs_diff(0) > self.y {
-                        continue;
-                    }
-                }
-                if x == 0 && y == 0 {
+                if (y < 0 && y.abs_diff(0) > self.y) || (x == 0 && y == 0) {
                     continue;
                 }
                 out.push(Vector::new(
@@ -827,13 +817,13 @@ impl Drop for Weirdifier {
     }
 }
 fn bell(lock: Option<&mut dyn std::io::Write>) {
-    let mut buf = [7];
+    let buf = [7];
     match lock {
         Some(lock) => {
-            lock.write(&mut buf).unwrap();
+            lock.write_all(&buf).unwrap();
         }
         None => {
-            std::io::stdout().write(&mut buf).unwrap();
+            std::io::stdout().write_all(&buf).unwrap();
             std::io::stdout().flush().unwrap();
         }
     }
@@ -896,19 +886,15 @@ fn ray_cast(
                 if x > to.x {
                     break;
                 }
-            } else {
-                if x < to.x {
-                    break;
-                }
+            } else if x < to.x {
+                break;
             }
             if delta_y.is_sign_positive() {
                 if y > to.y {
                     break;
                 }
-            } else {
-                if y < to.y {
-                    break;
-                }
+            } else if y < to.y {
+                break;
             }
         }
         crate::log!("  at ({precise_x}, {precise_y})");
@@ -952,7 +938,7 @@ enum Collision {
     Piece(Vector),
 }
 impl Collision {
-    fn to_entity<'a>(self, player: &'a mut Player) -> Option<Entity<'a>> {
+    fn into_entity<'a>(self, player: &'a mut Player) -> Option<Entity<'a>> {
         match self {
             Self::Player => Some(Entity::Player(player)),
             Self::Enemy(arc) => Some(Entity::Enemy(arc)),

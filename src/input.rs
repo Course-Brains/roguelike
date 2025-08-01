@@ -2,7 +2,7 @@ use albatrice::{FromBinary, ToBinary};
 use std::io::Read;
 pub enum Input {
     Arrow(Direction),      // move cursor
-    WASD(Direction, bool), // move character
+    Wasd(Direction, bool), // move character
     Enter,                 // interact
     Attack,                // attack
     Block,                 // block
@@ -20,12 +20,12 @@ impl Input {
         let mut lock = std::io::stdin().lock();
         let mut buf = [0_u8];
         loop {
-            lock.read(&mut buf).unwrap();
+            lock.read_exact(&mut buf).unwrap();
             match buf[0] {
                 27 => {
                     // escape byte
-                    lock.read(&mut buf).unwrap();
-                    lock.read(&mut buf).unwrap(); // actual data
+                    lock.read_exact(&mut buf).unwrap();
+                    lock.read_exact(&mut buf).unwrap(); // actual data
                     match buf[0] {
                         b'A' => return Input::Arrow(Direction::Up),
                         b'B' => return Input::Arrow(Direction::Down),
@@ -34,14 +34,14 @@ impl Input {
                         _ => {}
                     }
                 }
-                b'w' => return Input::WASD(Direction::Up, false),
-                b's' => return Input::WASD(Direction::Down, false),
-                b'a' => return Input::WASD(Direction::Left, false),
-                b'd' => return Input::WASD(Direction::Right, false),
-                b'W' => return Input::WASD(Direction::Up, true),
-                b'S' => return Input::WASD(Direction::Down, true),
-                b'A' => return Input::WASD(Direction::Left, true),
-                b'D' => return Input::WASD(Direction::Right, true),
+                b'w' => return Input::Wasd(Direction::Up, false),
+                b's' => return Input::Wasd(Direction::Down, false),
+                b'a' => return Input::Wasd(Direction::Left, false),
+                b'd' => return Input::Wasd(Direction::Right, false),
+                b'W' => return Input::Wasd(Direction::Up, true),
+                b'S' => return Input::Wasd(Direction::Down, true),
+                b'A' => return Input::Wasd(Direction::Left, true),
+                b'D' => return Input::Wasd(Direction::Right, true),
                 b'q' => return Input::Attack,
                 b'e' => return Input::Block,
                 b'r' => return Input::Return,

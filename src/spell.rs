@@ -35,7 +35,7 @@ pub enum Spell {
     Normal(NormalSpell),
 }
 impl Spell {
-    pub fn unwrap_contact<'a>(&'a self) -> &'a ContactSpell {
+    pub fn unwrap_contact(&self) -> &ContactSpell {
         match self {
             Spell::Contact(contact) => contact,
             Spell::Normal(_) => panic!("Called unwrap_contact on a normal spell"),
@@ -67,7 +67,7 @@ impl std::str::FromStr for Spell {
                     other => Err(format!("\"{other}\" is not a valid spell type")),
                 }
             }
-            None => Err(format!("You must specify the spell")),
+            None => Err("You must specify the spell".to_string()),
         }
     }
 }
@@ -271,7 +271,7 @@ impl NormalSpell {
                     crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
                 )
                 .unwrap();
-                println!("At position: {}", aim);
+                println!("At position: {aim}");
                 if let Some(piece) = &board[aim] {
                     println!("  There is a piece: {piece}");
                 }
@@ -282,6 +282,9 @@ impl NormalSpell {
                         enemy.variant.kill_name(),
                         enemy.health
                     );
+                    if !enemy.reward {
+                        println!("    It seems to be missing something");
+                    }
                 }
                 if player.pos == aim {
                     println!("  The player is there:");
@@ -299,7 +302,7 @@ impl NormalSpell {
         match self {
             Self::Swap => 3,
             Self::BidenBlast => 4,
-            Self::Identify => 1,
+            Self::Identify => 0,
         }
     }
 }

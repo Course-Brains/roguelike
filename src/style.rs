@@ -41,7 +41,6 @@ impl Style {
             dim: false,
             italic: false,
             underline: false,
-            strike: false,
         }
     }
     /*pub const fn set_color(&mut self, color: Color) -> &mut Self {
@@ -125,9 +124,9 @@ impl std::fmt::Display for Style {
                     write!(f, ";")?;
                 }
                 if color != 0 {
-                    write!(f, "{};{}", color, background)?;
+                    write!(f, "{color};{background}")?;
                 } else {
-                    write!(f, "{}", background)?;
+                    write!(f, "{background}")?;
                 }
             }
             None => {
@@ -135,7 +134,7 @@ impl std::fmt::Display for Style {
                     if !first {
                         write!(f, ";")?;
                     }
-                    write!(f, "{}", color)?;
+                    write!(f, "{color}")?;
                 }
             }
         }
@@ -156,7 +155,6 @@ impl FromBinary for Style {
             dim: bool::from_binary(binary)?,
             italic: bool::from_binary(binary)?,
             underline: bool::from_binary(binary)?,
-            strike: bool::from_binary(binary)?,
         })
     }
 }
@@ -169,8 +167,7 @@ impl ToBinary for Style {
         self.bold.to_binary(binary)?;
         self.dim.to_binary(binary)?;
         self.italic.to_binary(binary)?;
-        self.underline.to_binary(binary)?;
-        self.strike.to_binary(binary)
+        self.underline.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Debug)]

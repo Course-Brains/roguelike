@@ -97,7 +97,7 @@ impl UpgradeType {
                 let mut lock = std::io::stdin().lock();
                 let mut buf = [0];
                 loop {
-                    lock.read(&mut buf).unwrap();
+                    lock.read_exact(&mut buf).unwrap();
                     match buf[0] {
                         b'y' => {
                             crate::SAVE.store(true, std::sync::atomic::Ordering::Relaxed);

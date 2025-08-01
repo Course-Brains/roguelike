@@ -5,6 +5,7 @@ use crate::{
 use albatrice::debug;
 use std::cell::RefCell;
 use std::ops::Range;
+use std::rc::Rc;
 use std::sync::{
     Arc, RwLock,
     atomic::{AtomicBool, Ordering},
@@ -91,12 +92,12 @@ fn delay() {
         std::thread::sleep(DELAY)
     }
 }
-type Adjacent = Vec<Arc<RwLock<Room>>>;
+type Adjacent = Vec<Rc<RefCell<Room>>>;
 struct Room {
     x_bounds: Range<usize>,
     y_bounds: Range<usize>,
-    sub_room1: Option<Arc<RwLock<Room>>>,
-    sub_room2: Option<Arc<RwLock<Room>>>,
+    sub_room1: Option<Rc<RefCell<Room>>>,
+    sub_room2: Option<Rc<RefCell<Room>>>,
     up: RefCell<Adjacent>,
     down: RefCell<Adjacent>,
     left: RefCell<Adjacent>,
@@ -125,7 +126,7 @@ impl Room {
             assert_eq!(x_len % INTERVAL, 0, "x_len = {x_len}");
             assert_eq!(y_len % INTERVAL, 0, "y_len = {y_len}");
         });
-        if x_len <= MINIMUM || x_len <= MINIMUM {
+        if x_len <= MINIMUM || y_len <= MINIMUM {
             return;
         }
         let mut axis;
@@ -135,11 +136,9 @@ impl Room {
             axis = Axis::Horizontal;
         }
         delay();
-        if max {
-            if random() & 0b0011_1111 == 0 {
-                // 1 in 64 to do the other axis instead
-                axis = !axis;
-            }
+        if max && random() & 0b0011_1111 == 0 {
+            // 1 in 64 to do the other axis instead
+            axis = !axis;
         }
         let axis_len = match axis {
             Axis::Vertical => x_len,
@@ -189,13 +188,13 @@ impl Room {
             Axis::Vertical => {
                 // |
                 // left
-                self.sub_room2 = Some(Arc::new(RwLock::new(Room::new(
+                self.sub_room2 = Some(Rc::new(RefCell::new(Room::new(
                     self.x_bounds.start..split_point,
                     self.y_bounds.clone(),
                     split_budget,
                 ))));
                 // right
-                self.sub_room1 = Some(Arc::new(RwLock::new(Room::new(
+                self.sub_room1 = Some(Rc::new(RefCell::new(Room::new(
                     split_point..self.x_bounds.end,
                     self.y_bounds.clone(),
                     self.budget - split_budget,
@@ -204,33 +203,21 @@ impl Room {
             Axis::Horizontal => {
                 // -
                 // down
-                self.sub_room1 = Some(Arc::new(RwLock::new(Room::new(
+                self.sub_room1 = Some(Rc::new(RefCell::new(Room::new(
                     self.x_bounds.clone(),
                     self.y_bounds.start..split_point,
                     split_budget,
                 ))));
                 // up
-                self.sub_room2 = Some(Arc::new(RwLock::new(Room::new(
+                self.sub_room2 = Some(Rc::new(RefCell::new(Room::new(
                     self.x_bounds.clone(),
                     split_point..self.y_bounds.end,
                     self.budget - split_budget,
                 ))));
             }
         }
-        // If performance problems, change this:
-        //std::thread::sleep(std::time::Duration::from_secs(1));
-        self.sub_room1
-            .as_ref()
-            .unwrap()
-            .try_write()
-            .unwrap()
-            .subdivide();
-        self.sub_room2
-            .as_ref()
-            .unwrap()
-            .try_write()
-            .unwrap()
-            .subdivide();
+        self.sub_room1.as_ref().unwrap().borrow_mut().subdivide();
+        self.sub_room2.as_ref().unwrap().borrow_mut().subdivide();
     }
     fn create_map_rooms(&self, board: &mut Board) {
         if self.sub_room1.is_none() {
@@ -242,30 +229,26 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
+                .borrow_mut()
                 .create_map_rooms(board);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
+                .borrow_mut()
                 .create_map_rooms(board);
         }
     }
-    fn fill_leaf_adjacents(&mut self, adj: &[Arc<RwLock<Room>>]) {
+    fn fill_leaf_adjacents(&mut self, adj: &[Rc<RefCell<Room>>]) {
         if self.sub_room1.is_some() {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
+                .borrow_mut()
                 .fill_leaf_adjacents(adj);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
+                .borrow_mut()
                 .fill_leaf_adjacents(adj);
             return;
         }
@@ -274,24 +257,22 @@ impl Room {
         self.left = RefCell::new(adj.to_vec());
         self.right = RefCell::new(adj.to_vec());
     }
-    fn get_all_leafs(&self) -> Vec<Arc<RwLock<Room>>> {
+    fn get_all_leafs(&self) -> Vec<Rc<RefCell<Room>>> {
         let mut out = Vec::new();
         self.append_all_leafs(&mut out, None);
         out
     }
-    fn append_all_leafs(&self, out: &mut Vec<Arc<RwLock<Room>>>, this: Option<Arc<RwLock<Room>>>) {
+    fn append_all_leafs(&self, out: &mut Vec<Rc<RefCell<Room>>>, this: Option<Rc<RefCell<Room>>>) {
         if self.sub_room1.is_some() {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .try_read()
-                .unwrap()
+                .borrow()
                 .append_all_leafs(out, Some(self.sub_room1.clone().unwrap()));
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .try_read()
-                .unwrap()
+                .borrow()
                 .append_all_leafs(out, Some(self.sub_room2.clone().unwrap()));
         } else {
             out.push(this.unwrap());
@@ -302,136 +283,91 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
-                .remove_extra_adjacents(Some(Arc::as_ptr(self.sub_room1.as_ref().unwrap()).addr()));
+                .borrow_mut()
+                .remove_extra_adjacents(Some(Rc::as_ptr(self.sub_room1.as_ref().unwrap()).addr()));
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .try_write()
-                .unwrap()
-                .remove_extra_adjacents(Some(Arc::as_ptr(self.sub_room2.as_ref().unwrap()).addr()));
+                .borrow_mut()
+                .remove_extra_adjacents(Some(Rc::as_ptr(self.sub_room2.as_ref().unwrap()).addr()));
             return;
         }
         assert!(addr.is_some());
         self.up.borrow_mut().retain(|other| {
-            if Arc::as_ptr(other).addr() == addr.unwrap() {
+            if Rc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.try_read().unwrap().x_bounds.clone();
-            if self.y_bounds.end != other.try_read().unwrap().y_bounds.start {
-                false
-            } else if bounds.start <= self.x_bounds.start && bounds.end <= self.x_bounds.start {
-                false
-            } else if bounds.end >= self.x_bounds.end && bounds.start >= self.x_bounds.end {
+            let bounds = other.borrow().x_bounds.clone();
+            if self.y_bounds.end != other.borrow().y_bounds.start {
                 false
             } else {
-                true
+                bounds.start < self.x_bounds.end
             }
         });
         self.down.borrow_mut().retain(|other| {
-            if Arc::as_ptr(other).addr() == addr.unwrap() {
+            if Rc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.try_read().unwrap().x_bounds.clone();
-            if self.y_bounds.start != other.try_read().unwrap().y_bounds.end {
-                false
-            } else if bounds.start <= self.x_bounds.start && bounds.end <= self.x_bounds.start {
-                false
-            } else if bounds.end >= self.x_bounds.end && bounds.start >= self.x_bounds.end {
+            let bounds = other.borrow().x_bounds.clone();
+            if self.y_bounds.start != other.borrow().y_bounds.end {
                 false
             } else {
-                true
+                bounds.start < self.x_bounds.end
             }
         });
         self.left.borrow_mut().retain(|other| {
-            if Arc::as_ptr(other).addr() == addr.unwrap() {
+            if Rc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.try_read().unwrap().y_bounds.clone();
-            if self.x_bounds.start != other.try_read().unwrap().x_bounds.end {
-                false
-            } else if bounds.start <= self.y_bounds.start && bounds.end <= self.y_bounds.start {
-                false
-            } else if bounds.end >= self.y_bounds.end && bounds.start >= self.y_bounds.end {
+            let bounds = other.borrow().y_bounds.clone();
+            if self.x_bounds.start != other.borrow().x_bounds.end {
                 false
             } else {
-                true
+                bounds.start < self.y_bounds.end
             }
         });
         self.right.borrow_mut().retain(|other| {
-            if Arc::as_ptr(other).addr() == addr.unwrap() {
+            if Rc::as_ptr(other).addr() == addr.unwrap() {
                 return false;
             }
-            let bounds = other.try_read().unwrap().y_bounds.clone();
-            if self.x_bounds == bounds && self.y_bounds == other.try_read().unwrap().y_bounds {
-                false
-            } else if self.x_bounds.end != other.try_read().unwrap().x_bounds.start {
-                false
-            } else if bounds.start <= self.y_bounds.start && bounds.end <= self.y_bounds.start {
-                false
-            } else if bounds.end >= self.y_bounds.end && bounds.start >= self.y_bounds.end {
+            let bounds = other.borrow().y_bounds.clone();
+            if self.x_bounds.end != other.borrow().x_bounds.start {
                 false
             } else {
-                true
+                bounds.start < self.y_bounds.end
             }
         });
     }
     fn place_doors(&self, board: &mut Board) {
         if self.sub_room1.is_some() {
-            self.sub_room1
-                .as_ref()
-                .unwrap()
-                .try_read()
-                .unwrap()
-                .place_doors(board);
-            self.sub_room2
-                .as_ref()
-                .unwrap()
-                .try_read()
-                .unwrap()
-                .place_doors(board);
+            self.sub_room1.as_ref().unwrap().borrow().place_doors(board);
+            self.sub_room2.as_ref().unwrap().borrow().place_doors(board);
             return;
         }
         for up in self.up.borrow().iter() {
-            let low = self
-                .x_bounds
-                .start
-                .max(up.try_read().unwrap().x_bounds.start);
-            let high = self.x_bounds.end.min(up.try_read().unwrap().x_bounds.end);
+            let low = self.x_bounds.start.max(up.borrow().x_bounds.start);
+            let high = self.x_bounds.end.min(up.borrow().x_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(low.midpoint(high), self.y_bounds.end)] =
                 Some(Piece::Door(Door { open: false }));
         }
         for down in self.down.borrow().iter() {
-            let low = self
-                .x_bounds
-                .start
-                .max(down.try_read().unwrap().x_bounds.start);
-            let high = self.x_bounds.end.min(down.try_read().unwrap().x_bounds.end);
+            let low = self.x_bounds.start.max(down.borrow().x_bounds.start);
+            let high = self.x_bounds.end.min(down.borrow().x_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(low.midpoint(high), self.y_bounds.start)] =
                 Some(Piece::Door(Door { open: false }));
         }
         for left in self.left.borrow().iter() {
-            let low = self
-                .y_bounds
-                .start
-                .max(left.try_read().unwrap().y_bounds.start);
-            let high = self.y_bounds.end.min(left.try_read().unwrap().y_bounds.end);
+            let low = self.y_bounds.start.max(left.borrow().y_bounds.start);
+            let high = self.y_bounds.end.min(left.borrow().y_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
                 Some(Piece::Door(Door { open: false }));
         }
         for right in self.right.borrow().iter() {
-            let low = self
-                .y_bounds
-                .start
-                .max(right.try_read().unwrap().y_bounds.start);
-            let high = self
-                .y_bounds
-                .end
-                .min(right.try_read().unwrap().y_bounds.end);
+            let low = self.y_bounds.start.max(right.borrow().y_bounds.start);
+            let high = self.y_bounds.end.min(right.borrow().y_bounds.end);
             debug!(assert!(low < high));
             board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
                 Some(Piece::Door(Door { open: false }));
@@ -442,14 +378,12 @@ impl Room {
             self.sub_room1
                 .as_ref()
                 .unwrap()
-                .try_read()
-                .unwrap()
+                .borrow()
                 .place_enemies(board);
             self.sub_room2
                 .as_ref()
                 .unwrap()
-                .try_read()
-                .unwrap()
+                .borrow()
                 .place_enemies(board);
             return;
         }

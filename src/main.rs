@@ -56,11 +56,11 @@ const STAT_PATH: &str = "stats";
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
-        #[cfg(any(debug_assertions, feature = "force_log"))]
+        #[cfg(any(debug_assertions, feature = "log"))]
         $crate::log(format!($($arg)*))
     }
 }
-#[cfg(any(debug_assertions, feature = "force_log"))]
+#[cfg(any(debug_assertions, feature = "log"))]
 fn log(string: String) {
     writeln!(LOG.lock().unwrap().as_ref().unwrap(), "{string}").unwrap();
 }
@@ -80,7 +80,7 @@ static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 static SAVE: AtomicBool = AtomicBool::new(false);
 
 fn main() {
-    #[cfg(any(debug_assertions, feature = "force_log"))]
+    #[cfg(any(debug_assertions, feature = "log"))]
     {
         *LOG.lock().unwrap() = Some(File::create("log").unwrap());
     }

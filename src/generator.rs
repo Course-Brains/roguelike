@@ -298,7 +298,11 @@ impl Room {
                 return false;
             }
             let bounds = other.borrow().x_bounds.clone();
+            let low = self.x_bounds.start.max(other.borrow().x_bounds.start);
+            let high = self.x_bounds.end.min(other.borrow().x_bounds.end);
             if self.y_bounds.end != other.borrow().y_bounds.start {
+                false
+            } else if low >= high {
                 false
             } else {
                 bounds.start < self.x_bounds.end
@@ -309,7 +313,11 @@ impl Room {
                 return false;
             }
             let bounds = other.borrow().x_bounds.clone();
+            let low = self.x_bounds.start.max(other.borrow().x_bounds.start);
+            let high = self.x_bounds.end.min(other.borrow().x_bounds.end);
             if self.y_bounds.start != other.borrow().y_bounds.end {
+                false
+            } else if low >= high {
                 false
             } else {
                 bounds.start < self.x_bounds.end
@@ -320,7 +328,11 @@ impl Room {
                 return false;
             }
             let bounds = other.borrow().y_bounds.clone();
+            let low = self.y_bounds.start.max(other.borrow().y_bounds.start);
+            let high = self.y_bounds.end.min(other.borrow().y_bounds.end);
             if self.x_bounds.start != other.borrow().x_bounds.end {
+                false
+            } else if low >= high {
                 false
             } else {
                 bounds.start < self.y_bounds.end
@@ -331,7 +343,11 @@ impl Room {
                 return false;
             }
             let bounds = other.borrow().y_bounds.clone();
+            let low = self.y_bounds.start.max(other.borrow().y_bounds.start);
+            let high = self.y_bounds.end.min(other.borrow().y_bounds.end);
             if self.x_bounds.end != other.borrow().x_bounds.start {
+                false
+            } else if low >= high {
                 false
             } else {
                 bounds.start < self.y_bounds.end

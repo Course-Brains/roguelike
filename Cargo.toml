@@ -17,4 +17,8 @@ albatrice = { git = "https://github.com/albatrice/albatrice.git", branch = "cour
 crossterm = "0.29.0"
 
 [features]
-force_log = []
+log = []
+
+[profile.release-with-debug]
+inherits="release"
+debug = true

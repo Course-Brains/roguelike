@@ -11,7 +11,10 @@ impl Upgrade {
     pub fn on_step(&self, stepper: Entity<'_>) -> bool {
         if let Entity::Player(player) = stepper {
             if player.have_money(self.0.cost()) && self.0.can_pickup(player) {
-                return self.0.on_pickup(player);
+                if self.0.on_pickup(player) {
+                    player.take_money(self.0.cost());
+                    return true;
+                }
             }
         }
         false

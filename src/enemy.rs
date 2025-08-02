@@ -85,7 +85,6 @@ impl Enemy {
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
         let mut this = Some(arc.try_write().unwrap());
-        crate::log!("Thinking for: {}", this.as_ref().unwrap().variant);
         let addr = Arc::as_ptr(&arc).addr();
         if !this.as_ref().unwrap().active {
             if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
@@ -108,7 +107,7 @@ impl Enemy {
             this.as_mut().unwrap().stun -= 1;
             return false;
         }
-        crate::log!("  Active enemy");
+        crate::log!("Active enemy: {}", this.as_ref().unwrap().variant);
         match this.as_ref().unwrap().variant.clone() {
             Variant::Basic => {
                 if player.pos.x.abs_diff(this.as_ref().unwrap().pos.x) < 2
@@ -122,7 +121,8 @@ impl Enemy {
                     this.as_mut().unwrap().windup -= 1;
                     if this.as_ref().unwrap().windup == 0 {
                         if player
-                            .attacked(luck_roll8(player) as usize + 3, Variant::Basic.kill_name()).is_err()
+                            .attacked(luck_roll8(player) as usize + 3, Variant::Basic.kill_name())
+                            .is_err()
                         {
                             this.as_mut().unwrap().stun =
                                 this.as_ref().unwrap().variant.parry_stun();
@@ -435,8 +435,7 @@ impl Enemy {
                             {
                                 return false;
                             }
-                            this.as_mut().unwrap().variant =
-                                Variant::MageBoss(MageBossSpell::Swap);
+                            this.as_mut().unwrap().variant = Variant::MageBoss(MageBossSpell::Swap);
                             this.as_mut().unwrap().windup = 5;
                             this.as_mut().unwrap().attacking = true;
                             true

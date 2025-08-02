@@ -205,9 +205,15 @@ impl NormalSpell {
                         // One is within the flood and one isn't so we need to reflood
                         crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    let caster_pos = &mut get_pos(&caster, player);
-                    let swap_pos = &mut swap.try_write().unwrap().pos;
-                    std::mem::swap(caster_pos, swap_pos);
+                    match caster {
+                        Some(caster) => {
+                            std::mem::swap(
+                                &mut swap.try_write().unwrap().pos,
+                                &mut caster.try_write().unwrap().pos,
+                            );
+                        }
+                        None => std::mem::swap(&mut swap.try_write().unwrap().pos, &mut player.pos),
+                    }
                     return true;
                 }
                 false

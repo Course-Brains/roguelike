@@ -34,6 +34,7 @@ enum Command {
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
+        crate::CHEATS.store(true, crate::Ordering::Relaxed);
         let mut iter = string.split(' ');
         match iter.next().unwrap() {
             "get_player_data" => Ok(Command::GetPlayerData),
@@ -265,7 +266,6 @@ impl CommandHandler {
     }
     pub fn handle(&mut self, state: &mut State) {
         while let Ok(command) = self.rx.try_recv() {
-            crate::CHEATS.store(true, crate::Ordering::Relaxed);
             command.enact(state, &mut self.tx)
         }
     }

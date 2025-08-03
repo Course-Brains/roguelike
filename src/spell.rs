@@ -1,3 +1,4 @@
+use crate::proj_delay;
 use crate::{
     Board, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special, ray_cast,
 };
@@ -181,6 +182,8 @@ pub enum NormalSpell {
     BidenBlast,
     // Get information about the target(eg. health)
     Identify,
+    // Charge in a direction, hitting something
+    Charge,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -206,12 +209,10 @@ impl NormalSpell {
                         crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     match caster {
-                        Some(caster) => {
-                            std::mem::swap(
-                                &mut swap.try_write().unwrap().pos,
-                                &mut caster.try_write().unwrap().pos,
-                            );
-                        }
+                        Some(caster) => std::mem::swap(
+                            &mut swap.try_write().unwrap().pos,
+                            &mut caster.try_write().unwrap().pos,
+                        ),
                         None => std::mem::swap(&mut swap.try_write().unwrap().pos, &mut player.pos),
                     }
                     return true;
@@ -302,6 +303,46 @@ impl NormalSpell {
                 }
                 true
             }
+            Self::Charge => {
+                let aim = aim.unwrap();
+                let (mut path, collision) = ray_cast(
+                    get_pos(&caster, player),
+                    aim,
+                    board,
+                    None,
+                    false,
+                    player.pos,
+                );
+                // visuals for the charge
+                path.pop();
+                if path.len() != 0 {
+                    for pos in path.iter() {
+                        match caster {
+                            Some(ref caster) => caster.try_write().unwrap().pos = *pos,
+                            None => player.pos = *pos,
+                        }
+                        board.smart_render(player);
+                        proj_delay();
+                    }
+                }
+                if let Some(collision) = collision {
+                    if let Some(entity) = collision.into_entity(player) {
+                        let damage = crate::random::random8() as usize;
+                        match entity {
+                            Entity::Player(player) => {
+                                let _ = player.attacked(
+                                    damage * 5,
+                                    caster.unwrap().try_read().unwrap().variant.kill_name(),
+                                );
+                            }
+                            Entity::Enemy(arc) => {
+                                arc.try_write().unwrap().attacked(damage);
+                            }
+                        }
+                    }
+                }
+                true
+            }
         }
     }
     pub fn cast_time(&self) -> usize {
@@ -309,6 +350,7 @@ impl NormalSpell {
             Self::Swap => 3,
             Self::BidenBlast => 4,
             Self::Identify => 0,
+            Self::Charge => 1,
         }
     }
 }
@@ -319,6 +361,7 @@ impl std::str::FromStr for NormalSpell {
             "swap" => Ok(Self::Swap),
             "biden_blast" => Ok(Self::BidenBlast),
             "identify" => Ok(Self::Identify),
+            "charge" => Ok(Self::Charge),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }
@@ -332,6 +375,7 @@ impl FromBinary for NormalSpell {
             0 => Self::Swap,
             1 => Self::BidenBlast,
             2 => Self::Identify,
+            3 => Self::Charge,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -342,6 +386,7 @@ impl ToBinary for NormalSpell {
             Self::Swap => 0_u8,
             Self::BidenBlast => 1,
             Self::Identify => 2,
+            Self::Charge => 3,
         }
         .to_binary(binary)
     }

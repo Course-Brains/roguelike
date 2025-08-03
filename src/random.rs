@@ -47,6 +47,9 @@ pub fn random_index(max: usize) -> Option<usize> {
 pub fn random4() -> u8 {
     (random() & 3) + 1
 }
+pub fn random8() -> u8 {
+    (random() & 7) + 1
+}
 pub trait Random {
     fn random() -> Self;
 }

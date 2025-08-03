@@ -102,6 +102,7 @@ fn main() {
                 view_stats();
                 return;
             }
+            "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
             _ => {}
         }
     }
@@ -856,6 +857,7 @@ fn set_desc(msg: &'static str) {
     std::io::stdout().flush().unwrap();
 }
 // Gets the list of positions a projectile travels through and what it hit
+// DOES include the position of what it hit
 fn ray_cast(
     from: Vector,
     to: Vector,

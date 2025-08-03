@@ -214,52 +214,18 @@ impl Enemy {
             Variant::BasicBoss(direction) => {
                 if this.as_ref().unwrap().windup > 0 {
                     if this.as_ref().unwrap().windup == 1 {
+                        let start = this.as_ref().unwrap().pos;
                         // charge time
-                        let mut pos = this.as_ref().unwrap().pos;
-                        // Explained lower
-                        loop {
-                            pos += direction;
-                            if player.pos == pos {
-                                let _ = player
-                                    .attacked(20, Variant::BasicBoss(Direction::Up).kill_name());
-                                break;
-                            }
-                            if let Some(piece) = &board[pos] {
-                                if piece.enemy_collision() {
-                                    break;
-                                }
-                            }
-                            let mut other = None;
-                            for enemy in board.enemies.iter() {
-                                if Arc::ptr_eq(enemy, &arc) {
-                                    continue;
-                                }
-                                if enemy.try_read().unwrap().pos == pos {
-                                    other = Some(enemy.clone());
-                                    break;
-                                }
-                            }
-                            if let Some(other) = other {
-                                albatrice::debug!(if Arc::ptr_eq(&other, &arc) {
-                                    unreachable!("basic boss charged itself")
-                                });
-                                other.try_write().unwrap().attacked(4);
-                                break;
-                            }
-                            this.as_mut().unwrap().pos = pos;
-                            // It is VERY important that we release the lock on the enemy here.
-                            // Rendering REQUIRES that it can get a read of EVERY enemy (that
-                            // includes this one) which means that even though I have to do bad
-                            // shit, it is very important that the value inside this is dropped.
-                            this.take();
-                            board.smart_render(player);
-                            this = Some(arc.try_write().unwrap());
-                            std::thread::sleep(crate::PROJ_DELAY);
-                        }
-                        let mut this = this.unwrap();
-                        this.pos = pos - direction;
-                        this.windup = 0;
-                        this.attacking = false;
+                        this.take();
+                        NormalSpell::Charge.cast(
+                            Some(arc.clone()),
+                            player,
+                            board,
+                            None,
+                            Some(start + direction),
+                        );
+                        this = Some(arc.try_write().unwrap());
+                        this.as_mut().unwrap().windup = 0;
                         true
                     } else {
                         this.as_mut().unwrap().windup -= 1;

@@ -181,6 +181,28 @@ impl Board {
         }
         false
     }
+    pub fn flood_within(&self, origin: Vector, range: usize, enemy_collision: bool) -> Vec<Vector> {
+        let mut seen = HashSet::new();
+        let mut next = VecDeque::new();
+        next.push_front((origin, 0));
+        seen.insert(origin);
+        while let Some((pos, cost)) = next.pop_back() {
+            if cost >= range {
+                continue;
+            }
+            for adj in self
+                .get_adjacent(pos, None, enemy_collision)
+                .to_vec(pos)
+                .iter()
+            {
+                if !seen.contains(adj) {
+                    seen.insert(*adj);
+                    next.push_front((*adj, cost + 1));
+                }
+            }
+        }
+        seen.iter().map(|pos| *pos).collect()
+    }
 }
 // Rendering
 impl Board {
@@ -199,7 +221,9 @@ impl Board {
                 if let Some(piece) = &self[Vector::new(x, y)] {
                     let index = self.to_index(Vector::new(x, y));
                     let mut memory = false;
-                    if player.upgrades.map && piece.on_map() {
+                    if player.effects.full_vis.is_active()
+                        || (player.upgrades.map && piece.on_map())
+                    {
                         if !bounds.contains(&Vector::new(x, y)) {
                             continue;
                         }
@@ -247,7 +271,11 @@ impl Board {
         self.render(bounds.clone(), &mut lock, player);
         self.draw_spells(&mut lock, bounds.clone());
         self.draw_enemies(&mut lock, bounds.clone(), player);
-        self.draw_specials(&mut lock, bounds.clone());
+        self.draw_specials(
+            &mut lock,
+            bounds.clone(),
+            player.effects.full_vis.is_active(),
+        );
         self.draw_desc(player, &mut lock);
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         player.draw(self, bounds.clone());
@@ -265,7 +293,8 @@ impl Board {
             if !bounds.contains(&pos) {
                 continue;
             }
-            if player.effects.mage_sight.is_active() {
+            if player.effects.full_vis.is_active() {
+            } else if player.effects.mage_sight.is_active() {
                 if !enemy.try_read().unwrap().reachable {
                     continue;
                 }
@@ -279,17 +308,17 @@ impl Board {
             }
         }
     }
-    pub fn is_visible(&self, pos: Vector, bounds: Range<Vector>) -> bool {
+    pub fn is_visible(&self, pos: Vector, bounds: Range<Vector>, full_vis: bool) -> bool {
         if !bounds.contains(&pos) {
             return false;
         }
-        self.visible[self.to_index(pos)]
+        self.visible[self.to_index(pos)] || full_vis
     }
-    fn draw_specials(&mut self, lock: &mut impl Write, bounds: Range<Vector>) {
+    fn draw_specials(&mut self, lock: &mut impl Write, bounds: Range<Vector>, full_vis: bool) {
         self.specials.retain(|special| special.upgrade().is_some());
         for special in self.specials.iter() {
             let special = special.upgrade().unwrap();
-            if self.is_visible(special.pos, bounds.clone()) {
+            if self.is_visible(special.pos, bounds.clone(), full_vis) {
                 crossterm::queue!(lock, (special.pos - bounds.start).to_move()).unwrap();
                 match special.style {
                     Some(style) => write!(lock, "{}{}\x1b[0m", style, special.ch).unwrap(),
@@ -694,13 +723,21 @@ impl Board {
         bounds: Range<Vector>,
     ) {
         if self.move_enemy(player, enemy.clone())
-            && self.is_visible(enemy.try_read().unwrap().pos, bounds.clone())
+            && self.is_visible(
+                enemy.try_read().unwrap().pos,
+                bounds.clone(),
+                player.effects.full_vis.is_active(),
+            )
         {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);
         }
         if Enemy::think(enemy.clone(), self, player)
-            && self.is_visible(enemy.try_read().unwrap().pos, bounds.clone())
+            && self.is_visible(
+                enemy.try_read().unwrap().pos,
+                bounds.clone(),
+                player.effects.full_vis.is_active(),
+            )
         {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);

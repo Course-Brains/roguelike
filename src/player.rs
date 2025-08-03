@@ -242,6 +242,14 @@ impl Player {
     pub unsafe fn mut_money(&mut self) -> &mut usize {
         &mut self.money
     }
+    // gets the damage dealt by the player per hit
+    pub fn get_damage(&self) -> usize {
+        if self.effects.damage_boost.is_active() {
+            2
+        } else {
+            1
+        }
+    }
 }
 // Rendering
 impl Player {
@@ -430,6 +438,10 @@ pub struct Effects {
     pub unlucky: Duration,
     // make enemies roll even better(+4)
     pub doomed: Duration,
+    // +1 to damage
+    pub damage_boost: Duration,
+    // debug full visibility
+    pub full_vis: Duration,
 }
 impl Effects {
     // Creates an instance with no effects
@@ -440,6 +452,8 @@ impl Effects {
             regen: Duration::None,
             unlucky: Duration::None,
             doomed: Duration::None,
+            damage_boost: Duration::None,
+            full_vis: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
@@ -449,6 +463,8 @@ impl Effects {
         self.regen.decriment();
         self.unlucky.decriment();
         self.doomed.decriment();
+        self.damage_boost.decriment();
+        self.full_vis.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -462,6 +478,8 @@ impl Effects {
                     "regen" => self.regen = args.parse()?,
                     "unlucky" => self.unlucky = args.parse()?,
                     "doomed" => self.doomed = args.parse()?,
+                    "damage_boost" => self.damage_boost = args.parse()?,
+                    "full_vis" => self.full_vis = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
@@ -490,6 +508,14 @@ impl Effects {
             println!("    and is doomed for");
             self.doomed.list()
         }
+        if self.damage_boost.is_active() {
+            println!("    and has boosted damage for");
+            self.damage_boost.list()
+        }
+        if self.full_vis.is_active() {
+            println!("    and can see everything for");
+            self.full_vis.list();
+        }
     }
     pub fn has_none(&self) -> bool {
         if self.invincible.is_active() {
@@ -507,6 +533,12 @@ impl Effects {
         if self.doomed.is_active() {
             return false;
         }
+        if self.damage_boost.is_active() {
+            return false;
+        }
+        if self.full_vis.is_active() {
+            return false;
+        }
         true
     }
 }
@@ -521,6 +553,8 @@ impl FromBinary for Effects {
             regen: Duration::from_binary(binary)?,
             unlucky: Duration::from_binary(binary)?,
             doomed: Duration::from_binary(binary)?,
+            damage_boost: Duration::from_binary(binary)?,
+            full_vis: Duration::from_binary(binary)?,
         })
     }
 }
@@ -530,7 +564,9 @@ impl ToBinary for Effects {
         self.mage_sight.to_binary(binary)?;
         self.regen.to_binary(binary)?;
         self.unlucky.to_binary(binary)?;
-        self.doomed.to_binary(binary)
+        self.doomed.to_binary(binary)?;
+        self.damage_boost.to_binary(binary)?;
+        self.full_vis.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -599,10 +635,11 @@ impl std::str::FromStr for Duration {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut split = s.split(' ');
-        match split.next() {
+        match split.next().map(|s| s.trim()) {
             Some("none") => Ok(Duration::None),
             Some("turns") => Ok(Duration::Turns(parse(split.next())?)),
             Some("infinite") => Ok(Duration::Infinite),
+            Some("") => Ok(Duration::Infinite),
             Some(other) => Err(format!("{other} is not a valid duration")),
             None => Err("Did not get duration".to_string()),
         }

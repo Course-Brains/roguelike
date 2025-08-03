@@ -5,7 +5,7 @@ if [ "--update" = "$1" ]; then
 fi
 BACKTRACE_RESET=$RUST_BACKTRACE
 export RUST_BACKTRACE=1
-cargo run --features "log" 2> error.txt
+cargo run --features "log" -- $@ 2> error.txt
 if [ $? -eq 0 ]; then
     rm error.txt
 else

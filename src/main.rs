@@ -10,7 +10,7 @@ mod enemy;
 mod pieces;
 use enemy::Enemy;
 mod random;
-use random::{Random, random, random_in_range, random4};
+use random::{Random, random, random_in_range};
 mod commands;
 mod generator;
 use generator::generate;
@@ -46,7 +46,7 @@ fn proj_delay() {
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 0;
+const SAVE_VERSION: Version = 1;
 type Version = u32;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
@@ -85,6 +85,10 @@ fn main() {
         *LOG.lock().unwrap() = Some(File::create("log").unwrap());
     }
     random::initialize();
+    crate::log!(
+        "Recieved args: {:?}",
+        std::env::args().collect::<Vec<String>>()
+    );
     let mut args = std::env::args();
     let mut testing = false;
     while let Some(arg) = args.next() {
@@ -304,7 +308,11 @@ fn main() {
                 }
                 for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
                     if enemy.try_read().unwrap().pos == state.player.selector {
-                        if enemy.try_write().unwrap().attacked(1) {
+                        if enemy
+                            .try_write()
+                            .unwrap()
+                            .attacked(state.player.get_damage())
+                        {
                             state.player.on_kill(
                                 &state.board.enemies.swap_remove(index).try_read().unwrap(),
                             )

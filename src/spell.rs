@@ -1,6 +1,7 @@
 use crate::proj_delay;
 use crate::{
-    Board, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special, ray_cast,
+    Board, Collision, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special,
+    ray_cast,
 };
 use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
@@ -184,6 +185,8 @@ pub enum NormalSpell {
     Identify,
     // Charge in a direction, hitting something
     Charge,
+    // BidenBlast but bigger
+    BigExplode,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -220,54 +223,20 @@ impl NormalSpell {
                 false
             }
             Self::BidenBlast => {
-                let aim = aim.unwrap();
-                let origin = origin.unwrap_or(get_pos(&caster, player));
-                let path = ray_cast(origin, aim, board, None, caster.is_none(), player.pos).0;
-                let last_pos = *path.last().unwrap();
-                let render_bounds = board.get_render_bounds(player);
-
-                // drawing projectile
-                for pos in path.iter() {
-                    let special = board.add_special(fireball(*pos));
-                    if board.is_visible(*pos, render_bounds.clone()) {
-                        board.smart_render(player);
-                        crate::proj_delay();
-                    }
-                    std::mem::drop(special);
-                }
-                // drawing explosion
-                if board.is_visible(last_pos, render_bounds) {
-                    let mut specials = Vec::new();
-                    specials.push(board.add_special(explosion(last_pos)));
-                    board.smart_render(player);
-                    std::thread::sleep(crate::PROJ_DELAY * 4);
-                    for pos in last_pos.list_near(2).iter() {
-                        specials.push(board.add_special(explosion(*pos)));
-                    }
-                    board.smart_render(player);
-                    std::thread::sleep(crate::PROJ_DELAY * 4);
-                    std::mem::drop(specials);
-                    board.smart_render(player);
-                }
-                // dealing damage
-                let near = board.get_near(None, last_pos, 3);
-                for enemy in near.iter() {
-                    enemy
-                        .upgrade()
-                        .unwrap()
-                        .try_write()
-                        .unwrap()
-                        .attacked(crate::random4() as usize);
-                }
-                if player.pos.is_near(last_pos, 3) {
-                    let _ = player.attacked(
-                        crate::random4() as usize * 5,
-                        match caster {
-                            Some(caster) => caster.try_read().unwrap().variant.kill_name(),
-                            None => "a lack of depth perception",
-                        },
-                    );
-                }
+                let damage = crate::random::random4() as usize;
+                NormalSpell::fireball(
+                    caster.clone(),
+                    player,
+                    board,
+                    origin,
+                    aim,
+                    2,
+                    damage,
+                    damage * 5,
+                    caster
+                        .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
+                        .unwrap_or("a lack of depth perception"),
+                );
                 true
             }
             Self::Identify => {
@@ -343,6 +312,23 @@ impl NormalSpell {
                 }
                 true
             }
+            Self::BigExplode => {
+                let damage = crate::random::random16() as usize;
+                NormalSpell::fireball(
+                    caster.clone(),
+                    player,
+                    board,
+                    origin,
+                    aim,
+                    7,
+                    damage,
+                    damage * 5,
+                    caster
+                        .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
+                        .unwrap_or("a common lapse in judgement"),
+                );
+                true
+            }
         }
     }
     pub fn cast_time(&self) -> usize {
@@ -350,7 +336,64 @@ impl NormalSpell {
             Self::Swap => 3,
             Self::BidenBlast => 4,
             Self::Identify => 0,
-            Self::Charge => 1,
+            Self::Charge => 2,
+            Self::BigExplode => 10,
+        }
+    }
+    fn fireball(
+        caster: Option<Arc<RwLock<Enemy>>>,
+        player: &mut Player,
+        board: &mut Board,
+        origin: Option<Vector>,
+        aim: Option<Vector>,
+        explosion_size: usize,
+        damage: usize,
+        player_damage: usize,
+        death_name: &'static str,
+    ) {
+        let aim = aim.unwrap();
+        let origin = origin.unwrap_or(get_pos(&caster, player));
+        let (mut path, collision) =
+            ray_cast(origin, aim, board, None, caster.is_none(), player.pos);
+        if let Some(Collision::Piece(_)) = collision {
+            path.pop();
+        }
+        let bounds = board.get_render_bounds(player);
+        // rendering the projectile
+        for pos in path.iter() {
+            if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
+                let special = board.add_special(fireball(*pos));
+                board.smart_render(player);
+                proj_delay();
+                drop(special);
+            }
+        }
+        board.smart_render(player);
+        // explosion
+        let epicenter = path.last().unwrap_or(&origin);
+        let mut specials = Vec::new();
+        for size in 1..=explosion_size {
+            let mut seen = false;
+            for pos in board.flood_within(*epicenter, size, false).iter() {
+                if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
+                    specials.push(board.add_special(explosion(*pos)));
+                    board.smart_render(player);
+                    seen = true;
+                }
+            }
+            if seen {
+                std::thread::sleep(crate::PROJ_DELAY * 4);
+                specials.truncate(0);
+            }
+        }
+        board.smart_render(player);
+        for pos in board.flood_within(*epicenter, explosion_size, false).iter() {
+            if player.pos == *pos {
+                let _ = player.attacked(player_damage, death_name);
+            }
+            if let Some(enemy) = board.get_enemy(*pos, None) {
+                enemy.try_write().unwrap().attacked(damage);
+            }
         }
     }
 }
@@ -362,6 +405,7 @@ impl std::str::FromStr for NormalSpell {
             "biden_blast" => Ok(Self::BidenBlast),
             "identify" => Ok(Self::Identify),
             "charge" => Ok(Self::Charge),
+            "big_explode" => Ok(Self::BigExplode),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }
@@ -376,6 +420,7 @@ impl FromBinary for NormalSpell {
             1 => Self::BidenBlast,
             2 => Self::Identify,
             3 => Self::Charge,
+            4 => Self::BigExplode,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -387,6 +432,7 @@ impl ToBinary for NormalSpell {
             Self::BidenBlast => 1,
             Self::Identify => 2,
             Self::Charge => 3,
+            Self::BigExplode => 4,
         }
         .to_binary(binary)
     }

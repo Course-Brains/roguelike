@@ -42,6 +42,7 @@ impl Enemy {
             match self.variant {
                 Variant::Basic | Variant::BasicBoss(_) => '1',
                 Variant::Mage(_) | Variant::MageBoss(_) => '2',
+                Variant::FighterBoss { .. } => '3',
             },
             Some({
                 let mut out = crate::Style::new();
@@ -411,6 +412,113 @@ impl Enemy {
                     }
                 }
             }
+            Variant::FighterBoss { buff, action } => {
+                if this.as_ref().unwrap().windup > 0 {
+                    if this.as_ref().unwrap().windup == 1 {
+                        // Doin' time
+                        match action {
+                            FighterBossAction::Teleport(aim) => {
+                                this.take();
+                                // TODO: change this to be an actual teleportation
+                                NormalSpell::Charge.cast(
+                                    Some(arc.clone()),
+                                    player,
+                                    board,
+                                    None,
+                                    Some(aim),
+                                );
+                                this = Some(arc.try_write().unwrap());
+                            }
+                            FighterBossAction::BigExplode(aim) => {
+                                this.take();
+                                NormalSpell::BigExplode.cast(
+                                    Some(arc.clone()),
+                                    player,
+                                    board,
+                                    None,
+                                    Some(aim),
+                                );
+                                this = Some(arc.try_write().unwrap());
+                            }
+                            FighterBossAction::ApplyBuff => {
+                                if let Variant::FighterBoss { buff, .. } =
+                                    &mut this.as_mut().unwrap().variant
+                                {
+                                    *buff = 3;
+                                } else {
+                                    unreachable!("My name is Professor Bug");
+                                }
+                            }
+                            FighterBossAction::Smack => {
+                                if this.as_ref().unwrap().pos.is_near(player.pos, 2) {
+                                    // Smackins
+                                    let mut damage = crate::random::random8() as usize;
+                                    if buff > 0 {
+                                        damage *= 2;
+                                    }
+                                    let _ = player.attacked(
+                                        damage,
+                                        this.as_ref().unwrap().variant.kill_name(),
+                                    );
+                                    if let Variant::FighterBoss { buff, .. } =
+                                        &mut this.as_mut().unwrap().variant
+                                    {
+                                        *buff = *buff - 1;
+                                    } else {
+                                        unreachable!("Professor Bug, that is my name");
+                                    }
+                                }
+                            }
+                        }
+                        this.as_mut().unwrap().windup = 0;
+                        true
+                    } else {
+                        this.as_mut().unwrap().windup -= 1;
+                        false
+                    }
+                } else {
+                    // deciding what to do
+                    this.as_mut().unwrap().attacking = true;
+                    if this.as_ref().unwrap().pos.is_near(player.pos, 2) && buff > 0 {
+                        // Smacking
+                        this.as_mut()
+                            .unwrap()
+                            .variant
+                            .set_fighter_boss_action(FighterBossAction::Smack);
+                        this.as_mut().unwrap().windup = 2;
+                    } else if this.as_ref().unwrap().pos.is_near(player.pos, 6) && buff == 0 {
+                        // Teleporting away
+                        let delta_x = this.as_ref().unwrap().pos.x as isize - player.pos.x as isize;
+                        let delta_y = this.as_ref().unwrap().pos.y as isize - player.pos.y as isize;
+                        let target_x = this.as_ref().unwrap().pos.x as isize + delta_x;
+                        let target_y = this.as_ref().unwrap().pos.y as isize + delta_y;
+                        let target =
+                            Vector::new(target_x.max(0) as usize, target_y.max(0) as usize);
+                        this.as_mut()
+                            .unwrap()
+                            .variant
+                            .set_fighter_boss_action(FighterBossAction::Teleport(target));
+                        this.as_mut().unwrap().windup = 3;
+                    } else if !this.as_ref().unwrap().pos.is_near(player.pos, 10) && buff == 0 {
+                        // Buffing self
+                        this.as_mut()
+                            .unwrap()
+                            .variant
+                            .set_fighter_boss_action(FighterBossAction::ApplyBuff);
+                        this.as_mut().unwrap().windup = 10;
+                    } else if !this.as_ref().unwrap().pos.is_near(player.pos, 10) {
+                        // Big explode
+                        this.as_mut()
+                            .unwrap()
+                            .variant
+                            .set_fighter_boss_action(FighterBossAction::BigExplode(player.pos));
+                        this.as_mut().unwrap().windup = 6;
+                    } else {
+                        this.as_mut().unwrap().attacking = false;
+                    }
+                    false
+                }
+            }
         }
     }
     pub fn is_near(&self, pos: Vector, range: usize) -> bool {
@@ -419,9 +527,10 @@ impl Enemy {
     pub fn promote(&mut self) -> Result<(), ()> {
         match self.variant {
             Variant::Basic => self.variant = Variant::basic_boss(),
-            Variant::BasicBoss(_) => return Err(()),
             Variant::Mage(_) => self.variant = Variant::mage_boss(),
-            Variant::MageBoss(_) => return Err(()),
+            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => {
+                return Err(());
+            }
         }
         Ok(())
     }
@@ -447,6 +556,10 @@ pub enum Variant {
     BasicBoss(Direction),
     Mage(MageSpell),
     MageBoss(MageBossSpell),
+    FighterBoss {
+        buff: usize,
+        action: FighterBossAction,
+    },
 }
 impl Variant {
     fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
@@ -464,10 +577,8 @@ impl Variant {
                 ),
                 None => false,
             },
-            Variant::BasicBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
-                .cost
-                .is_some(),
-            Variant::MageBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
+            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => board
+                .backtraces[board.x * enemy.pos.y + enemy.pos.x]
                 .cost
                 .is_some(),
         }
@@ -476,10 +587,15 @@ impl Variant {
         // red is physical
         // purple is magic
         match self {
-            Variant::Basic => Color::Red,
-            Variant::BasicBoss(_) => Color::Red,
-            Variant::Mage(_) => Color::Purple,
-            Variant::MageBoss(_) => Color::Purple,
+            Variant::Basic | Variant::BasicBoss(_) => Color::Red,
+            Variant::Mage(_) | Variant::MageBoss(_) => Color::Purple,
+            Variant::FighterBoss { action, .. } => {
+                if let FighterBossAction::Smack = action {
+                    Color::Red
+                } else {
+                    Color::Purple
+                }
+            }
         }
     }
     fn max_health(&self) -> usize {
@@ -488,22 +604,22 @@ impl Variant {
             Variant::BasicBoss(_) => 10,
             Variant::Mage(_) => 5,
             Variant::MageBoss(_) => 10,
+            Variant::FighterBoss { .. } => 15,
         }
     }
     fn parry_stun(&self) -> usize {
         match self {
-            Variant::Basic => 3,
-            Variant::BasicBoss(_) => 1,
-            Variant::Mage(_) => 0,
-            Variant::MageBoss(_) => 0,
+            Variant::Basic => 5,
+            Variant::BasicBoss(_) => 2,
+            Variant::Mage(_) | Variant::MageBoss(_) => 0,
+            Variant::FighterBoss { .. } => 2,
         }
     }
     fn dash_stun(&self) -> usize {
         match self {
             Variant::Basic => 1,
-            Variant::BasicBoss(_) => 0,
             Variant::Mage(_) => 2,
-            Variant::MageBoss(_) => 0,
+            Variant::MageBoss(_) | Variant::BasicBoss(_) | Variant::FighterBoss { .. } => 0,
         }
     }
     // returns kill reward in energy, then health
@@ -514,6 +630,7 @@ impl Variant {
             Variant::BasicBoss(_) => (10, 10),
             Variant::Mage(_) => (5, 5),
             Variant::MageBoss(_) => (20, 5),
+            Variant::FighterBoss { .. } => (15, 10),
         }
     }
     pub fn kill_name(&self) -> &'static str {
@@ -522,23 +639,21 @@ impl Variant {
             Variant::BasicBoss(_) => "Specialized Automata",
             Variant::Mage(_) => "Mage Construct",
             Variant::MageBoss(_) => "Lazy Mage",
+            Variant::FighterBoss { .. } => "",
         }
     }
     pub fn is_boss(&self) -> bool {
-        match self {
-            Variant::Basic => false,
-            Variant::BasicBoss(_) => true,
-            Variant::Mage(_) => false,
-            Variant::MageBoss(_) => true,
-        }
+        matches!(
+            self,
+            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. }
+        )
     }
     // used to get which type should be promoted into the boss
     pub fn get_tier(&self) -> Result<usize, ()> {
         match self {
             Variant::Basic => Ok(1),
-            Variant::BasicBoss(_) => Err(()),
             Variant::Mage(_) => Ok(2),
-            Variant::MageBoss(_) => Err(()),
+            Variant::MageBoss(_) | Variant::BasicBoss(_) | Variant::FighterBoss { .. } => Err(()),
         }
     }
     fn mage_aggro(&self) -> bool {
@@ -546,6 +661,11 @@ impl Variant {
             Self::Mage(_) => true,
             // Bosses don't matter because they always have aggro
             _ => false,
+        }
+    }
+    fn set_fighter_boss_action(&mut self, new_action: FighterBossAction) {
+        if let Variant::FighterBoss { action, .. } = self {
+            *action = new_action;
         }
     }
     pub const fn basic() -> Variant {
@@ -560,6 +680,12 @@ impl Variant {
     pub const fn mage_boss() -> Variant {
         Variant::MageBoss(MageBossSpell::Create)
     }
+    pub const fn fighter_boss() -> Variant {
+        Variant::FighterBoss {
+            buff: 0,
+            action: FighterBossAction::Smack,
+        }
+    }
 }
 impl std::fmt::Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -568,6 +694,7 @@ impl std::fmt::Display for Variant {
             Variant::Mage(_) => write!(f, "mage"),
             Variant::BasicBoss(_) => write!(f, "basic_boss"),
             Variant::MageBoss(_) => write!(f, "mage_boss"),
+            Variant::FighterBoss { .. } => write!(f, "fighter_boss"),
         }
     }
 }
@@ -579,6 +706,7 @@ impl std::str::FromStr for Variant {
             "mage" => Ok(Variant::mage()),
             "basic_boss" => Ok(Variant::basic_boss()),
             "mage_boss" => Ok(Variant::mage_boss()),
+            "fighter_boss" => Ok(Variant::fighter_boss()),
             _ => Err("invalid variant".to_string()),
         }
     }
@@ -597,6 +725,13 @@ pub enum MageBossSpell {
     Create,
     // swap places with another enemy (5 turns)
     Swap,
+}
+#[derive(Clone, Debug, Copy)]
+pub enum FighterBossAction {
+    Teleport(Vector),
+    BigExplode(Vector),
+    ApplyBuff,
+    Smack,
 }
 pub fn luck_roll8(player: &Player) -> u8 {
     let base = crate::random() & 7;

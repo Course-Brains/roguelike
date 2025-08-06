@@ -31,13 +31,16 @@ enum Command {
     Cast(Spell),
     CreateCircle(Spell, SmartVector, SmartVector),
     GetData(SmartVector),
+    GetBoss,
+    CountEnemies,
+    Checksum,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
         crate::CHEATS.store(true, crate::Ordering::Relaxed);
         let mut iter = string.split(' ');
         match iter.next().unwrap() {
-            "get_player_data" => Ok(Command::GetPlayerData),
+            "get_pla yer_data" => Ok(Command::GetPlayerData),
             "set_health" => Ok(Command::SetHealth(match iter.next() {
                 Some(arg) => Some(parse(Some(arg))?),
                 None => None,
@@ -96,6 +99,9 @@ impl Command {
                 iter.next(),
                 true,
             )?)),
+            "get_boss" => Ok(Command::GetBoss),
+            "count_enemies" => Ok(Command::CountEnemies),
+            "checksum" => Ok(Command::Checksum),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -250,6 +256,74 @@ impl Command {
                             .unwrap();
                         }
                     }
+                }
+            }
+            Command::GetBoss => match state.board.boss.as_ref().map(|weak| weak.upgrade()) {
+                Some(Some(arc)) => {
+                    let mut index = None;
+                    for (ind, enemy) in state.board.enemies.iter().enumerate() {
+                        if std::sync::Arc::ptr_eq(&arc, enemy) {
+                            index = Some(ind);
+                        }
+                    }
+                    let enemy = arc.try_read().unwrap();
+                    out.send(format!(
+                        "The boss is a: {} at pos: {} and index: {}",
+                        enemy.variant,
+                        enemy.pos,
+                        index.unwrap()
+                    ))
+                    .unwrap()
+                }
+                _ => out.send("There is no boss".to_string()).unwrap(),
+            },
+            Command::CountEnemies => {
+                let mut count = std::collections::HashMap::new();
+                for enemy in state.board.enemies.iter() {
+                    let variant_num = match enemy.try_read().unwrap().variant {
+                        crate::enemy::Variant::Basic => 0,
+                        crate::enemy::Variant::BasicBoss(_) => 1,
+                        crate::enemy::Variant::Mage(_) => 2,
+                        crate::enemy::Variant::MageBoss(_) => 3,
+                        crate::enemy::Variant::Fighter(_) => 4,
+                        crate::enemy::Variant::FighterBoss { .. } => 5,
+                    };
+                    let prev = count.get(&variant_num).unwrap_or(&0);
+                    count.insert(variant_num, prev + 1);
+                }
+                out.send(format!("There are {} basic", count.get(&0).unwrap_or(&0)))
+                    .unwrap();
+                out.send(format!(
+                    "There are {} basic_boss",
+                    count.get(&1).unwrap_or(&0)
+                ))
+                .unwrap();
+                out.send(format!("There are {} mage", count.get(&2).unwrap_or(&0)))
+                    .unwrap();
+                out.send(format!(
+                    "There are {} mage_boss",
+                    count.get(&3).unwrap_or(&0)
+                ))
+                .unwrap();
+                out.send(format!("There are {} fighter", count.get(&4).unwrap_or(&0)))
+                    .unwrap();
+                out.send(format!(
+                    "There are {} fighter_boss",
+                    count.get(&5).unwrap_or(&0)
+                ))
+                .unwrap();
+            }
+            Command::Checksum => {
+                let mut failed = false;
+                for enemy in state.board.enemies.iter() {
+                    let pos = enemy.try_read().unwrap().pos;
+                    if state.board[pos].is_some() {
+                        out.send(format!("Failure at {pos}")).unwrap();
+                        failed = true;
+                    }
+                }
+                if !failed {
+                    out.send("no faults".to_string()).unwrap()
                 }
             }
         }

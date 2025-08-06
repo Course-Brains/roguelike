@@ -165,3 +165,14 @@ create\_circle \[spell type\] \[spell\] \[pos x\] \[pos y\] \[target x\] \[targe
 get\_data \[x\] \[y\]
     Gets all data at the given position(except backtrace data >:}), it
     does use relative positioning
+
+get\_boss
+   Gives the boss's position, type, and index if it exists
+
+count\_enemies
+    Counts the number of each type of enemy
+
+checksum
+    Checks and reports any instances of enemies being on top of a
+    piece, notably, this does not ignore cases like open doors where
+    that is intentional

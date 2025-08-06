@@ -10,7 +10,7 @@ mod enemy;
 mod pieces;
 use enemy::Enemy;
 mod random;
-use random::{Random, random, random_in_range};
+use random::{Random, random};
 mod commands;
 mod generator;
 use generator::generate;
@@ -90,6 +90,7 @@ fn main() {
         std::env::args().collect::<Vec<String>>()
     );
     let mut args = std::env::args();
+    let mut counting = false;
     let mut testing = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -100,7 +101,11 @@ fn main() {
             }
             "maptest" => {
                 log!("TESTING MAP GEN");
-                testing = true
+                testing = true;
+            }
+            "mapcount" => {
+                log!("COUNTING BOSSES");
+                counting = true
             }
             "stats" => {
                 view_stats();
@@ -111,13 +116,21 @@ fn main() {
         }
     }
     if testing {
-        let mut count = 0;
+        generate(MapGenSettings::new(151, 151, 45, 15, 75))
+            .join()
+            .unwrap();
+        return;
+    }
+    if counting {
+        let mut basic = 0;
+        let mut mage = 0;
+        let mut fighter = 0;
         for index in 0..u8::MAX {
             random::initialize_with(index);
             let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
                 .join()
                 .unwrap();
-            if let enemy::Variant::BasicBoss(_) = board
+            match board
                 .boss
                 .unwrap()
                 .upgrade()
@@ -126,11 +139,13 @@ fn main() {
                 .unwrap()
                 .variant
             {
-                print!("{index}, ");
-                count += 1;
+                enemy::Variant::BasicBoss(_) => basic += 1,
+                enemy::Variant::MageBoss(_) => mage += 1,
+                enemy::Variant::FighterBoss { .. } => fighter += 1,
+                _ => unreachable!("non boss boss"),
             }
         }
-        println!("\n{count} out of 256 have the basic boss");
+        println!("basic: {basic}\nmage: {mage}\nfighter: {fighter}");
         return;
     }
 

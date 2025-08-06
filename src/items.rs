@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{FromBinary, Style, ToBinary, player::Duration};
+use crate::{FromBinary, Style, ToBinary, player::Duration, spell::NormalSpell};
 
 const SCROLL: char = 'S';
 const POTION: char = 'P';
@@ -145,18 +145,14 @@ impl ItemType {
                 true
             }
             Self::EnderPearl => {
-                let path = crate::ray_cast(
-                    state.player.pos,
-                    state.player.selector,
-                    &state.board,
+                let aim = state.player.selector;
+                NormalSpell::Teleport.cast(
                     None,
-                    true,
-                    state.player.pos,
-                )
-                .0;
-                if path.len() >= 2 {
-                    state.player.pos = path[path.len() - 2];
-                }
+                    &mut state.player,
+                    &mut state.board,
+                    None,
+                    Some(aim),
+                );
                 true
             }
             Self::Warp => {

@@ -1,6 +1,6 @@
 use crate::{
     Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
-    pieces::wall::Wall, random, random_in_range,
+    pieces::wall::Wall, random::*,
 };
 use albatrice::debug;
 use std::cell::RefCell;
@@ -37,6 +37,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
             elapsed.as_secs(),
             elapsed.as_millis()
         );
+        //checksum(&board);
         board
     })
 }
@@ -87,6 +88,35 @@ fn promote_boss(board: &mut Board) {
     board.boss_pos = boss.try_read().unwrap().pos;
     boss.try_write().unwrap().promote().unwrap()
 }
+fn attempt_pick_pos(
+    board: &mut Board,
+    x_range: &Range<usize>,
+    y_range: &Range<usize>,
+) -> Option<Vector> {
+    for _ in 0..10 {
+        delay();
+        let x = random_in_usize_range(x_range);
+        delay();
+        let y = random_in_usize_range(y_range);
+        let pos = Vector::new(x, y);
+        if board.get_enemy(pos, None).is_none() && board[pos].is_none() {
+            return Some(pos);
+        }
+    }
+    None
+}
+fn checksum(board: &Board) {
+    for enemy in board.enemies.iter() {
+        let pos = enemy.try_read().unwrap().pos;
+        let addr = Arc::as_ptr(enemy).addr();
+        if let Some(piece) = &board[pos] {
+            panic!("Enemy spawned inside: {piece}");
+        }
+        if let Some(_) = board.get_enemy(pos, Some(addr)) {
+            panic!("Enemy spawned inside another enemy")
+        }
+    }
+}
 fn delay() {
     if DO_DELAY.load(Ordering::SeqCst) {
         std::thread::sleep(DELAY)
@@ -126,8 +156,17 @@ impl Room {
             assert_eq!(x_len % INTERVAL, 0, "x_len = {x_len}");
             assert_eq!(y_len % INTERVAL, 0, "y_len = {y_len}");
         });
+        let mut force_axis = None;
         if x_len <= MINIMUM || y_len <= MINIMUM {
-            return;
+            if max {
+                if x_len <= MINIMUM {
+                    force_axis = Some(Axis::Vertical)
+                } else {
+                    force_axis = Some(Axis::Horizontal)
+                }
+            } else {
+                return;
+            }
         }
         let mut axis;
         if x_len > y_len {
@@ -136,7 +175,7 @@ impl Room {
             axis = Axis::Horizontal;
         }
         delay();
-        if max && random() & 0b0011_1111 == 0 {
+        if (max && force_axis.is_none()) && random() & 0b0011_1111 == 0 {
             // 1 in 64 to do the other axis instead
             axis = !axis;
         }
@@ -404,35 +443,46 @@ impl Room {
             return;
         }
         let mut budget = self.budget;
-        let mut fails = 0;
-        'outer: while budget > 0 && fails < 10 {
-            delay();
-            let pos = Vector::new(
-                random_in_range(0..(self.x_bounds.end - self.x_bounds.start - 2) as u8) as usize
-                    + self.x_bounds.start
-                    + 1,
-                random_in_range(0..(self.y_bounds.end - self.y_bounds.start - 2) as u8) as usize
-                    + self.y_bounds.start
-                    + 1,
-            );
-            for enemy in board.enemies.iter() {
-                if enemy.try_read().unwrap().pos == pos {
-                    fails += 1;
-                    continue 'outer;
-                }
+        let (center_variant, center_num) = Variant::pick_variant(budget, true);
+        // Placing centers
+        let mut centers = Vec::new();
+        for _ in 0..center_num {
+            if let Some(pos) = attempt_pick_pos(board, &self.x_bounds, &self.y_bounds) {
+                centers.push(pos);
+                budget -= center_variant.get_cost().unwrap();
+                board.enemies.push(Arc::new(RwLock::new(Enemy::new(
+                    pos,
+                    center_variant.clone(),
+                ))));
             }
-            let variant = {
-                if budget >= 5 {
-                    budget -= 5;
-                    Variant::mage()
-                } else {
-                    budget -= 1;
-                    Variant::basic()
-                }
-            };
-            board
-                .enemies
-                .push(Arc::new(RwLock::new(Enemy::new(pos, variant))));
+        }
+        if centers.len() == 0 {
+            return;
+        }
+        let budget_per_center = budget / centers.len();
+        // Allocating budgets
+        let mut centers: Vec<(Vector, usize)> = centers
+            .into_iter()
+            .map(|center| {
+                budget -= budget_per_center;
+                (center, budget_per_center)
+            })
+            .collect();
+        if budget > 0 {
+            centers.last_mut().unwrap().1 += budget;
+        }
+        // Placing surroundings
+        for (center, mut budget) in centers.into_iter() {
+            let mut available = board.flood_within(center, 3, true);
+            while budget > 0 {
+                delay();
+                let pos = available.swap_remove(random_index(available.len()).unwrap());
+                let variant = Variant::pick_variant(budget, false).0;
+                budget -= variant.get_cost().unwrap();
+                board
+                    .enemies
+                    .push(Arc::new(RwLock::new(Enemy::new(pos, variant))));
+            }
         }
     }
 }

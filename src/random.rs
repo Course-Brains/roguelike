@@ -30,8 +30,12 @@ pub fn initialize() {
 pub fn initialize_with(index: u8) {
     INDEX.store(index, Ordering::SeqCst);
 }
-pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
+/*pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
     random() % (range.end - range.start) + range.start
+}*/
+// will only pick from the first 256 spots in the range
+pub fn random_in_usize_range(range: &std::ops::Range<usize>) -> usize {
+    (random() % (range.end - range.start).min(u8::MAX as usize) as u8) as usize + range.start
 }
 pub fn random_index(max: usize) -> Option<usize> {
     match max > 256 {
@@ -59,5 +63,10 @@ pub trait Random {
 impl Random for bool {
     fn random() -> Self {
         random() & 0b0000_0001 == 1
+    }
+}
+impl Random for i8 {
+    fn random() -> Self {
+        u8::cast_signed(random())
     }
 }

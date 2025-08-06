@@ -151,7 +151,7 @@ impl Player {
     }
     pub fn death_message() {
         let mut out = std::io::stdout().lock();
-        match crate::random() % 4 {
+        match crate::random() % 5 {
             0 => write!(out, "Do better next time."),
             1 => write!(
                 out,
@@ -159,6 +159,7 @@ impl Player {
             ),
             2 => write!(out, "You CAN prevail."),
             3 => write!(out, "Have you ever heard of the definition of insanity?"),
+            4 => write!(out, "Bad Luck"),
             _ => unreachable!("Fuckity wuckity someone is bad at math"),
         }
         .unwrap();
@@ -248,6 +249,20 @@ impl Player {
             2
         } else {
             1
+        }
+    }
+    pub fn stat_choice(&mut self) {
+        crate::set_desc("1: more health, 2: more energy");
+        let mut buf = [0];
+        let mut lock = std::io::stdin().lock();
+        loop {
+            lock.read_exact(&mut buf).unwrap();
+            match buf[0] {
+                b'1' => self.max_health += self.max_health / 5,
+                b's' => self.max_energy += self.max_energy / 5,
+                _ => continue,
+            }
+            break;
         }
     }
 }

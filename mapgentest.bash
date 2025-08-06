@@ -1,5 +1,6 @@
 #!/bin/bash
 
+rm output
 touch output
 NUM_FAILS=0
 FAILS=""
@@ -12,7 +13,7 @@ do
     else
 	echo "$i: FAILURE" >> output
 	NUM_FAILS=$(($NUM_FAILS+1))
-	FAILS="$FAIL:$i"
+	FAILS="$FAILS:$i"
     fi
 done
 

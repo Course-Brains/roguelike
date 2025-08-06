@@ -269,7 +269,11 @@ impl Board {
         .unwrap();
         self.generate_visible(player);
         self.render(bounds.clone(), &mut lock, player);
-        self.draw_spells(&mut lock, bounds.clone());
+        self.draw_spells(
+            &mut lock,
+            bounds.clone(),
+            player.effects.full_vis.is_active(),
+        );
         self.draw_enemies(&mut lock, bounds.clone(), player);
         self.draw_specials(
             &mut lock,
@@ -327,9 +331,9 @@ impl Board {
             }
         }
     }
-    fn draw_spells(&self, lock: &mut impl Write, bounds: Range<Vector>) {
+    fn draw_spells(&self, lock: &mut impl Write, bounds: Range<Vector>, full_vis: bool) {
         for spell in self.spells.iter() {
-            if self.visible[self.to_index(spell.pos)] {
+            if self.is_visible(spell.pos, bounds.clone(), full_vis) {
                 crossterm::queue!(lock, (spell.pos - bounds.start).to_move()).unwrap();
                 write!(lock, "{}∆\x1b[0m", Style::new().purple()).unwrap();
             }

@@ -187,6 +187,8 @@ pub enum NormalSpell {
     Charge,
     // BidenBlast but bigger
     BigExplode,
+    // Fire a projectile and teleport where it lands
+    Teleport,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -329,6 +331,43 @@ impl NormalSpell {
                 );
                 true
             }
+            Self::Teleport => {
+                let aim = aim.unwrap();
+                let stop = caster
+                    .as_ref()
+                    .is_none_or(|caster| caster.try_read().unwrap().variant.precise_teleport());
+                let origin = origin.unwrap_or(get_pos(&caster, player));
+                let (mut path, collision) = ray_cast(origin, aim, board, None, stop, player.pos);
+                if collision.is_some() {
+                    path.pop();
+                }
+                // If the path length is 0 then teleporting wouldn't move it so there is no need to
+                // do anything else
+                if path.len() == 0 {
+                    return true;
+                }
+                let bounds = board.get_render_bounds(player);
+                // rendering the projectile
+                for pos in path.iter() {
+                    if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
+                        let special = board.add_special(Special {
+                            pos: *pos,
+                            ch: ' ',
+                            style: Some(*Style::new().purple()),
+                        });
+                        board.smart_render(player);
+                        proj_delay();
+                        drop(special)
+                    }
+                }
+                // actual teleportation
+                let target = *path.last().unwrap(); // len > 0
+                match caster {
+                    Some(arc) => arc.try_write().unwrap().pos = target,
+                    None => player.pos = target,
+                }
+                true
+            }
         }
     }
     pub fn cast_time(&self) -> usize {
@@ -338,6 +377,7 @@ impl NormalSpell {
             Self::Identify => 0,
             Self::Charge => 2,
             Self::BigExplode => 10,
+            Self::Teleport => 3,
         }
     }
     fn fireball(
@@ -406,6 +446,7 @@ impl std::str::FromStr for NormalSpell {
             "identify" => Ok(Self::Identify),
             "charge" => Ok(Self::Charge),
             "big_explode" => Ok(Self::BigExplode),
+            "teleport" => Ok(Self::Teleport),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }
@@ -421,6 +462,7 @@ impl FromBinary for NormalSpell {
             2 => Self::Identify,
             3 => Self::Charge,
             4 => Self::BigExplode,
+            5 => Self::Teleport,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -433,6 +475,7 @@ impl ToBinary for NormalSpell {
             Self::Identify => 2,
             Self::Charge => 3,
             Self::BigExplode => 4,
+            Self::Teleport => 5,
         }
         .to_binary(binary)
     }

@@ -1,3 +1,5 @@
+// When I do add spells, add a system for random unidentifiable buffs that get determined at the
+// start, with one of them being the ability to do other actions while casting
 mod player;
 use player::Player;
 mod board;
@@ -10,7 +12,7 @@ mod enemy;
 mod pieces;
 use enemy::Enemy;
 mod random;
-use random::{Random, random};
+use random::{Rand, Random, random};
 mod commands;
 mod generator;
 use generator::generate;
@@ -46,7 +48,7 @@ fn proj_delay() {
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 1;
+const SAVE_VERSION: Version = 2;
 type Version = u32;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
@@ -125,7 +127,7 @@ fn main() {
         let mut basic = 0;
         let mut mage = 0;
         let mut fighter = 0;
-        for index in 0..u8::MAX {
+        for index in 0..Rand::MAX {
             random::initialize_with(index);
             let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
                 .join()
@@ -527,10 +529,12 @@ impl State {
         self.player.decriment_effects();
         self.think();
         self.turn += 1;
+        self.board.turns_spent += 1;
         self.render();
     }
     fn load_next_map(&mut self) {
         generator::DO_DELAY.store(false, Ordering::SeqCst);
+        stats().shop_turns.push(self.board.turns_spent);
         self.board = std::mem::replace(
             &mut self.next_map,
             std::thread::spawn(|| Board::new(1, 1, 1, 1)),
@@ -545,10 +549,10 @@ impl State {
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
         self.board.flood(self.player.pos);
-        stats().turn_count.push(self.turn);
         self.render();
     }
     fn load_shop(&mut self) {
+        stats().level_turns.push(self.board.turns_spent);
         self.board = std::mem::replace(&mut self.next_shop, std::thread::spawn(Board::new_shop))
             .join()
             .unwrap();
@@ -993,8 +997,10 @@ struct Stats {
     buy_list: HashMap<ItemType, usize>,
     // What upgrades were held at death
     upgrades: Upgrades,
-    // How many turns have passed when loading into a new level
-    turn_count: Vec<usize>,
+    // How many turns were spent in each completed level
+    level_turns: Vec<usize>,
+    // How many turns were spent in each shop
+    shop_turns: Vec<usize>,
     // How much damage was taken in total
     damage_taken: usize,
     // How much damage was blocked in total
@@ -1011,8 +1017,8 @@ struct Stats {
     spell_list: HashMap<Spell, usize>,
     // How many saves were made
     num_saves: usize,
-    // how many enemies were killed
-    kills: usize,
+    // how many of each enemy type were killed
+    kills: HashMap<u8, usize>,
     // total energy used
     energy_used: usize,
 }
@@ -1024,7 +1030,8 @@ impl Stats {
             depth: 0,
             buy_list: HashMap::new(),
             upgrades: Upgrades::new(),
-            turn_count: Vec::new(),
+            level_turns: Vec::new(),
+            shop_turns: Vec::new(),
             damage_taken: 0,
             damage_blocked: 0,
             damage_invulned: 0,
@@ -1033,7 +1040,7 @@ impl Stats {
             death_turn: 0,
             spell_list: HashMap::new(),
             num_saves: 0,
-            kills: 0,
+            kills: HashMap::new(),
             energy_used: 0,
         }
     }
@@ -1050,6 +1057,35 @@ impl Stats {
         self.spell_list
             .insert(spell, self.spell_list.get(&spell).unwrap_or(&0) + 1);
     }
+    fn add_kill(&mut self, variant: enemy::Variant) {
+        let key = match variant {
+            enemy::Variant::Basic => 0,
+            enemy::Variant::BasicBoss(_) => 1,
+            enemy::Variant::Mage(_) => 2,
+            enemy::Variant::MageBoss(_) => 3,
+            enemy::Variant::Fighter(_) => 4,
+            enemy::Variant::FighterBoss { .. } => 5,
+        };
+        let prev = self.kills.get(&key).unwrap_or(&0);
+        self.kills.insert(key, prev + 1);
+    }
+    fn list_kills(&self) {
+        for (variant, kills) in self.kills.iter() {
+            print!(
+                "{}: {kills}, ",
+                match variant {
+                    0 => "basic",
+                    1 => "basic_boss",
+                    2 => "mage",
+                    3 => "mage_boss",
+                    4 => "fighter",
+                    5 => "fighter_boss",
+                    _ => unreachable!("We done fucked up the save version"),
+                }
+            );
+        }
+        print!("\n");
+    }
 }
 impl FromBinary for Stats {
     fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
@@ -1062,7 +1098,8 @@ impl FromBinary for Stats {
             depth: usize::from_binary(binary)?,
             buy_list: HashMap::from_binary(binary)?,
             upgrades: Upgrades::from_binary(binary)?,
-            turn_count: Vec::from_binary(binary)?,
+            level_turns: Vec::from_binary(binary)?,
+            shop_turns: Vec::from_binary(binary)?,
             damage_taken: usize::from_binary(binary)?,
             damage_blocked: usize::from_binary(binary)?,
             damage_invulned: usize::from_binary(binary)?,
@@ -1071,7 +1108,7 @@ impl FromBinary for Stats {
             death_turn: usize::from_binary(binary)?,
             spell_list: HashMap::from_binary(binary)?,
             num_saves: usize::from_binary(binary)?,
-            kills: usize::from_binary(binary)?,
+            kills: HashMap::from_binary(binary)?,
             energy_used: usize::from_binary(binary)?,
         })
     }
@@ -1083,7 +1120,8 @@ impl ToBinary for Stats {
         self.depth.to_binary(binary)?;
         self.buy_list.to_binary(binary)?;
         self.upgrades.to_binary(binary)?;
-        self.turn_count.to_binary(binary)?;
+        self.level_turns.to_binary(binary)?;
+        self.shop_turns.to_binary(binary)?;
         self.damage_taken.to_binary(binary)?;
         self.damage_blocked.to_binary(binary)?;
         self.damage_invulned.to_binary(binary)?;
@@ -1142,9 +1180,29 @@ fn view_stats() {
     let stats = Vec::<Stats>::from_binary(&mut file).unwrap();
     let mut index = 0;
     macro_rules! list {
-        ($field: ident) => {
-            for stat in stats.iter() {
-                println!("{:?}", stat.$field);
+        ($field: ident, $index: ident) => {
+            match $index {
+                Some(index) => {
+                    println!("{index}: {:?}", stats[index].$field);
+                }
+                None => {
+                    for stat in stats.iter() {
+                        println!("{:?}", stat.$field);
+                    }
+                }
+            }
+        };
+        ($field: ident, $index: ident, $method: ident) => {
+            match $index {
+                Some(index) => {
+                    print!("{index}: ");
+                    stats[index].$method()
+                }
+                None => {
+                    for stat in stats.iter() {
+                        stat.$method()
+                    }
+                }
             }
         };
     }
@@ -1194,25 +1252,38 @@ fn view_stats() {
                 }
             }
             "list" => match split.next() {
-                Some(field) => match field {
-                    "shop_money" => list!(shop_money),
-                    "total_money" => list!(total_money),
-                    "depth" => list!(depth),
-                    "buy_list" => list!(buy_list),
-                    "upgrades" => list!(upgrades),
-                    "turn_count" => list!(turn_count),
-                    "damage_taken" => list!(damage_taken),
-                    "damage_blocked" => list!(damage_blocked),
-                    "damage_invulned" => list!(damage_invulned),
-                    "damage_dealt" => list!(damage_dealt),
-                    "damage_healed" => list!(damage_healed),
-                    "death_turn" => list!(death_turn),
-                    "spell_list" => list!(spell_list),
-                    "num_saves" => list!(num_saves),
-                    "kills" => list!(kills),
-                    "energy_used" => list!(energy_used),
-                    other => println!("{other} is not a valid field"),
-                },
+                Some(field) => {
+                    let index = match split.next() {
+                        Some(string) => match string.parse::<usize>() {
+                            Ok(index) => Some(index),
+                            Err(_) => {
+                                eprintln!("Invalid index");
+                                continue;
+                            }
+                        },
+                        None => None,
+                    };
+                    match field {
+                        "shop_money" => list!(shop_money, index),
+                        "total_money" => list!(total_money, index),
+                        "depth" => list!(depth, index),
+                        "buy_list" => list!(buy_list, index),
+                        "upgrades" => list!(upgrades, index),
+                        "level_turns" => list!(level_turns, index),
+                        "shop_turns" => list!(shop_turns, index),
+                        "damage_taken" => list!(damage_taken, index),
+                        "damage_blocked" => list!(damage_blocked, index),
+                        "damage_invulned" => list!(damage_invulned, index),
+                        "damage_dealt" => list!(damage_dealt, index),
+                        "damage_healed" => list!(damage_healed, index),
+                        "death_turn" => list!(death_turn, index),
+                        "spell_list" => list!(spell_list, index),
+                        "num_saves" => list!(num_saves, index),
+                        "kills" => list!(kills, index, list_kills),
+                        "energy_used" => list!(energy_used, index),
+                        other => println!("{other} is not a valid field"),
+                    }
+                }
                 None => println!("{index} out of {}:\n{:#?}", stats.len() - 1, stats[index]),
             },
             "quit" => break,

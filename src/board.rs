@@ -25,6 +25,8 @@ pub struct Board {
     pub boss: Option<Weak<RwLock<Enemy>>>,
     visible: Vec<bool>,
     seen: Vec<bool>,
+    // The number of turns spent on this board specifically
+    pub turns_spent: usize,
 }
 // General use
 impl Board {
@@ -48,6 +50,7 @@ impl Board {
             boss: None,
             visible,
             seen,
+            turns_spent: 0,
         }
     }
     pub fn to_index(&self, pos: Vector) -> usize {
@@ -864,6 +867,7 @@ impl FromBinary for Board {
             boss: None,
             visible: Vec::from_binary(binary)?,
             seen: Vec::from_binary(binary)?,
+            turns_spent: usize::from_binary(binary)?,
         })
     }
 }
@@ -884,7 +888,8 @@ impl ToBinary for Board {
         self.boss_pos.to_binary(binary)?;
         // skipping boss because skipping enemies
         self.visible.to_binary(binary)?;
-        self.seen.to_binary(binary)
+        self.seen.to_binary(binary)?;
+        self.turns_spent.to_binary(binary)
     }
 }
 #[derive(Copy, Clone)]

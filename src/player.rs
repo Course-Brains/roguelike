@@ -99,7 +99,7 @@ impl Player {
         Ok(false)
     }
     pub fn on_kill(&mut self, enemy: &crate::Enemy) {
-        crate::stats().kills += 1;
+        crate::stats().add_kill(enemy.variant.clone());
         if !enemy.reward {
             return;
         }
@@ -258,8 +258,8 @@ impl Player {
         loop {
             lock.read_exact(&mut buf).unwrap();
             match buf[0] {
-                b'1' => self.max_health += self.max_health / 5,
-                b's' => self.max_energy += self.max_energy / 5,
+                b'1' => self.max_health += (self.max_health / 5).max(1),
+                b's' => self.max_energy += (self.max_energy / 5).max(1),
                 _ => continue,
             }
             break;

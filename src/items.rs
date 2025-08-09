@@ -174,7 +174,8 @@ impl ItemType {
                 false
             }
             Self::Tea => {
-                state.player.effects.invincible.increase_to(5, 10);
+                state.player.effects.invincible.increase_to(10, 20);
+                state.player.effects.damage_boost.increase_to(40, 80);
                 true
             }
         }

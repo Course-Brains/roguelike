@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
-static RANDOM_TABLE: [u8; 256] = [
+pub type Rand = u8;
+// static so that it doesn't get inlined
+static RANDOM_TABLE: [Rand; Rand::MAX as usize + 1] = [
     0, 8, 109, 220, 222, 241, 155, 115, 75, 248, 245, 137, 16, 66, 74, 21, 209, 47, 80, 238, 154,
     27, 205, 130, 161, 89, 65, 36, 95, 110, 85, 48, 210, 142, 211, 240, 22, 67, 200, 50, 28, 188,
     52, 140, 208, 120, 68, 151, 62, 51, 184, 190, 91, 204, 152, 215, 149, 104, 25, 178, 252, 183,
@@ -15,7 +17,7 @@ static RANDOM_TABLE: [u8; 256] = [
     84, 118, 214, 187, 136, 126, 162, 236, 243,
 ];
 static INDEX: AtomicU8 = AtomicU8::new(0);
-pub fn random() -> u8 {
+pub fn random() -> Rand {
     RANDOM_TABLE[INDEX.fetch_add(1, Ordering::SeqCst) as usize]
 }
 pub fn initialize() {
@@ -23,11 +25,11 @@ pub fn initialize() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos()
-        & 255) as u8;
+        & Rand::MAX as u128) as Rand;
     crate::log!("Initialized with random index: {init}",);
     INDEX.store(init, Ordering::SeqCst)
 }
-pub fn initialize_with(index: u8) {
+pub fn initialize_with(index: Rand) {
     INDEX.store(index, Ordering::SeqCst);
 }
 /*pub fn random_in_range(range: std::ops::Range<u8>) -> u8 {
@@ -35,10 +37,10 @@ pub fn initialize_with(index: u8) {
 }*/
 // will only pick from the first 256 spots in the range
 pub fn random_in_usize_range(range: &std::ops::Range<usize>) -> usize {
-    (random() % (range.end - range.start).min(u8::MAX as usize) as u8) as usize + range.start
+    (random() % (range.end - range.start).min(Rand::MAX as usize) as Rand) as usize + range.start
 }
 pub fn random_index(max: usize) -> Option<usize> {
-    match max > 256 {
+    match max > Rand::MAX as usize + 1 {
         true => Some(random() as usize),
         false => {
             if max == 0 {
@@ -48,13 +50,13 @@ pub fn random_index(max: usize) -> Option<usize> {
         }
     }
 }
-pub fn random4() -> u8 {
+pub fn random4() -> Rand {
     (random() & 0b0000_0011) + 1
 }
-pub fn random8() -> u8 {
+pub fn random8() -> Rand {
     (random() & 0b0000_0111) + 1
 }
-pub fn random16() -> u8 {
+pub fn random16() -> Rand {
     (random() & 0b0000_1111) + 1
 }
 pub trait Random {

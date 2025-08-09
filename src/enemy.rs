@@ -434,7 +434,7 @@ impl Enemy {
             }
             Variant::Fighter(action) => {
                 if this.as_ref().unwrap().windup > 0 {
-                    if this.as_ref().unwrap().windup == 0 {
+                    if this.as_ref().unwrap().windup == 1 {
                         // doin time
                         match action {
                             FighterAction::Smack => {
@@ -581,7 +581,7 @@ impl Enemy {
                             .unwrap()
                             .variant
                             .set_fighter_boss_action(FighterBossAction::BigExplode(player.pos));
-                        this.as_mut().unwrap().windup = 6;
+                        this.as_mut().unwrap().windup = 9;
                     } else {
                         this.as_mut().unwrap().attacking = false;
                     }

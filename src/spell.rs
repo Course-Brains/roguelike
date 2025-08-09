@@ -285,15 +285,22 @@ impl NormalSpell {
                     player.pos,
                 );
                 // visuals for the charge
+                let bounds = board.get_render_bounds(player);
                 path.pop();
                 if path.len() != 0 {
                     for pos in path.iter() {
-                        match caster {
-                            Some(ref caster) => caster.try_write().unwrap().pos = *pos,
-                            None => player.pos = *pos,
+                        if board.is_visible(
+                            *pos,
+                            bounds.clone(),
+                            player.effects.full_vis.is_active(),
+                        ) {
+                            match caster {
+                                Some(ref caster) => caster.try_write().unwrap().pos = *pos,
+                                None => player.pos = *pos,
+                            }
+                            board.smart_render(player);
+                            proj_delay();
                         }
-                        board.smart_render(player);
-                        proj_delay();
                     }
                 }
                 if let Some(collision) = collision {

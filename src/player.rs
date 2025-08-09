@@ -252,15 +252,25 @@ impl Player {
         }
     }
     pub fn stat_choice(&mut self) {
+        crate::log!("Granting stats");
         crate::set_desc("1: more health, 2: more energy");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
         loop {
             lock.read_exact(&mut buf).unwrap();
             match buf[0] {
-                b'1' => self.max_health += (self.max_health / 5).max(1),
-                b's' => self.max_energy += (self.max_energy / 5).max(1),
-                _ => continue,
+                b'1' => {
+                    crate::log!("  Chosen health");
+                    self.max_health += (self.max_health / 5).max(1)
+                }
+                b'2' => {
+                    crate::log!("  Chosen energy");
+                    self.max_energy += (self.max_energy / 5).max(1)
+                }
+                other => {
+                    crate::log!("  Recieved \"{}\", trying again", char::from(other));
+                    continue;
+                }
             }
             break;
         }

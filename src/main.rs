@@ -304,9 +304,18 @@ fn main() {
                     state.increment()
                 }
                 false => {
-                    if state.is_valid_move(direction) {
-                        state.player.do_move(direction, &mut state.board);
-                        state.increment()
+                    if state.player.fast {
+                        for _ in 0..5 {
+                            if state.is_valid_move(direction) {
+                                state.player.do_move(direction, &mut state.board);
+                                state.increment();
+                            }
+                        }
+                    } else {
+                        if state.is_valid_move(direction) {
+                            state.player.do_move(direction, &mut state.board);
+                            state.increment()
+                        }
                     }
                 }
             },
@@ -426,8 +435,15 @@ fn main() {
                 }
             }
             Input::Convert => {
-                state.player.give_money(state.player.energy);
-                state.player.energy = 0;
+                if state.player.upgrades.precise_convert {
+                    if state.player.energy > 0 {
+                        state.player.give_money(1);
+                        state.player.energy -= 1;
+                    }
+                } else {
+                    state.player.give_money(state.player.energy);
+                    state.player.energy = 0;
+                }
                 state.increment();
             }
             Input::Inspect => {
@@ -451,8 +467,8 @@ fn main() {
                 Board::set_desc(
                     &mut std::io::stdout(),
                     match state.player.fast {
-                        true => "Fast selector movement enabled",
-                        false => "Fast selector movement disabled",
+                        true => "Fast movement enabled",
+                        false => "Fast movement disabled",
                     },
                 );
                 state.reposition_cursor();
@@ -938,13 +954,11 @@ fn ray_cast(
     end_stop: bool,
     player: Vector,
 ) -> (Vec<Vector>, Option<Collision>) {
-    crate::log!("calculating projectile path from {from} to {to}");
     let x = to.x as f64 - from.x as f64;
     let y = to.y as f64 - from.y as f64;
     let len = (x.powi(2) + y.powi(2)).sqrt();
     let delta_x = (x / len) / 2.0;
     let delta_y = (y / len) / 2.0;
-    crate::log!("  Will move ({delta_x}, {delta_y}) per calc");
     let mut precise_x = from.x as f64;
     let mut precise_y = from.y as f64;
     let mut x = from.x;
@@ -971,7 +985,6 @@ fn ray_cast(
                 break;
             }
         }
-        crate::log!("  at ({precise_x}, {precise_y})");
         precise_x += delta_x;
         precise_y += delta_y;
         x = precise_x as usize;
@@ -988,18 +1001,15 @@ fn ray_cast(
         }
         if let Some(piece) = &board[pos] {
             if piece.projectile_collision() {
-                crate::log!("    hit {piece}, stopping");
                 collision = Some(pos.into());
                 break;
             }
         }
         if let Some(enemy) = board.get_enemy(pos, addr) {
-            crate::log!("    hit enemy, stopping");
             collision = Some(enemy.into());
             break;
         }
         if pos == player {
-            crate::log!("    hit player, stopping");
             collision = Some(Collision::Player);
             break;
         }

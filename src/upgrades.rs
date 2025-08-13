@@ -10,6 +10,7 @@ pub struct Upgrades {
     pub mage_eye: usize,
     pub map: bool,
     pub soft_shoes: bool,
+    pub precise_convert: bool,
 }
 impl Upgrades {
     pub const fn new() -> Upgrades {
@@ -17,6 +18,7 @@ impl Upgrades {
             mage_eye: 0,
             map: false,
             soft_shoes: false,
+            precise_convert: false,
         }
     }
 }
@@ -29,6 +31,7 @@ impl FromBinary for Upgrades {
             mage_eye: usize::from_binary(binary)?,
             map: bool::from_binary(binary)?,
             soft_shoes: bool::from_binary(binary)?,
+            precise_convert: bool::from_binary(binary)?,
         })
     }
 }
@@ -36,7 +39,8 @@ impl ToBinary for Upgrades {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         self.mage_eye.to_binary(binary)?;
         self.map.to_binary(binary)?;
-        self.soft_shoes.to_binary(binary)
+        self.soft_shoes.to_binary(binary)?;
+        self.precise_convert.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +49,7 @@ pub enum UpgradeType {
     Map,
     SoftShoes,
     SavePint, // no corresponding upgrade field
+    PreciseConvert,
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -64,6 +69,7 @@ impl UpgradeType {
             Self::Map => 300,
             Self::SoftShoes => 200,
             Self::SavePint => 0,
+            Self::PreciseConvert => 150,
         }
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
@@ -108,6 +114,10 @@ impl UpgradeType {
                     }
                 }
             }
+            Self::PreciseConvert => {
+                player.upgrades.precise_convert = true;
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -115,6 +125,7 @@ impl UpgradeType {
             Self::MageEye => player.upgrades.mage_eye < 2,
             Self::Map => !player.upgrades.map,
             Self::SoftShoes => !player.upgrades.soft_shoes,
+            Self::PreciseConvert => !player.upgrades.precise_convert,
             _ => true,
         }
     }
@@ -124,6 +135,7 @@ impl UpgradeType {
             Self::Map => "A map",
             Self::SoftShoes => "A pair of particularly soft shoes",
             Self::SavePint => "A savepint",
+            Self::PreciseConvert => "Clean needles",
         }
     }
 }
@@ -134,6 +146,7 @@ impl std::fmt::Display for UpgradeType {
             Self::Map => write!(f, "map"),
             Self::SoftShoes => write!(f, "soft shoes"),
             Self::SavePint => write!(f, "save pint"),
+            Self::PreciseConvert => write!(f, "precise convert"),
         }
     }
 }
@@ -145,16 +158,19 @@ impl std::str::FromStr for UpgradeType {
             "map" => Ok(Self::Map),
             "soft_shoes" => Ok(Self::SoftShoes),
             "save_pint" => Ok(Self::SavePint),
+            "precise_convert" => Ok(Self::PreciseConvert),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
 }
 impl Random for UpgradeType {
     fn random() -> Self {
-        match random() & 0b0000_0001 {
+        match random() % 4 {
             0 => Self::MageEye,
             1 => Self::Map,
             2 => Self::SoftShoes,
+            3 => Self::PreciseConvert,
+            // Save pint cannot be made from random calls
             _ => unreachable!("Le fucked is up"),
         }
     }
@@ -169,6 +185,7 @@ impl FromBinary for UpgradeType {
             1 => Self::Map,
             2 => Self::SoftShoes,
             3 => Self::SavePint,
+            4 => Self::PreciseConvert,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -182,9 +199,10 @@ impl ToBinary for UpgradeType {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         match self {
             Self::MageEye => 0_u8,
-            Self::Map => 1_u8,
-            Self::SoftShoes => 2_u8,
-            Self::SavePint => 3_u8,
+            Self::Map => 1,
+            Self::SoftShoes => 2,
+            Self::SavePint => 3,
+            Self::PreciseConvert => 4,
         }
         .to_binary(binary)
     }

@@ -89,16 +89,17 @@ impl Enemy {
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
         let mut this = Some(arc.try_write().unwrap());
+        if !this.as_ref().unwrap().reachable {
+            return false;
+        }
         let addr = Arc::as_ptr(&arc).addr();
         if !this.as_ref().unwrap().active {
             if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
             {
-                if this.as_ref().unwrap().reachable {
-                    this.as_mut()
-                        .unwrap()
-                        .log("Woke up due to mage sight".to_string());
-                    this.as_mut().unwrap().active = true;
-                }
+                this.as_mut()
+                    .unwrap()
+                    .log("Woke up due to mage sight".to_string());
+                this.as_mut().unwrap().active = true;
             } else if this
                 .as_ref()
                 .unwrap()
@@ -117,7 +118,6 @@ impl Enemy {
             this.as_mut().unwrap().stun -= 1;
             return false;
         }
-        crate::log!("Active enemy: {}", this.as_ref().unwrap().variant);
         let pos = this.as_ref().unwrap().pos;
         let player_pos = player.pos;
         // put in a lazycell because that way the expensive ray cast is only done when needed
@@ -144,7 +144,7 @@ impl Enemy {
                 {
                     this.as_mut().unwrap().attacking = true;
                     if this.as_ref().unwrap().windup == 0 {
-                        this.as_mut().unwrap().windup = 3;
+                        this.as_mut().unwrap().windup = 2;
                         return true;
                     }
                     this.as_mut().unwrap().windup -= 1;

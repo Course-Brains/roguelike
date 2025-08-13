@@ -34,6 +34,7 @@ enum Command {
     GetBoss,
     CountEnemies,
     Checksum,
+    SetBench(bool),
     EnableLog(usize, String),
 }
 impl Command {
@@ -103,6 +104,7 @@ impl Command {
             "get_boss" => Ok(Command::GetBoss),
             "count_enemies" => Ok(Command::CountEnemies),
             "checksum" => Ok(Command::Checksum),
+            "set_bench" => Ok(Command::SetBench(parse(iter.next())?)),
             "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
@@ -326,6 +328,13 @@ impl Command {
                 }
                 if !failed {
                     out.send("no faults".to_string()).unwrap()
+                }
+            }
+            Command::SetBench(state) => {
+                if state {
+                    crate::enable_benchmark();
+                } else {
+                    crate::bench::BENCHMARK.store(false, std::sync::atomic::Ordering::SeqCst);
                 }
             }
             Command::EnableLog(index, path) => {

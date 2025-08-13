@@ -176,3 +176,11 @@ checksum
     Checks and reports any instances of enemies being on top of a
     piece, notably, this does not ignore cases like open doors where
     that is intentional
+
+set\_bench \[state\]
+    Sets whether or not benchmark data should be emitted to the
+    benchmark files. Takes in true or false.
+
+enable\_log \[index\] \[path\]
+    Enables detailed logging for the enemy at \[index\] and writes it
+    to the file at \[path\]

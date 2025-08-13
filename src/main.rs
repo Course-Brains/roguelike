@@ -37,6 +37,43 @@ fn stats<'a>() -> std::sync::MutexGuard<'a, Stats> {
 }
 // Whether or not the console was used
 static CHEATS: AtomicBool = AtomicBool::new(false);
+mod bench {
+    use std::fs::File;
+    use std::sync::{LazyLock, RwLock, RwLockWriteGuard, atomic::AtomicBool};
+    // Whether or not to esspecially log timings
+    pub static BENCHMARK: AtomicBool = AtomicBool::new(false);
+    macro_rules! bench_maker {
+        ($path: literal) => {
+            LazyLock::new(|| RwLock::new(File::create($path).unwrap()))
+        };
+        ($name: ident, $index: literal) => {
+            pub fn $name<'a>() -> RwLockWriteGuard<'a, File> {
+                BENCHES.get($index).unwrap().write().unwrap()
+            }
+        };
+    }
+    static BENCHES: [LazyLock<RwLock<File>>; 5] = [
+        bench_maker!("bench/render"),
+        bench_maker!("bench/vis_flood"),
+        bench_maker!("bench/flood"),
+        bench_maker!("bench/nav"),
+        bench_maker!("bench/think"),
+    ];
+    bench_maker!(render, 0);
+    bench_maker!(vis_flood, 1);
+    bench_maker!(flood, 2);
+    bench_maker!(nav, 3);
+    bench_maker!(think, 4);
+}
+fn enable_benchmark() {
+    bench::BENCHMARK.store(true, Ordering::SeqCst);
+    if !std::fs::exists("bench").unwrap() {
+        std::fs::create_dir("bench").unwrap();
+    }
+}
+fn bench() -> bool {
+    bench::BENCHMARK.load(Ordering::SeqCst)
+}
 
 // Delay between moves/applicable thinks
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
@@ -112,6 +149,10 @@ fn main() {
             "stats" => {
                 view_stats();
                 return;
+            }
+            "bench" => {
+                log!("Enabling benchmark through command line argument");
+                enable_benchmark();
             }
             "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
             _ => {}
@@ -494,9 +535,13 @@ impl State {
         self.board.purge_dead();
         self.board.generate_nav_data(self.player.pos);
         let bounds = self.board.get_render_bounds(&self.player);
+        let mut time = std::time::Duration::new(0, 0);
         for enemy in self.board.enemies.clone().iter() {
             self.board
-                .move_and_think(&mut self.player, enemy.clone(), bounds.clone());
+                .move_and_think(&mut self.player, enemy.clone(), bounds.clone(), &mut time);
+        }
+        if bench() {
+            writeln!(bench::think(), "{}", time.as_millis()).unwrap();
         }
         self.board.update_spells(&mut self.player);
         self.board.place_exit();

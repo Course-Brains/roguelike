@@ -34,13 +34,14 @@ enum Command {
     GetBoss,
     CountEnemies,
     Checksum,
+    EnableLog(usize, String),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
         crate::CHEATS.store(true, crate::Ordering::Relaxed);
         let mut iter = string.split(' ');
         match iter.next().unwrap() {
-            "get_pla yer_data" => Ok(Command::GetPlayerData),
+            "get_player_data" => Ok(Command::GetPlayerData),
             "set_health" => Ok(Command::SetHealth(match iter.next() {
                 Some(arg) => Some(parse(Some(arg))?),
                 None => None,
@@ -102,6 +103,7 @@ impl Command {
             "get_boss" => Ok(Command::GetBoss),
             "count_enemies" => Ok(Command::CountEnemies),
             "checksum" => Ok(Command::Checksum),
+            "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -325,6 +327,10 @@ impl Command {
                 if !failed {
                     out.send("no faults".to_string()).unwrap()
                 }
+            }
+            Command::EnableLog(index, path) => {
+                state.board.enemies[index].try_write().unwrap().log =
+                    Some(std::fs::File::create(path).unwrap());
             }
         }
     }

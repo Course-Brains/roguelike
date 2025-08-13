@@ -6,13 +6,6 @@ fn main() {
         .split()
         .unwrap();
     println!("Connection made");
-    (std::env::args()
-        .skip(1)
-        .map(|s| s.to_string() + " ")
-        .collect::<String>()
-        + "\n")
-        .to_binary(&mut write)
-        .unwrap();
     std::thread::spawn(move || while input().to_binary(&mut write).is_ok() {});
     while let Ok(string) = String::from_binary(&mut read) {
         println!("{string}");

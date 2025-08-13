@@ -4,12 +4,13 @@ use crate::{
     spell::{ContactSpell, NormalSpell, Spell, SpellCircle},
     style::Color,
 };
+use std::io::Write;
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};
 const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
 const MAGE_BOSS_PROMOTE_RANGE: usize = 10;
 const MAGE_BOSS_SWAP_THRESH: usize = 10;
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
@@ -22,6 +23,7 @@ pub struct Enemy {
     pub dead: bool,
     // If it should give rewards when killed
     pub reward: bool,
+    pub log: Option<std::fs::File>,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -36,6 +38,7 @@ impl Enemy {
             attacking: false,
             dead: false,
             reward: true,
+            log: None,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -73,13 +76,12 @@ impl Enemy {
     }
     // returns whether or not it was killed
     pub fn attacked(&mut self, damage: usize) -> bool {
-        if damage > self.health {
+        self.log(format!("Attacked for {damage} damage"));
+        if damage >= self.health {
+            self.log("  And died".to_string());
             self.dead = true
         } else {
             self.health -= damage;
-            if self.health == 0 {
-                self.dead = true
-            }
         }
         self.active = true;
         self.dead
@@ -92,6 +94,9 @@ impl Enemy {
             if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
             {
                 if this.as_ref().unwrap().reachable {
+                    this.as_mut()
+                        .unwrap()
+                        .log("Woke up due to mage sight".to_string());
                     this.as_mut().unwrap().active = true;
                 }
             } else if this
@@ -100,6 +105,9 @@ impl Enemy {
                 .variant
                 .detect(this.as_ref().unwrap(), board, player)
             {
+                this.as_mut()
+                    .unwrap()
+                    .log("Woke up due to detection".to_string());
                 this.as_mut().unwrap().active = true;
             } else {
                 return false;
@@ -595,9 +603,9 @@ impl Enemy {
     }
     pub fn promote(&mut self) -> Result<(), ()> {
         match self.variant {
-            Variant::Basic => self.variant = Variant::basic_boss(),
-            Variant::Mage(_) => self.variant = Variant::mage_boss(),
-            Variant::Fighter(_) => self.variant = Variant::fighter_boss(),
+            Variant::Basic => *self = Enemy::new(self.pos, Variant::basic_boss()),
+            Variant::Mage(_) => *self = Enemy::new(self.pos, Variant::mage_boss()),
+            Variant::Fighter(_) => *self = Enemy::new(self.pos, Variant::fighter_boss()),
             Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => {
                 return Err(());
             }
@@ -618,6 +626,28 @@ impl Enemy {
     fn set_reward(mut self, state: bool) -> Self {
         self.reward = state;
         self
+    }
+    pub fn log(&mut self, msg: String) {
+        if let Some(log) = self.log.as_mut() {
+            log.write_all((msg + "\n").as_bytes()).unwrap();
+        }
+    }
+}
+impl Clone for Enemy {
+    fn clone(&self) -> Self {
+        Enemy {
+            health: self.health,
+            variant: self.variant.clone(),
+            stun: self.stun,
+            windup: self.windup,
+            pos: self.pos,
+            active: self.active,
+            reachable: self.reachable,
+            attacking: self.attacking,
+            dead: self.dead,
+            reward: self.reward,
+            log: self.log.as_ref().map(|file| file.try_clone().unwrap()),
+        }
     }
 }
 #[derive(Clone, Debug)]

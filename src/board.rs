@@ -211,6 +211,11 @@ impl Board {
 impl Board {
     // returns whether or not the cursor has a background behind it
     pub fn render(&self, bounds: Range<Vector>, lock: &mut impl Write, player: &Player) {
+        let start = if crate::bench() {
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
         let x_bound = bounds.start.x..bounds.end.x;
         let y_bound = bounds.start.y..bounds.end.y;
         for y in y_bound.clone() {
@@ -261,6 +266,10 @@ impl Board {
             }
         }
         write!(lock, "\x1b[B\x1b[2K").unwrap();
+        if let Some(start) = start {
+            let elapsed = start.elapsed();
+            writeln!(crate::bench::render(), "{}", elapsed.as_millis()).unwrap();
+        }
     }
     pub fn smart_render(&mut self, player: &mut Player) {
         let mut lock = VecDeque::new();
@@ -470,6 +479,9 @@ impl Board {
             elapsed.as_millis(),
             elapsed.as_nanos()
         );
+        if crate::bench() {
+            writeln!(crate::bench::vis_flood(), "{}", elapsed.as_millis()).unwrap();
+        }
     }
     pub fn add_special(&mut self, special: Special) -> Arc<Special> {
         let arc = Arc::new(special);
@@ -581,6 +593,9 @@ impl Board {
             elapsed.as_millis(),
             elapsed.as_nanos()
         );
+        if crate::bench() {
+            writeln!(crate::bench::nav(), "{}", elapsed.as_millis()).unwrap();
+        }
     }
     pub fn get_adjacent(&self, pos: Vector, player: Option<Vector>, enemy_collision: bool) -> Adj {
         let mut out = Adj::new(true);
@@ -721,13 +736,17 @@ impl Board {
             "flood time: {}({})",
             elapsed.as_millis(),
             elapsed.as_nanos()
-        )
+        );
+        if crate::bench() {
+            writeln!(crate::bench::flood(), "{}", elapsed.as_millis()).unwrap();
+        }
     }
     pub fn move_and_think(
         &mut self,
         player: &mut Player,
         enemy: Arc<RwLock<Enemy>>,
         bounds: Range<Vector>,
+        time: &mut std::time::Duration,
     ) {
         if self.move_enemy(player, enemy.clone())
             && self.is_visible(
@@ -739,7 +758,10 @@ impl Board {
             self.smart_render(player);
             std::thread::sleep(crate::DELAY);
         }
-        if Enemy::think(enemy.clone(), self, player)
+        let start = std::time::Instant::now();
+        let think = Enemy::think(enemy.clone(), self, player);
+        *time += start.elapsed();
+        if think
             && self.is_visible(
                 enemy.try_read().unwrap().pos,
                 bounds.clone(),

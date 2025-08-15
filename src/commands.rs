@@ -104,7 +104,12 @@ impl Command {
             "get_boss" => Ok(Command::GetBoss),
             "count_enemies" => Ok(Command::CountEnemies),
             "checksum" => Ok(Command::Checksum),
-            "set_bench" => Ok(Command::SetBench(parse(iter.next())?)),
+            "set_bench" => Ok(Command::SetBench(
+                iter.next()
+                    .unwrap_or("true")
+                    .parse::<bool>()
+                    .map_err(|e| e.to_string())?,
+            )),
             "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
             _ => Err("unknown command".to_string()),
         }
@@ -233,6 +238,19 @@ impl Command {
             }),
             Command::GetData(pos) => {
                 let pos = pos.to_absolute(&state.player);
+                let index = state.board.to_index(pos);
+                if state.board.seen[index] {
+                    out.send("It has been seen".to_string()).unwrap();
+                }
+                if state.board.visible[index] {
+                    out.send("It is within the visibility flood".to_string())
+                        .unwrap();
+                } else if state.is_visible(pos) {
+                    out.send("It is visible".to_string()).unwrap()
+                }
+                if state.board.reachable[index] {
+                    out.send("It is reachable".to_string()).unwrap();
+                }
                 if let Some(piece) = &state.board[pos] {
                     out.send(format!("It is a {piece}")).unwrap();
                 }

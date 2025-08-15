@@ -23,11 +23,11 @@ pub struct Board {
     pub specials: Vec<Weak<Special>>,
     pub boss_pos: Vector,
     pub boss: Option<Weak<RwLock<Enemy>>>,
-    visible: Vec<bool>,
-    seen: Vec<bool>,
+    pub visible: Vec<bool>,
+    pub seen: Vec<bool>,
     // The number of turns spent on this board specifically
     pub turns_spent: usize,
-    reachable: Vec<bool>,
+    pub reachable: Vec<bool>,
 }
 // General use
 impl Board {
@@ -687,6 +687,8 @@ impl Board {
         match self.get_open_door_flood_start(door) {
             ShouldFloodDoor::Yes(pos) => {
                 let start = std::time::Instant::now();
+                let index = self.to_index(door);
+                self.reachable[index] = true;
                 let index = self.to_index(pos);
                 self.reachable[index] = true;
                 let mut seen = HashSet::new();

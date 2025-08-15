@@ -226,7 +226,7 @@ fn main() {
     state.board.flood(state.player.pos);
     state.render();
     loop {
-        if state.player.handle_death() {
+        if Player::handle_death(&state) {
             stats().collect_death(&state);
             save_stats();
             break;
@@ -636,6 +636,13 @@ impl State {
                 .has_background(self.player.selector, &self.player),
             self.board.get_render_bounds(&self.player),
         );
+    }
+    fn is_visible(&self, pos: Vector) -> bool {
+        self.board.is_visible(
+            pos,
+            self.board.get_render_bounds(&self.player),
+            self.player.effects.full_vis.is_active(),
+        )
     }
 }
 impl FromBinary for State {

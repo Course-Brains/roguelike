@@ -128,15 +128,15 @@ impl Player {
         }
     }
     // returns whether or not the player is dead
-    pub fn handle_death(&self) -> bool {
-        match self.killer {
+    pub fn handle_death(state: &crate::State) -> bool {
+        match state.player.killer {
             Some(killer) => {
                 println!(
                     "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
                     Style::new().green().intense(true),
                     killer
                 );
-                Player::death_message();
+                Player::death_message(state);
                 print!("\nPress {}Enter\x1b[0m to exit.", Style::new().cyan());
                 std::io::stdout().flush().unwrap();
                 loop {
@@ -149,8 +149,16 @@ impl Player {
             None => false,
         }
     }
-    pub fn death_message() {
+    pub fn death_message(state: &crate::State) {
         let mut out = std::io::stdout().lock();
+        if state.level == 0
+            && state.turn < 300
+            && std::fs::File::open("stats")
+                .is_ok_and(|file| file.metadata().is_ok_and(|meta| meta.len() > 10000))
+        {
+            write!(out, "Just roll better next time, lmao.").unwrap();
+            return;
+        }
         match crate::random() % 5 {
             0 => write!(out, "Do better next time."),
             1 => write!(

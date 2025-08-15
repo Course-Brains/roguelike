@@ -209,7 +209,9 @@ impl NormalSpell {
                 let addr = caster.as_ref().map(|arc| Arc::as_ptr(arc).addr());
                 if let Some(swap) = board.pick_near(addr, get_pos(&caster, player), 30) {
                     let swap = swap.upgrade().unwrap();
-                    if is_within_flood(&caster) != swap.try_read().unwrap().reachable {
+                    if is_within_flood(&caster, board)
+                        != board.is_reachable(swap.try_read().unwrap().pos)
+                    {
                         // One is within the flood and one isn't so we need to reflood
                         crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
@@ -503,8 +505,8 @@ fn get_pos(caster: &Option<Arc<RwLock<Enemy>>>, player: &Player) -> Vector {
         None => player.pos,
     }
 }
-fn is_within_flood(caster: &Option<Arc<RwLock<Enemy>>>) -> bool {
+fn is_within_flood(caster: &Option<Arc<RwLock<Enemy>>>, board: &Board) -> bool {
     caster
         .as_ref()
-        .is_none_or(|arc| arc.try_read().unwrap().reachable)
+        .is_none_or(|arc| board.is_reachable(arc.try_read().unwrap().pos))
 }

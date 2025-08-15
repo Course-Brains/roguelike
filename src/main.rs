@@ -52,18 +52,20 @@ mod bench {
             }
         };
     }
-    static BENCHES: [LazyLock<RwLock<File>>; 5] = [
+    static BENCHES: [LazyLock<RwLock<File>>; 6] = [
         bench_maker!("bench/render"),
         bench_maker!("bench/vis_flood"),
         bench_maker!("bench/flood"),
         bench_maker!("bench/nav"),
         bench_maker!("bench/think"),
+        bench_maker!("bench/open_flood"),
     ];
     bench_maker!(render, 0);
     bench_maker!(vis_flood, 1);
     bench_maker!(flood, 2);
     bench_maker!(nav, 3);
     bench_maker!(think, 4);
+    bench_maker!(open_flood, 5);
 }
 fn enable_benchmark() {
     bench::BENCHMARK.store(true, Ordering::SeqCst);
@@ -418,9 +420,15 @@ fn main() {
             }
             Input::Enter => {
                 if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
-                    door.open = !door.open;
+                    if door.open {
+                        door.open = false;
+                        re_flood();
+                    } else {
+                        state.board.open_door_flood(state.player.selector);
+                        state.board[state.player.selector] =
+                            Some(Piece::Door(pieces::door::Door { open: true }));
+                    }
                     state.increment();
-                    RE_FLOOD.store(true, Ordering::Relaxed)
                 }
             }
             Input::Item(index) => {
@@ -713,6 +721,18 @@ impl Vector {
             }
         }
         out
+    }
+    fn up(self) -> Vector {
+        Vector::new(self.x, self.y - 1)
+    }
+    fn down(self) -> Vector {
+        Vector::new(self.x, self.y + 1)
+    }
+    fn left(self) -> Vector {
+        Vector::new(self.x - 1, self.y)
+    }
+    fn right(self) -> Vector {
+        Vector::new(self.x + 1, self.y)
     }
 }
 impl std::ops::Sub for Vector {

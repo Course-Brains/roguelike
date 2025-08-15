@@ -18,7 +18,6 @@ pub struct Enemy {
     windup: usize,
     pub pos: Vector,
     pub active: bool,
-    pub reachable: bool,
     pub attacking: bool,
     pub dead: bool,
     // If it should give rewards when killed
@@ -34,7 +33,6 @@ impl Enemy {
             windup: 0,
             pos,
             active: false,
-            reachable: false,
             attacking: false,
             dead: false,
             reward: true,
@@ -89,7 +87,7 @@ impl Enemy {
     // returns whether or not it needs to re-render the board after this
     pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
         let mut this = Some(arc.try_write().unwrap());
-        if !this.as_ref().unwrap().reachable {
+        if !board.is_reachable(this.as_ref().unwrap().pos) {
             return false;
         }
         let addr = Arc::as_ptr(&arc).addr();
@@ -227,7 +225,7 @@ impl Enemy {
                     }
                     2 => {
                         // spell time
-                        if this.reachable && board[player.pos].is_none() {
+                        if board[player.pos].is_none() {
                             this.windup = ContactSpell::DrainHealth.cast_time();
                             this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
@@ -642,7 +640,6 @@ impl Clone for Enemy {
             windup: self.windup,
             pos: self.pos,
             active: self.active,
-            reachable: self.reachable,
             attacking: self.attacking,
             dead: self.dead,
             reward: self.reward,

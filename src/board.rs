@@ -5,7 +5,7 @@ use crate::{
     spell::{Spell, SpellCircle},
 };
 use albatrice::{FromBinary, ToBinary};
-use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::io::Write;
 use std::ops::Range;
 use std::sync::RwLock;
@@ -27,6 +27,7 @@ pub struct Board {
     seen: Vec<bool>,
     // The number of turns spent on this board specifically
     pub turns_spent: usize,
+    reachable: Vec<bool>,
 }
 // General use
 impl Board {
@@ -51,6 +52,7 @@ impl Board {
             visible,
             seen,
             turns_spent: 0,
+            reachable: vec![false; x * y],
         }
     }
     pub fn to_index(&self, pos: Vector) -> usize {
@@ -206,6 +208,9 @@ impl Board {
         }
         seen.iter().map(|pos| *pos).collect()
     }
+    pub fn is_reachable(&self, pos: Vector) -> bool {
+        self.reachable[self.to_index(pos)]
+    }
 }
 // Rendering
 impl Board {
@@ -311,7 +316,7 @@ impl Board {
             }
             if player.effects.full_vis.is_active() {
             } else if player.effects.mage_sight.is_active() {
-                if !enemy.try_read().unwrap().reachable {
+                if !self.is_reachable(enemy.try_read().unwrap().pos) {
                     continue;
                 }
             } else if !self.visible[self.to_index(pos)] {
@@ -418,7 +423,7 @@ impl Board {
             }
         } else if player.effects.mage_sight.is_active() {
             if let Some(enemy) = self.get_enemy(player.selector, None) {
-                if enemy.try_read().unwrap().reachable {
+                if self.is_reachable(enemy.try_read().unwrap().pos) {
                     write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
                 }
             }
@@ -515,7 +520,7 @@ impl Board {
             0,
         ));
         for enemy in self.enemies.iter() {
-            if !enemy.try_read().unwrap().reachable {
+            if !self.is_reachable(enemy.try_read().unwrap().pos) {
                 continue;
             }
             if self.backtraces[self.to_index(enemy.try_read().unwrap().pos)]
@@ -678,21 +683,64 @@ impl Board {
 
         out
     }
+    pub fn open_door_flood(&mut self, door: Vector) {
+        if let Some(pos) = self.get_open_door_flood_start(door) {
+            let start = std::time::Instant::now();
+            let index = self.to_index(pos);
+            self.reachable[index] = true;
+            let mut seen = HashSet::new();
+            let mut next = VecDeque::new();
+            seen.insert(pos);
+            next.push_front(pos);
+            while let Some(pos) = next.pop_back() {
+                let index = self.to_index(pos);
+                self.reachable[index] = true;
+                let adj = self.get_adjacent(pos, None, false);
+                macro_rules! helper {
+                    ($name: ident) => {
+                        if adj.$name && !seen.contains(&pos.$name()) {
+                            seen.insert(pos.$name());
+                            next.push_front(pos.$name());
+                        }
+                    };
+                }
+                helper!(up);
+                helper!(down);
+                helper!(left);
+                helper!(right);
+            }
+            if crate::bench() {
+                let elapsed = start.elapsed();
+                writeln!(crate::bench::open_flood(), "{}", elapsed.as_millis()).unwrap();
+            }
+        }
+    }
+    fn get_open_door_flood_start(&self, door: Vector) -> Option<Vector> {
+        let adj = self.get_adjacent(door, None, false);
+        if adj.up && self.is_reachable(door.down()) {
+            Some(door.up())
+        } else if adj.down && self.is_reachable(door.up()) {
+            Some(door.down())
+        } else if adj.left && self.is_reachable(door.right()) {
+            Some(door.left())
+        } else if adj.right && self.is_reachable(door.left()) {
+            Some(door.right())
+        } else {
+            None
+        }
+    }
     pub fn flood(&mut self, player: Vector) {
         let start = std::time::Instant::now();
-        let mut lookup = HashMap::new();
-        for (index, enemy) in self.enemies.iter_mut().enumerate() {
-            enemy.try_write().unwrap().reachable = false;
-            lookup.insert(enemy.try_read().unwrap().pos, index);
+        for reachable in self.reachable.iter_mut() {
+            *reachable = false;
         }
         let mut to_visit = VecDeque::new();
         let mut seen = HashSet::new();
         to_visit.push_front(player);
         seen.insert(player);
         while let Some(pos) = to_visit.pop_back() {
-            if let Some(index) = lookup.get(&pos) {
-                self.enemies[*index].try_write().unwrap().reachable = true;
-            }
+            let index = self.to_index(pos);
+            self.reachable[index] = true;
             let adj = self.get_adjacent(pos, None, false);
             if adj.up {
                 if pos.y == 0 {
@@ -775,7 +823,7 @@ impl Board {
     pub fn move_enemy(&mut self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {
         let mut enemy = arc.try_write().unwrap();
         let addr = Arc::as_ptr(&arc).addr();
-        if !enemy.active || !enemy.reachable || enemy.attacking || enemy.is_stunned() {
+        if !enemy.active || !self.is_reachable(enemy.pos) || enemy.attacking || enemy.is_stunned() {
             return false;
         }
         enemy.alert_nearby(addr, self, crate::random() as usize & 7);
@@ -890,6 +938,7 @@ impl FromBinary for Board {
             visible: Vec::from_binary(binary)?,
             seen: Vec::from_binary(binary)?,
             turns_spent: usize::from_binary(binary)?,
+            reachable: Vec::from_binary(binary)?,
         })
     }
 }
@@ -911,7 +960,8 @@ impl ToBinary for Board {
         // skipping boss because skipping enemies
         self.visible.to_binary(binary)?;
         self.seen.to_binary(binary)?;
-        self.turns_spent.to_binary(binary)
+        self.turns_spent.to_binary(binary)?;
+        self.reachable.to_binary(binary)
     }
 }
 #[derive(Copy, Clone)]

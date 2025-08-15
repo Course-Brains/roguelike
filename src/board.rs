@@ -684,49 +684,70 @@ impl Board {
         out
     }
     pub fn open_door_flood(&mut self, door: Vector) {
-        if let Some(pos) = self.get_open_door_flood_start(door) {
-            let start = std::time::Instant::now();
-            let index = self.to_index(pos);
-            self.reachable[index] = true;
-            let mut seen = HashSet::new();
-            let mut next = VecDeque::new();
-            seen.insert(pos);
-            next.push_front(pos);
-            while let Some(pos) = next.pop_back() {
+        match self.get_open_door_flood_start(door) {
+            ShouldFloodDoor::Yes(pos) => {
+                let start = std::time::Instant::now();
                 let index = self.to_index(pos);
                 self.reachable[index] = true;
-                let adj = self.get_adjacent(pos, None, false);
-                macro_rules! helper {
-                    ($name: ident) => {
-                        if adj.$name && !seen.contains(&pos.$name()) {
-                            seen.insert(pos.$name());
-                            next.push_front(pos.$name());
-                        }
-                    };
+                let mut seen = HashSet::new();
+                let mut next = VecDeque::new();
+                seen.insert(pos);
+                next.push_front(pos);
+                while let Some(pos) = next.pop_back() {
+                    let index = self.to_index(pos);
+                    self.reachable[index] = true;
+                    let adj = self.get_adjacent(pos, None, false);
+                    macro_rules! helper {
+                        ($name: ident) => {
+                            if adj.$name && !seen.contains(&pos.$name()) {
+                                seen.insert(pos.$name());
+                                next.push_front(pos.$name());
+                            }
+                        };
+                    }
+                    helper!(up);
+                    helper!(down);
+                    helper!(left);
+                    helper!(right);
                 }
-                helper!(up);
-                helper!(down);
-                helper!(left);
-                helper!(right);
+                if crate::bench() {
+                    let elapsed = start.elapsed();
+                    writeln!(crate::bench::open_flood(), "{}", elapsed.as_millis()).unwrap();
+                }
             }
-            if crate::bench() {
-                let elapsed = start.elapsed();
-                writeln!(crate::bench::open_flood(), "{}", elapsed.as_millis()).unwrap();
+            ShouldFloodDoor::NoNeed => {
+                // Even if we don't need to flood the new area, we still need to mark the door as
+                // reachable
+                let index = self.to_index(door);
+                self.reachable[index] = true;
             }
+            ShouldFloodDoor::No => {}
         }
     }
-    fn get_open_door_flood_start(&self, door: Vector) -> Option<Vector> {
+    fn get_open_door_flood_start(&self, door: Vector) -> ShouldFloodDoor {
         let adj = self.get_adjacent(door, None, false);
         if adj.up && self.is_reachable(door.down()) {
-            Some(door.up())
+            if self.is_reachable(door.up()) {
+                return ShouldFloodDoor::NoNeed;
+            }
+            ShouldFloodDoor::Yes(door.up())
         } else if adj.down && self.is_reachable(door.up()) {
-            Some(door.down())
+            if self.is_reachable(door.down()) {
+                return ShouldFloodDoor::NoNeed;
+            }
+            ShouldFloodDoor::Yes(door.down())
         } else if adj.left && self.is_reachable(door.right()) {
-            Some(door.left())
+            if self.is_reachable(door.left()) {
+                return ShouldFloodDoor::NoNeed;
+            }
+            ShouldFloodDoor::Yes(door.left())
         } else if adj.right && self.is_reachable(door.left()) {
-            Some(door.right())
+            if self.is_reachable(door.right()) {
+                return ShouldFloodDoor::NoNeed;
+            }
+            ShouldFloodDoor::Yes(door.right())
         } else {
-            None
+            ShouldFloodDoor::No
         }
     }
     pub fn flood(&mut self, player: Vector) {
@@ -1274,4 +1295,9 @@ impl ToBinary for Special {
         self.ch.to_binary(binary)?;
         self.style.as_ref().to_binary(binary)
     }
+}
+enum ShouldFloodDoor {
+    Yes(Vector), // Start point
+    NoNeed,
+    No,
 }

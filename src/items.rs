@@ -86,7 +86,6 @@ impl ItemType {
                     }
                     return true;
                 }
-                state.player.inspect = false;
                 let mut already_said = false;
                 if random & 0b0011_1000 == 0 {
                     already_said = true;

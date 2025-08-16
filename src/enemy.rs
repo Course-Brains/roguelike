@@ -241,6 +241,7 @@ impl Enemy {
             Variant::BasicBoss(direction) => {
                 if this.as_ref().unwrap().windup > 0 {
                     if this.as_ref().unwrap().windup == 1 {
+                        this.as_mut().unwrap().log(format!("Charging {direction}"));
                         let start = this.as_ref().unwrap().pos;
                         // charge time
                         this.take();
@@ -256,20 +257,29 @@ impl Enemy {
                         true
                     } else {
                         this.as_mut().unwrap().windup -= 1;
+                        let new_windup = this.as_ref().unwrap().windup;
+                        this.as_mut()
+                            .unwrap()
+                            .log(format!("Decrimenting windup, now at {new_windup}"));
                         false
                     }
                 } else if this.as_ref().unwrap().is_near(player.pos, 2) {
                     // smack 'em
-                    let _ = player.attacked(
-                        luck_roll8(player) as usize / 2 + 3,
-                        Variant::BasicBoss(Direction::Up).kill_name(),
-                    );
+                    let damage = luck_roll8(player) as usize / 2 + 3;
+                    this.as_mut()
+                        .unwrap()
+                        .log(format!("Attacking player for {damage}"));
+                    let _ = player.attacked(damage, Variant::BasicBoss(Direction::Up).kill_name());
                     true
                 } else if this.as_ref().unwrap().pos.x == player.pos.x && *line_of_sight {
                     // charge up a vertical charge
                     if this.as_ref().unwrap().pos.y > player.pos.y {
+                        this.as_mut().unwrap().log("Starting charge up".to_string());
                         this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Up)
                     } else {
+                        this.as_mut()
+                            .unwrap()
+                            .log("Starting charge down".to_string());
                         this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Down)
                     }
                     this.as_mut().unwrap().windup = 2;
@@ -278,14 +288,22 @@ impl Enemy {
                 } else if this.as_ref().unwrap().pos.y == player.pos.y && *line_of_sight {
                     // charge up a horizontal charge
                     if this.as_ref().unwrap().pos.x > player.pos.x {
+                        this.as_mut()
+                            .unwrap()
+                            .log("Starting charge left".to_string());
                         this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Left)
                     } else {
+                        this.as_mut()
+                            .unwrap()
+                            .log("Starting charge right".to_string());
                         this.as_mut().unwrap().variant = Variant::BasicBoss(Direction::Right)
                     }
                     this.as_mut().unwrap().windup = 2;
                     this.as_mut().unwrap().attacking = true;
                     true
                 } else {
+                    this.as_mut().unwrap().log("Doing nothing".to_string());
+                    this.as_mut().unwrap().attacking = false;
                     false
                 }
             }
@@ -460,12 +478,11 @@ impl Enemy {
                                     None,
                                     Some(aim),
                                 );
-                                //this = Some(arc.try_write().unwrap());
+                                this = Some(arc.try_write().unwrap());
                             }
                         }
-                    } else {
-                        this.as_mut().unwrap().windup -= 1;
                     }
+                    this.as_mut().unwrap().windup -= 1;
                 } else {
                     // Deciding what to do
                     if this.as_ref().unwrap().pos.is_near(player.pos, 2) {

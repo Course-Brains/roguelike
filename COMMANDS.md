@@ -94,8 +94,7 @@ set\_piece \[x\] \[y\] [args]
         upgrade \[upgrade\]
             Sets it to an Upgrade which grants the given \[upgrade\].
             Valid upgrades are as in the upgrade command
-    No, you cannot create spells using this because they require a
-    caster
+    No, you cannot create spells using this because they are not pieces
 
 load\_next
     Loads the next level
@@ -111,6 +110,9 @@ effect \[effect\] \[duration\]
         regen
         unlucky
         doomed
+        damage\_boost
+        full\_vis
+        drunk
     Valid durations are:
         none
             Disables the effect
@@ -130,6 +132,7 @@ give \[item\] \[slot\]
         gamba
         ender\_pearl
         warp
+        spirit
 
 set\_money \[amount\]
     Sets the money to the given \[amount\]
@@ -140,6 +143,12 @@ upgrade \[upgrade\]
         mage\_eye
         map
         soft\_shoes
+        save\_pint
+            Don't
+        precise\_convert
+        energy\_boost
+        health\_boost
+        lifesteal
 
 set\_detect\_mod \[mod\]
     Sets the detection modifier to the given \[mod\]
@@ -154,6 +163,10 @@ cast \[spell type\] \[spell\]
             swap
             biden\_blast
             identify
+            charge
+            big\_explode
+            teleport
+            summon\_spirit
         contact
             drain\_health
 

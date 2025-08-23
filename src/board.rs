@@ -211,6 +211,15 @@ impl Board {
     pub fn is_reachable(&self, pos: Vector) -> bool {
         self.reachable[self.to_index(pos)]
     }
+    pub fn count_visible_enemies(&self, bounds: Range<Vector>, full_vis: bool) -> usize {
+        let mut count = 0;
+        for enemy in self.enemies.iter() {
+            if self.is_visible(enemy.try_read().unwrap().pos, bounds.clone(), full_vis) {
+                count += 1;
+            }
+        }
+        count
+    }
 }
 // Rendering
 impl Board {
@@ -458,7 +467,7 @@ impl Board {
         seen.insert(player.pos);
         next.push_front((player.pos, 0));
         while let Some((pos, cost)) = next.pop_back() {
-            if cost > player.perception {
+            if cost > player.get_perception() {
                 continue;
             }
             for x in -1..=1 {
@@ -818,6 +827,7 @@ impl Board {
         enemy: Arc<RwLock<Enemy>>,
         bounds: Range<Vector>,
         time: &mut std::time::Duration,
+        do_delay: bool,
     ) {
         if self.move_enemy(player, enemy.clone())
             && self.is_visible(
@@ -827,11 +837,11 @@ impl Board {
             )
         {
             self.smart_render(player);
-            std::thread::sleep(crate::DELAY);
+            if do_delay {
+                std::thread::sleep(crate::DELAY);
+            }
         }
-        let start = std::time::Instant::now();
-        let think = Enemy::think(enemy.clone(), self, player);
-        *time += start.elapsed();
+        let think = Enemy::think(enemy.clone(), self, player, time);
         if think
             && self.is_visible(
                 enemy.try_read().unwrap().pos,
@@ -840,7 +850,9 @@ impl Board {
             )
         {
             self.smart_render(player);
-            std::thread::sleep(crate::DELAY);
+            if do_delay {
+                std::thread::sleep(crate::DELAY);
+            }
         }
     }
     pub fn move_enemy(&mut self, player: &mut Player, arc: Arc<RwLock<Enemy>>) -> bool {

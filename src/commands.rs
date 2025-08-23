@@ -222,6 +222,7 @@ impl Command {
                         &mut state.board,
                         None,
                         Some(target),
+                        None,
                     );
                 }
                 Spell::Contact(spell) => {

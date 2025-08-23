@@ -21,11 +21,12 @@ pub fn random() -> Rand {
     RANDOM_TABLE[INDEX.fetch_add(1, Ordering::SeqCst) as usize]
 }
 pub fn initialize() {
-    let init = (std::time::SystemTime::now()
+    let init = ((std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos()
-        & Rand::MAX as u128) as Rand;
+        & Rand::MAX as u128) as Rand)
+        .wrapping_add((std::process::id() & (Rand::MAX as u32)) as Rand);
     crate::log!("Initialized with random index: {init}",);
     INDEX.store(init, Ordering::SeqCst)
 }

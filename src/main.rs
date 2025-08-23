@@ -30,6 +30,11 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use albatrice::{FromBinary, ToBinary};
 
+// The format version of the save data, different versions are incompatible and require a restart
+// of the save, but the version will only change on releases, so if the user is not going by
+// release, then they could end up with two incompatible save files.
+const SAVE_VERSION: Version = 3;
+
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
 fn stats<'a>() -> std::sync::MutexGuard<'a, Stats> {
@@ -52,13 +57,14 @@ mod bench {
             }
         };
     }
-    static BENCHES: [LazyLock<RwLock<File>>; 6] = [
+    static BENCHES: [LazyLock<RwLock<File>>; 7] = [
         bench_maker!("bench/render"),
         bench_maker!("bench/vis_flood"),
         bench_maker!("bench/flood"),
         bench_maker!("bench/nav"),
         bench_maker!("bench/think"),
         bench_maker!("bench/open_flood"),
+        bench_maker!("bench/total"),
     ];
     bench_maker!(render, 0);
     bench_maker!(vis_flood, 1);
@@ -66,6 +72,7 @@ mod bench {
     bench_maker!(nav, 3);
     bench_maker!(think, 4);
     bench_maker!(open_flood, 5);
+    bench_maker!(total, 6);
 }
 fn enable_benchmark() {
     bench::BENCHMARK.store(true, Ordering::SeqCst);
@@ -84,10 +91,6 @@ const PROJ_DELAY: std::time::Duration = std::time::Duration::from_millis(25);
 fn proj_delay() {
     std::thread::sleep(PROJ_DELAY);
 }
-// The format version of the save data, different versions are incompatible and require a restart
-// of the save, but the version will only change on releases, so if the user is not going by
-// release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 2;
 type Version = u32;
 // the path to the file used for saving and loading
 const PATH: &str = "save";
@@ -97,11 +100,11 @@ const STAT_PATH: &str = "stats";
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
-        #[cfg(any(debug_assertions, feature = "log"))]
+        #[cfg(feature = "log")]
         $crate::log(format!($($arg)*))
     }
 }
-#[cfg(any(debug_assertions, feature = "log"))]
+#[cfg(feature = "log")]
 fn log(string: String) {
     writeln!(LOG.lock().unwrap().as_ref().unwrap(), "{string}").unwrap();
 }
@@ -121,7 +124,7 @@ static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 static SAVE: AtomicBool = AtomicBool::new(false);
 
 fn main() {
-    #[cfg(any(debug_assertions, feature = "log"))]
+    #[cfg(feature = "log")]
     {
         *LOG.lock().unwrap() = Some(File::create("log").unwrap());
     }
@@ -397,12 +400,11 @@ fn main() {
                     stats().energy_used += 1;
                     state.player.was_hit = false;
                     state.player.blocking = true;
-                    state.think();
+                    state.increment();
                     if state.player.was_hit {
                         state.player.energy -= 1;
                     }
                     state.player.blocking = false;
-                    state.turn += 1;
                     state.render();
                 }
             }
@@ -552,18 +554,26 @@ impl State {
         }
         false
     }
-    fn think(&mut self) {
+    fn think(&mut self, time: &mut std::time::Duration) {
         if self.player.effects.regen.is_active() {
             self.player.heal(2)
         }
-        self.board.purge_dead();
         self.board.generate_nav_data(self.player.pos);
         let bounds = self.board.get_render_bounds(&self.player);
-        let mut time = std::time::Duration::new(0, 0);
-        for enemy in self.board.enemies.clone().iter() {
-            self.board
-                .move_and_think(&mut self.player, enemy.clone(), bounds.clone(), &mut time);
+        let last_index = self
+            .board
+            .count_visible_enemies(bounds.clone(), self.player.effects.full_vis.is_active())
+            - 1;
+        for (index, enemy) in self.board.enemies.clone().iter().enumerate() {
+            self.board.move_and_think(
+                &mut self.player,
+                enemy.clone(),
+                bounds.clone(),
+                time,
+                index != last_index,
+            );
         }
+        self.board.purge_dead();
         if bench() {
             writeln!(bench::think(), "{}", time.as_millis()).unwrap();
         }
@@ -595,11 +605,18 @@ impl State {
         );
     }
     fn increment(&mut self) {
+        let mut start = std::time::Instant::now();
         self.player.decriment_effects();
-        self.think();
+        let mut time = start.elapsed();
+        self.think(&mut time);
+        start = std::time::Instant::now();
         self.turn += 1;
         self.board.turns_spent += 1;
         self.render();
+        time += start.elapsed();
+        if bench() {
+            writeln!(bench::total(), "{}", time.as_millis()).unwrap();
+        }
     }
     fn load_next_map(&mut self) {
         generator::DO_DELAY.store(false, Ordering::SeqCst);
@@ -1069,7 +1086,7 @@ impl From<Vector> for Collision {
 }
 #[derive(Clone, Debug)]
 struct Stats {
-    // The amount of money when entering each shop
+    // The amo unt of money when entering each shop
     shop_money: Vec<usize>,
     // The total amount of money gained in a run
     total_money: usize,
@@ -1103,6 +1120,8 @@ struct Stats {
     kills: HashMap<u8, usize>,
     // total energy used
     energy_used: usize,
+    // reward energy that was lost
+    energy_wasted: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1124,6 +1143,7 @@ impl Stats {
             num_saves: 0,
             kills: HashMap::new(),
             energy_used: 0,
+            energy_wasted: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1192,6 +1212,7 @@ impl FromBinary for Stats {
             num_saves: usize::from_binary(binary)?,
             kills: HashMap::from_binary(binary)?,
             energy_used: usize::from_binary(binary)?,
+            energy_wasted: usize::from_binary(binary)?,
         })
     }
 }
@@ -1213,7 +1234,8 @@ impl ToBinary for Stats {
         self.spell_list.to_binary(binary)?;
         self.num_saves.to_binary(binary)?;
         self.kills.to_binary(binary)?;
-        self.energy_used.to_binary(binary)
+        self.energy_used.to_binary(binary)?;
+        self.energy_wasted.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1363,6 +1385,7 @@ fn view_stats() {
                         "num_saves" => list!(num_saves, index),
                         "kills" => list!(kills, index, list_kills),
                         "energy_used" => list!(energy_used, index),
+                        "energy_wasted" => list!(energy_wasted, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

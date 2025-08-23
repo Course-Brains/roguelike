@@ -85,9 +85,16 @@ impl Enemy {
         self.dead
     }
     // returns whether or not it needs to re-render the board after this
-    pub fn think(arc: Arc<RwLock<Self>>, board: &mut Board, player: &mut Player) -> bool {
+    pub fn think(
+        arc: Arc<RwLock<Self>>,
+        board: &mut Board,
+        player: &mut Player,
+        time: &mut std::time::Duration,
+    ) -> bool {
+        let mut start = std::time::Instant::now();
         let mut this = Some(arc.try_write().unwrap());
         if !board.is_reachable(this.as_ref().unwrap().pos) {
+            *time += start.elapsed();
             return false;
         }
         let addr = Arc::as_ptr(&arc).addr();
@@ -109,11 +116,13 @@ impl Enemy {
                     .log("Woke up due to detection".to_string());
                 this.as_mut().unwrap().active = true;
             } else {
+                *time += start.elapsed();
                 return false;
             }
         }
         if this.as_ref().unwrap().stun != 0 {
             this.as_mut().unwrap().stun -= 1;
+            *time += start.elapsed();
             return false;
         }
         let pos = this.as_ref().unwrap().pos;
@@ -143,6 +152,7 @@ impl Enemy {
                     this.as_mut().unwrap().attacking = true;
                     if this.as_ref().unwrap().windup == 0 {
                         this.as_mut().unwrap().windup = 2;
+                        *time += start.elapsed();
                         return true;
                     }
                     this.as_mut().unwrap().windup -= 1;
@@ -154,12 +164,15 @@ impl Enemy {
                             this.as_mut().unwrap().stun =
                                 this.as_ref().unwrap().variant.parry_stun();
                         }
+                        *time += start.elapsed();
                         return true;
                     }
+                    *time += start.elapsed();
                     false
                 } else {
                     this.as_mut().unwrap().attacking = false;
                     this.as_mut().unwrap().windup = 0;
+                    *time += start.elapsed();
                     false
                 }
             }
@@ -172,6 +185,7 @@ impl Enemy {
                 }
                 if this.as_ref().unwrap().windup > 1 {
                     this.as_mut().unwrap().windup -= 1;
+                    *time += start.elapsed();
                     return false;
                 }
                 if this.as_ref().unwrap().windup == 1 {
@@ -188,13 +202,23 @@ impl Enemy {
                                 });
                             }
                             this.as_mut().unwrap().windup = 0;
+                            *time += start.elapsed();
                         }
                         MageSpell::Teleport => {
                             crate::log!("  Casting swap");
                             assert!(arc.try_write().is_err(), "RUH ROH RAGGY");
                             this.take();
                             assert!(arc.try_write().is_ok(), "AR NAWR");
-                            NormalSpell::Swap.cast(Some(arc.clone()), player, board, None, None);
+                            *time += start.elapsed();
+                            NormalSpell::Swap.cast(
+                                Some(arc.clone()),
+                                player,
+                                board,
+                                None,
+                                None,
+                                Some(time),
+                            );
+                            start = std::time::Instant::now();
                             this = Some(arc.try_write().unwrap());
                             this.as_mut().unwrap().windup = 0;
                         }
@@ -207,8 +231,10 @@ impl Enemy {
                         if this.is_near(player.pos, TELE_THRESH) {
                             this.windup = NormalSpell::Swap.cast_time();
                             this.variant = Variant::Mage(MageSpell::Teleport);
+                            *time += start.elapsed();
                             return true;
                         }
+                        *time += start.elapsed();
                         false
                     }
                     1 => {
@@ -221,6 +247,7 @@ impl Enemy {
                                 enemy.try_write().unwrap().active = true;
                             }
                         }
+                        *time += start.elapsed();
                         false
                     }
                     2 => {
@@ -229,10 +256,12 @@ impl Enemy {
                             this.windup = ContactSpell::DrainHealth.cast_time();
                             this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
+                        *time += start.elapsed();
                         true
                     }
                     3 => {
                         // do nothing
+                        *time += start.elapsed();
                         false
                     }
                     _ => unreachable!("Bit and seems to be broken"),
@@ -242,15 +271,17 @@ impl Enemy {
                 if this.as_ref().unwrap().windup > 0 {
                     if this.as_ref().unwrap().windup == 1 {
                         this.as_mut().unwrap().log(format!("Charging {direction}"));
-                        let start = this.as_ref().unwrap().pos;
+                        let start_pos = this.as_ref().unwrap().pos;
                         // charge time
                         this.take();
+                        *time += start.elapsed();
                         NormalSpell::Charge.cast(
                             Some(arc.clone()),
                             player,
                             board,
                             None,
-                            Some(start + direction),
+                            Some(start_pos + direction),
+                            Some(time),
                         );
                         this = Some(arc.try_write().unwrap());
                         this.as_mut().unwrap().windup = 0;
@@ -261,6 +292,7 @@ impl Enemy {
                         this.as_mut()
                             .unwrap()
                             .log(format!("Decrimenting windup, now at {new_windup}"));
+                        *time += start.elapsed();
                         false
                     }
                 } else if this.as_ref().unwrap().is_near(player.pos, 2) {
@@ -270,6 +302,7 @@ impl Enemy {
                         .unwrap()
                         .log(format!("Attacking player for {damage}"));
                     let _ = player.attacked(damage, Variant::BasicBoss(Direction::Up).kill_name());
+                    *time += start.elapsed();
                     true
                 } else if this.as_ref().unwrap().pos.x == player.pos.x && *line_of_sight {
                     // charge up a vertical charge
@@ -284,6 +317,7 @@ impl Enemy {
                     }
                     this.as_mut().unwrap().windup = 2;
                     this.as_mut().unwrap().attacking = true;
+                    *time += start.elapsed();
                     true
                 } else if this.as_ref().unwrap().pos.y == player.pos.y && *line_of_sight {
                     // charge up a horizontal charge
@@ -300,10 +334,12 @@ impl Enemy {
                     }
                     this.as_mut().unwrap().windup = 2;
                     this.as_mut().unwrap().attacking = true;
+                    *time += start.elapsed();
                     true
                 } else {
                     this.as_mut().unwrap().log("Doing nothing".to_string());
                     this.as_mut().unwrap().attacking = false;
+                    *time += start.elapsed();
                     false
                 }
             }
@@ -316,13 +352,16 @@ impl Enemy {
                             MageBossSpell::Obamehameha(direction) => {
                                 let aim = this.as_ref().unwrap().pos + direction;
                                 this.take();
+                                *time += start.elapsed();
                                 NormalSpell::BidenBlast.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     None,
                                     Some(aim),
+                                    Some(time),
                                 );
+                                start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
                             }
                             MageBossSpell::Promote(enemy) => {
@@ -334,6 +373,7 @@ impl Enemy {
                                 // If the player is near then get_adjacent can crash or fail
                                 if this.as_ref().unwrap().is_near(player.pos, 5) {
                                     this.unwrap().windup = 0;
+                                    *time += start.elapsed();
                                     return false;
                                 }
                                 'outer: for pos in board
@@ -365,6 +405,7 @@ impl Enemy {
                                     board,
                                     None,
                                     None,
+                                    Some(time),
                                 );
                                 this = Some(arc.try_write().unwrap());
                             }
@@ -372,6 +413,7 @@ impl Enemy {
                     }
                     this.as_mut().unwrap().windup -= 1;
                     // redraw if it actually cast something
+                    *time += start.elapsed();
                     this.unwrap().windup == 0
                 }
                 // Deciding what to do
@@ -397,6 +439,7 @@ impl Enemy {
                             Variant::MageBoss(MageBossSpell::Obamehameha(dir));
                         this.as_mut().unwrap().windup = 4;
                         this.as_mut().unwrap().attacking = true;
+                        *time += start.elapsed();
                         return true;
                     }
                     false
@@ -425,8 +468,10 @@ impl Enemy {
                                     Variant::MageBoss(MageBossSpell::Promote(chosen));
                                 this.as_mut().unwrap().windup = 5;
                                 this.as_mut().unwrap().attacking = true;
+                                *time += start.elapsed();
                                 return true;
                             }
+                            *time += start.elapsed();
                             false
                         }
                         1 => {
@@ -435,6 +480,7 @@ impl Enemy {
                                 Variant::MageBoss(MageBossSpell::Create);
                             this.as_mut().unwrap().windup = 5;
                             this.as_mut().unwrap().attacking = true;
+                            *time += start.elapsed();
                             true
                         }
                         2 => {
@@ -449,6 +495,7 @@ impl Enemy {
                             this.as_mut().unwrap().variant = Variant::MageBoss(MageBossSpell::Swap);
                             this.as_mut().unwrap().windup = 5;
                             this.as_mut().unwrap().attacking = true;
+                            *time += start.elapsed();
                             true
                         }
                         3 => false,
@@ -471,13 +518,16 @@ impl Enemy {
                             }
                             FighterAction::Teleport(aim) => {
                                 this.take();
+                                *time += start.elapsed();
                                 NormalSpell::Teleport.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     None,
                                     Some(aim),
+                                    Some(time),
                                 );
+                                start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
                             }
                         }
@@ -501,6 +551,7 @@ impl Enemy {
                         this.as_mut().unwrap().attacking = false;
                     }
                 }
+                *time += start.elapsed();
                 true
             }
             Variant::FighterBoss { buff, action } => {
@@ -511,24 +562,30 @@ impl Enemy {
                             FighterBossAction::Teleport(aim) => {
                                 this.take();
                                 // TODO: change this to be an actual teleportation
+                                *time += start.elapsed();
                                 NormalSpell::Charge.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     None,
                                     Some(aim),
+                                    Some(time),
                                 );
+                                start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
                             }
                             FighterBossAction::BigExplode(aim) => {
                                 this.take();
+                                *time += start.elapsed();
                                 NormalSpell::BigExplode.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     None,
                                     Some(aim),
+                                    Some(time),
                                 );
+                                start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
                             }
                             FighterBossAction::ApplyBuff => {
@@ -562,9 +619,11 @@ impl Enemy {
                             }
                         }
                         this.as_mut().unwrap().windup = 0;
+                        *time += start.elapsed();
                         true
                     } else {
                         this.as_mut().unwrap().windup -= 1;
+                        *time += start.elapsed();
                         false
                     }
                 } else {
@@ -608,6 +667,7 @@ impl Enemy {
                     } else {
                         this.as_mut().unwrap().attacking = false;
                     }
+                    *time += start.elapsed();
                     false
                 }
             }
@@ -680,15 +740,16 @@ impl Variant {
     fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
         match self {
             Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => {
-                    advantage_pass(|| cost < luck_roll8(player) as usize, player.detect_mod)
-                }
+                Some(cost) => advantage_pass(
+                    || cost < luck_roll8(player) as usize,
+                    player.get_detect_mod(),
+                ),
                 None => false,
             },
             Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
                 Some(cost) => advantage_pass(
                     || cost < ((luck_roll8(player) + 1) << 2) as usize,
-                    player.detect_mod,
+                    player.get_detect_mod(),
                 ),
                 None => false,
             },
@@ -697,7 +758,7 @@ impl Variant {
                 .is_some_and(|cost| {
                     advantage_pass(
                         || cost < (luck_roll8(player) << 1) as usize,
-                        player.detect_mod,
+                        player.get_detect_mod(),
                     )
                 }),
             Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => board

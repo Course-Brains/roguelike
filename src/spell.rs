@@ -18,12 +18,26 @@ impl SpellCircle {
     pub fn update(&self, board: &mut Board, player: &mut Player) -> bool {
         match &self.spell {
             Spell::Normal(spell) => {
-                spell.cast(self.caster.clone(), player, board, Some(self.pos), self.aim);
+                spell.cast(
+                    self.caster.clone(),
+                    player,
+                    board,
+                    Some(self.pos),
+                    self.aim,
+                    None,
+                );
                 true
             }
             Spell::Contact(spell) => {
                 if let Some(enemy) = board.get_enemy(self.pos, None) {
                     spell.cast(enemy.into(), Entity::new(self.caster.clone(), player));
+                    return false;
+                }
+                if player.pos == self.pos {
+                    if self.caster.is_some() {
+                        return true;
+                    }
+                    spell.cast(player.into(), Entity::Enemy(self.caster.clone().unwrap()));
                     return false;
                 }
                 true
@@ -189,6 +203,8 @@ pub enum NormalSpell {
     BigExplode,
     // Fire a projectile and teleport where it lands
     Teleport,
+    // Give the player a "spirit" mua ha ha
+    SummonSpirit,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -200,7 +216,9 @@ impl NormalSpell {
         board: &mut Board,
         origin: Option<Vector>,
         aim: Option<Vector>,
+        time: Option<&mut std::time::Duration>,
     ) -> bool {
+        let start = std::time::Instant::now();
         if caster.is_none() {
             crate::stats().add_spell(Spell::Normal(*self));
         }
@@ -222,12 +240,21 @@ impl NormalSpell {
                         ),
                         None => std::mem::swap(&mut swap.try_write().unwrap().pos, &mut player.pos),
                     }
+                    if let Some(time) = time {
+                        *time += start.elapsed()
+                    }
                     return true;
+                }
+                if let Some(time) = time {
+                    *time += start.elapsed()
                 }
                 false
             }
             Self::BidenBlast => {
                 let damage = crate::random::random4() as usize;
+                if let Some(&mut mut time) = time {
+                    time += start.elapsed()
+                }
                 NormalSpell::fireball(
                     caster.clone(),
                     player,
@@ -240,6 +267,7 @@ impl NormalSpell {
                     caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
                         .unwrap_or("a lack of depth perception"),
+                    time,
                 );
                 true
             }
@@ -274,6 +302,9 @@ impl NormalSpell {
                         player.effects.list();
                     }
                 }
+                if let Some(time) = time {
+                    *time += start.elapsed()
+                }
                 true
             }
             Self::Charge => {
@@ -289,6 +320,7 @@ impl NormalSpell {
                 // visuals for the charge
                 let bounds = board.get_render_bounds(player);
                 path.pop();
+                let mut delay_counts = 0;
                 if path.len() != 0 {
                     for pos in path.iter() {
                         if board.is_visible(
@@ -302,6 +334,7 @@ impl NormalSpell {
                             }
                             board.smart_render(player);
                             proj_delay();
+                            delay_counts += 1;
                         }
                     }
                 }
@@ -321,10 +354,17 @@ impl NormalSpell {
                         }
                     }
                 }
+                if let Some(time) = time {
+                    *time += start.elapsed();
+                    *time -= crate::PROJ_DELAY * delay_counts
+                }
                 true
             }
             Self::BigExplode => {
                 let damage = crate::random::random16() as usize;
+                if let Some(&mut mut time) = time {
+                    time += start.elapsed()
+                }
                 NormalSpell::fireball(
                     caster.clone(),
                     player,
@@ -337,6 +377,7 @@ impl NormalSpell {
                     caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
                         .unwrap_or("a common lapse in judgement"),
+                    time,
                 );
                 true
             }
@@ -353,10 +394,14 @@ impl NormalSpell {
                 // If the path length is 0 then teleporting wouldn't move it so there is no need to
                 // do anything else
                 if path.len() == 0 {
+                    if let Some(time) = time {
+                        *time += start.elapsed()
+                    }
                     return true;
                 }
                 let bounds = board.get_render_bounds(player);
                 // rendering the projectile
+                let mut delay_counts = 0;
                 for pos in path.iter() {
                     if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
                         let special = board.add_special(Special {
@@ -366,6 +411,7 @@ impl NormalSpell {
                         });
                         board.smart_render(player);
                         proj_delay();
+                        delay_counts += 1;
                         drop(special)
                     }
                 }
@@ -375,7 +421,19 @@ impl NormalSpell {
                     Some(arc) => arc.try_write().unwrap().pos = target,
                     None => player.pos = target,
                 }
+                if let Some(time) = time {
+                    *time += start.elapsed();
+                    *time -= crate::PROJ_DELAY * delay_counts
+                }
                 true
+            }
+            Self::SummonSpirit => {
+                assert!(caster.is_none(), "Only the player can summon spirits");
+                if let Some(time) = time {
+                    *time += start.elapsed()
+                }
+                // quite frankly doesn't matter enough how long this takes for me to do it properly
+                player.add_item(crate::ItemType::Spirit)
             }
         }
     }
@@ -387,6 +445,7 @@ impl NormalSpell {
             Self::Charge => 2,
             Self::BigExplode => 10,
             Self::Teleport => 3,
+            Self::SummonSpirit => 10,
         }
     }
     fn fireball(
@@ -399,7 +458,10 @@ impl NormalSpell {
         damage: usize,
         player_damage: usize,
         death_name: &'static str,
+        time: Option<&mut std::time::Duration>,
     ) {
+        let start = std::time::Instant::now();
+        let mut delay_counts = 0;
         let aim = aim.unwrap();
         let origin = origin.unwrap_or(get_pos(&caster, player));
         let (mut path, collision) =
@@ -414,6 +476,7 @@ impl NormalSpell {
                 let special = board.add_special(fireball(*pos));
                 board.smart_render(player);
                 proj_delay();
+                delay_counts += 1;
                 drop(special);
             }
         }
@@ -432,6 +495,7 @@ impl NormalSpell {
             }
             if seen {
                 std::thread::sleep(crate::PROJ_DELAY * 4);
+                delay_counts += 4;
                 specials.truncate(0);
             }
         }
@@ -443,6 +507,10 @@ impl NormalSpell {
             if let Some(enemy) = board.get_enemy(*pos, None) {
                 enemy.try_write().unwrap().attacked(damage);
             }
+        }
+        if let Some(time) = time {
+            *time += start.elapsed();
+            *time -= crate::PROJ_DELAY * delay_counts;
         }
     }
 }
@@ -472,6 +540,7 @@ impl FromBinary for NormalSpell {
             3 => Self::Charge,
             4 => Self::BigExplode,
             5 => Self::Teleport,
+            6 => Self::SummonSpirit,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -485,6 +554,7 @@ impl ToBinary for NormalSpell {
             Self::Charge => 3,
             Self::BigExplode => 4,
             Self::Teleport => 5,
+            Self::SummonSpirit => 6,
         }
         .to_binary(binary)
     }

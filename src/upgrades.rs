@@ -11,6 +11,7 @@ pub struct Upgrades {
     pub map: bool,
     pub soft_shoes: bool,
     pub precise_convert: bool,
+    pub lifesteal: bool,
 }
 impl Upgrades {
     pub const fn new() -> Upgrades {
@@ -19,6 +20,7 @@ impl Upgrades {
             map: false,
             soft_shoes: false,
             precise_convert: false,
+            lifesteal: false,
         }
     }
 }
@@ -32,6 +34,7 @@ impl FromBinary for Upgrades {
             map: bool::from_binary(binary)?,
             soft_shoes: bool::from_binary(binary)?,
             precise_convert: bool::from_binary(binary)?,
+            lifesteal: bool::from_binary(binary)?,
         })
     }
 }
@@ -40,7 +43,8 @@ impl ToBinary for Upgrades {
         self.mage_eye.to_binary(binary)?;
         self.map.to_binary(binary)?;
         self.soft_shoes.to_binary(binary)?;
-        self.precise_convert.to_binary(binary)
+        self.precise_convert.to_binary(binary)?;
+        self.lifesteal.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -50,6 +54,9 @@ pub enum UpgradeType {
     SoftShoes,
     SavePint, // no corresponding upgrade field
     PreciseConvert,
+    EnergyBoost, // max energy (exponential cost?)
+    HealthBoost, // max health ...
+    Lifesteal,   // health on kill
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -70,6 +77,9 @@ impl UpgradeType {
             Self::SoftShoes => 200,
             Self::SavePint => 0,
             Self::PreciseConvert => 150,
+            Self::EnergyBoost => 100,
+            Self::HealthBoost => 100,
+            Self::Lifesteal => 150,
         }
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
@@ -118,6 +128,18 @@ impl UpgradeType {
                 player.upgrades.precise_convert = true;
                 true
             }
+            Self::EnergyBoost => {
+                player.max_energy += (player.max_energy / 2).max(1);
+                true
+            }
+            Self::HealthBoost => {
+                player.max_health += (player.max_health / 2).max(1);
+                true
+            }
+            Self::Lifesteal => {
+                player.upgrades.lifesteal = true;
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -126,6 +148,7 @@ impl UpgradeType {
             Self::Map => !player.upgrades.map,
             Self::SoftShoes => !player.upgrades.soft_shoes,
             Self::PreciseConvert => !player.upgrades.precise_convert,
+            Self::Lifesteal => !player.upgrades.lifesteal,
             _ => true,
         }
     }
@@ -136,6 +159,9 @@ impl UpgradeType {
             Self::SoftShoes => "A pair of particularly soft shoes",
             Self::SavePint => "A savepint",
             Self::PreciseConvert => "Clean needles",
+            Self::HealthBoost => "Additional flesh",
+            Self::EnergyBoost => "An adrenal gland",
+            Self::Lifesteal => "A butcher's knife",
         }
     }
 }
@@ -147,6 +173,9 @@ impl std::fmt::Display for UpgradeType {
             Self::SoftShoes => write!(f, "soft shoes"),
             Self::SavePint => write!(f, "save pint"),
             Self::PreciseConvert => write!(f, "precise convert"),
+            Self::EnergyBoost => write!(f, "energy boost"),
+            Self::HealthBoost => write!(f, "health boost"),
+            Self::Lifesteal => write!(f, "lifesteal"),
         }
     }
 }
@@ -159,18 +188,24 @@ impl std::str::FromStr for UpgradeType {
             "soft_shoes" => Ok(Self::SoftShoes),
             "save_pint" => Ok(Self::SavePint),
             "precise_convert" => Ok(Self::PreciseConvert),
+            "energy_boost" => Ok(Self::EnergyBoost),
+            "health_boost" => Ok(Self::HealthBoost),
+            "lifesteal" => Ok(Self::Lifesteal),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
 }
 impl Random for UpgradeType {
     fn random() -> Self {
-        match random() % 4 {
+        match random() % 7 {
             0 => Self::MageEye,
             1 => Self::Map,
             2 => Self::SoftShoes,
             3 => Self::PreciseConvert,
             // Save pint cannot be made from random calls
+            4 => Self::EnergyBoost,
+            5 => Self::HealthBoost,
+            6 => Self::Lifesteal,
             _ => unreachable!("Le fucked is up"),
         }
     }
@@ -186,6 +221,9 @@ impl FromBinary for UpgradeType {
             2 => Self::SoftShoes,
             3 => Self::SavePint,
             4 => Self::PreciseConvert,
+            5 => Self::EnergyBoost,
+            6 => Self::HealthBoost,
+            7 => Self::Lifesteal,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -203,6 +241,9 @@ impl ToBinary for UpgradeType {
             Self::SoftShoes => 2,
             Self::SavePint => 3,
             Self::PreciseConvert => 4,
+            Self::EnergyBoost => 5,
+            Self::HealthBoost => 6,
+            Self::Lifesteal => 7,
         }
         .to_binary(binary)
     }

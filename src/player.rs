@@ -104,13 +104,16 @@ impl Player {
             return;
         }
         let (energy, health) = enemy.variant.kill_value();
+        if self.upgrades.lifesteal {
+            self.health += energy;
+        }
         for _ in 0..energy {
             if self.energy < self.max_energy {
                 self.energy += 1;
             } else if self.health < self.max_health {
                 self.health += health;
             } else {
-                break;
+                crate::stats().energy_wasted += 1;
             }
         }
         self.health = self.health.min(self.max_health);
@@ -253,11 +256,14 @@ impl Player {
     }
     // gets the damage dealt by the player per hit
     pub fn get_damage(&self) -> usize {
+        let mut damage = 1;
         if self.effects.damage_boost.is_active() {
-            2
-        } else {
-            1
+            damage += 1
         }
+        if self.effects.drunk.is_active() {
+            damage += 1
+        }
+        damage
     }
     pub fn stat_choice(&mut self) {
         crate::log!("Granting stats");
@@ -281,6 +287,20 @@ impl Player {
                 }
             }
             break;
+        }
+    }
+    pub fn get_perception(&self) -> usize {
+        if self.effects.drunk.is_active() {
+            self.perception / 2
+        } else {
+            self.perception
+        }
+    }
+    pub fn get_detect_mod(&self) -> isize {
+        if self.effects.drunk.is_active() {
+            self.detect_mod + 1
+        } else {
+            self.detect_mod
         }
     }
 }
@@ -475,6 +495,8 @@ pub struct Effects {
     pub damage_boost: Duration,
     // debug full visibility
     pub full_vis: Duration,
+    // Lower perception, more detectable, increased damage
+    pub drunk: Duration,
 }
 impl Effects {
     // Creates an instance with no effects
@@ -487,6 +509,7 @@ impl Effects {
             doomed: Duration::None,
             damage_boost: Duration::None,
             full_vis: Duration::None,
+            drunk: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
@@ -498,6 +521,7 @@ impl Effects {
         self.doomed.decriment();
         self.damage_boost.decriment();
         self.full_vis.decriment();
+        self.drunk.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -513,6 +537,7 @@ impl Effects {
                     "doomed" => self.doomed = args.parse()?,
                     "damage_boost" => self.damage_boost = args.parse()?,
                     "full_vis" => self.full_vis = args.parse()?,
+                    "drunk" => self.drunk = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
@@ -549,30 +574,20 @@ impl Effects {
             println!("    and can see everything for");
             self.full_vis.list();
         }
+        if self.drunk.is_active() {
+            println!("    and is drunk for");
+            self.drunk.list();
+        }
     }
     pub fn has_none(&self) -> bool {
-        if self.invincible.is_active() {
-            return false;
-        }
-        if self.mage_sight.is_active() {
-            return false;
-        }
-        if self.regen.is_active() {
-            return false;
-        }
-        if self.unlucky.is_active() {
-            return false;
-        }
-        if self.doomed.is_active() {
-            return false;
-        }
-        if self.damage_boost.is_active() {
-            return false;
-        }
-        if self.full_vis.is_active() {
-            return false;
-        }
-        true
+        !(self.invincible.is_active()
+            || self.mage_sight.is_active()
+            || self.regen.is_active()
+            || self.unlucky.is_active()
+            || self.doomed.is_active()
+            || self.damage_boost.is_active()
+            || self.full_vis.is_active()
+            || self.drunk.is_active())
     }
 }
 impl FromBinary for Effects {
@@ -588,6 +603,7 @@ impl FromBinary for Effects {
             doomed: Duration::from_binary(binary)?,
             damage_boost: Duration::from_binary(binary)?,
             full_vis: Duration::from_binary(binary)?,
+            drunk: Duration::from_binary(binary)?,
         })
     }
 }
@@ -599,7 +615,8 @@ impl ToBinary for Effects {
         self.unlucky.to_binary(binary)?;
         self.doomed.to_binary(binary)?;
         self.damage_boost.to_binary(binary)?;
-        self.full_vis.to_binary(binary)
+        self.full_vis.to_binary(binary)?;
+        self.drunk.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

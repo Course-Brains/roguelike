@@ -21,6 +21,8 @@ pub enum ItemType {
     Warp,
     // makes you invincible "I'm holdin' tea!" - Em
     Tea,
+    // A "spirit"
+    Spirit,
 }
 impl ItemType {
     // What is listed in the inventory
@@ -33,6 +35,7 @@ impl ItemType {
             Self::EnderPearl => write!(out, "Scroll of teleportation").unwrap(),
             Self::Warp => write!(out, "Scroll of warping").unwrap(),
             Self::Tea => write!(out, "Tea").unwrap(),
+            Self::Spirit => write!(out, "Spirit").unwrap(),
         }
     }
     // What happens when it is used
@@ -71,6 +74,7 @@ impl ItemType {
             }
             Self::Gamba => {
                 let random = crate::random();
+                state.player.inspect = false;
                 if random == 0 {
                     // super good luck
                     crate::set_desc("You feel blessed");
@@ -151,6 +155,7 @@ impl ItemType {
                     &mut state.board,
                     None,
                     Some(aim),
+                    None,
                 );
                 true
             }
@@ -173,8 +178,13 @@ impl ItemType {
                 false
             }
             Self::Tea => {
+                state.player.effects.drunk.remove();
                 state.player.effects.invincible.increase_to(10, 20);
                 state.player.effects.damage_boost.increase_to(40, 80);
+                true
+            }
+            Self::Spirit => {
+                state.player.effects.drunk += 50;
                 true
             }
         }
@@ -189,6 +199,7 @@ impl ItemType {
             Self::EnderPearl => 15,
             Self::Warp => 30,
             Self::Tea => 50,
+            Self::Spirit => unimplemented!("Spirit intentionally not in shop"),
         }
     }
     // What is said when on the ground
@@ -201,6 +212,7 @@ impl ItemType {
             Self::EnderPearl => "Scroll of teleportation",
             Self::Warp => "Scroll of warping",
             Self::Tea => "Tea",
+            Self::Spirit => "Spirit",
         }
     }
     pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {
@@ -211,8 +223,7 @@ impl ItemType {
                 | Self::Gamba
                 | Self::EnderPearl
                 | Self::Warp => SCROLL,
-
-                Self::HealthPotion | Self::Tea => POTION,
+                Self::HealthPotion | Self::Tea | Self::Spirit => POTION,
             },
             Some(match self.price() <= player.get_money() {
                 true => *Style::new().green(),
@@ -232,6 +243,7 @@ impl std::str::FromStr for ItemType {
             "ender_pearl" => Ok(Self::EnderPearl),
             "warp" => Ok(Self::Warp),
             "tea" => Ok(Self::Tea),
+            "spirit" => Ok(Self::Spirit),
             other => Err(format!("{other} is not an item type")),
         }
     }
@@ -246,6 +258,7 @@ impl std::fmt::Display for ItemType {
             Self::EnderPearl => write!(f, "ender pearl"),
             Self::Warp => write!(f, "warp"),
             Self::Tea => write!(f, "tea"),
+            Self::Spirit => write!(f, "spirit"),
         }
     }
 }
@@ -259,6 +272,7 @@ impl crate::Random for crate::ItemType {
             4 => Self::EnderPearl,
             5 => Self::Warp,
             6 => Self::Tea,
+            // Spirit intentionally not in shop
             _ => unreachable!("idk, not my problem"),
         }
     }
@@ -276,6 +290,7 @@ impl FromBinary for ItemType {
             4 => Self::EnderPearl,
             5 => Self::Warp,
             6 => Self::Tea,
+            7 => Self::Spirit,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -295,6 +310,7 @@ impl ToBinary for ItemType {
             Self::EnderPearl => 4,
             Self::Warp => 5,
             Self::Tea => 6,
+            Self::Spirit => 7,
         }
         .to_binary(binary)
     }

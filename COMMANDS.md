@@ -24,22 +24,32 @@ meaning that you cannot just skip one and have it be relative to the
 selector for that axis alone. If you need to, simply use "s0" for that
 axis.
 
+ARGUMENTS:
+Arguments marked with \[name\] are required while arguments marked
+with {name} are optional and can be inferred by the command. However,
+when typing in the command, do not include the square or curly
+brackets, only enter the argument or leave it empty.
+If multiple arguments are marked as optional, usually that means you
+can either have none or all of them, for instance, if it is optional
+to give a position, then you would either need to type in both axes or
+neither of them.
+Relative positioning specific: If a relative position is marked as
+optional, then unless otherwise stated, the default is the position of
+the selector
+
 ==============================================================================
 
 get\_player\_data
     Gets the full player data as printed by pretty debug
 
-set\_health \[health\]
-    Sets the player's health to [health], or full health if \[health\]
-    is not given
+set\_health {health}
+    Sets the player's health to {health}, or full health if not given
 
-set\_energy \[energy\]
-    Sets the player's energy to [energy], or full energy if \[energy\]
-    is not given
+set\_energy {energy}
+    Sets the player's energy to {energy}, or full energy if not given
 
-set\_pos \[x\] \[y\]
-    Sets the player's position to (\[x\], \[y\]) this uses relative
-    positions
+set\_pos {x} {y}
+    Sets the player's position to ({x}, {y}) using relative positions
 
 redraw
     Redraws the screen manually
@@ -51,8 +61,8 @@ kill \[index\]
     Kills the enemy at the given \[index\], if you want to find out the
     index, see list\_enemies
 
-spawn \[variant\] \[x\] \[y\]
-    Spawns an enemy at the given \[x\] and \[y\] coordinates, using
+spawn \[variant\] {x} {y}
+    Spawns an enemy at the given {x} and {y} coordinates, using
     relative positions.
     Valid variants are:
         basic
@@ -102,9 +112,10 @@ load\_next
 load\_shop
     Loads the next shop
 
-effect \[effect\] \[duration\]
-    Sets the \[duration\] for the given \[effect\] for the player
-    \[duration\]. Valid effects are:
+effect \[effect\] {duration}
+    Sets the {duration} for the given \[effect\] for the player,
+    defaulting to infinite if unspecified
+    Valid effects are:
         invincible
         mage\_sight
         regen
@@ -122,9 +133,11 @@ effect \[effect\] \[duration\]
         infinite
             Gives the effect with no time limit
 
-give \[item\] \[slot\]
-    Sets the given \[slot\] to contain the \[item\]. The slot is
-    specified starting at 0 instead of 1.
+give \[item\] {slot}
+    Sets the given {slot} to contain the \[item\]. The slot is
+    specified starting at 0 instead of 1. If no slot is specified, it
+    will pick one from the available slots, or if none are available,
+    slot 0.
     valid items are:
         mage\_sight
         health\_potion
@@ -170,14 +183,13 @@ cast \[spell type\] \[spell\]
         contact
             drain\_health
 
-create\_circle \[spell type\] \[spell\] \[pos x\] \[pos y\] \[target x\] \[targety\]
-    Creates a spell circle at the given (relative) position. Uses the
+create\_circle \[spell type\] \[spell\] \[pos x\] \[pos y\] {target x} {targety}
+    Creates a spell circle at the given relative position. Uses the
     same spell selection rules as cast. The target position is not
     always needed by spells, so it can be ignored for those spells.
 
-get\_data \[x\] \[y\]
-    Gets all data at the given position(except backtrace data >:}), it
-    does use relative positioning
+get\_data {x} {y}
+    Gets all data at the given relative position(except path data >:})
 
 get\_boss
    Gives the boss's position, type, and index if it exists
@@ -201,3 +213,10 @@ enable\_log \[index\] \[path\]
 list\_reachable\_enemies
     Do I really need to explain this one? It lists the enemies that
     are reachable, shocking.
+
+nav\_stepthrough \[state\] {index}
+    Enables or disables nav stepthrough based on \[state\] which can
+    be either true or false, and optionally can be given an index for
+    which it will only step through for that enemy.
+    's' can be used while stepping through to 's'kip the current enemy
+    and 'S' can be used to skip all enemies that turn.

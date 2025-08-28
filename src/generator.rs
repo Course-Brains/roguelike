@@ -28,7 +28,6 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         let mut board = Board::new(settings.x, settings.y, settings.render_x, settings.render_y);
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
-        remove_edge_doors(&mut board);
         room.place_enemies(&mut board);
         promote_boss(&mut board);
         let elapsed = start.elapsed();
@@ -40,26 +39,6 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         //checksum(&board);
         board
     })
-}
-fn remove_edge_doors(board: &mut Board) {
-    let board_x = board.x;
-    let board_y = board.y;
-    for x in 0..(board_x - 1) {
-        if let Some(Piece::Door(_)) = board[Vector::new(x, board_y - 1)] {
-            board[Vector::new(x, board_y - 1)] = Some(Piece::Wall(Wall {}));
-        }
-        if let Some(Piece::Door(_)) = board[Vector::new(x, 0)] {
-            board[Vector::new(x, 0)] = Some(Piece::Wall(Wall {}));
-        }
-    }
-    for y in 0..(board_y - 1) {
-        if let Some(Piece::Door(_)) = board[Vector::new(board_x - 1, y)] {
-            board[Vector::new(board_x - 1, y)] = Some(Piece::Wall(Wall {}));
-        }
-        if let Some(Piece::Door(_)) = board[Vector::new(0, y)] {
-            board[Vector::new(0, y)] = Some(Piece::Wall(Wall {}));
-        }
-    }
 }
 fn promote_boss(board: &mut Board) {
     let mut highest = 1;

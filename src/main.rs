@@ -227,20 +227,7 @@ fn main() {
         // There is a save file
         true => State::from_binary(&mut std::fs::File::open(PATH).unwrap()).unwrap(),
         // there is not a save file
-        false => State {
-            player: Player::new(Vector::new(1, 1)),
-            board: match empty {
-                true => std::thread::spawn(Board::new_empty),
-                false => generate(MapGenSettings::new(151, 151, 45, 15, 75)),
-            }
-            .join()
-            .unwrap(),
-            turn: 0,
-            next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
-            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
-            next_shop: std::thread::spawn(Board::new_shop),
-            level: 0,
-        },
+        false => State::new(empty),
     };
     // discourage save scumming by making it so that if it closes non-properly then the file is
     // gone
@@ -545,8 +532,29 @@ struct State {
     next_map_settings: MapGenSettings,
     next_shop: std::thread::JoinHandle<Board>,
     level: usize,
+    // debugging
+    nav_stepthrough: bool,
+    nav_stepthrough_index: Option<usize>,
 }
 impl State {
+    fn new(empty: bool) -> State {
+        State {
+            player: Player::new(Vector::new(1, 1)),
+            board: match empty {
+                true => std::thread::spawn(Board::new_empty),
+                false => generate(MapGenSettings::new(151, 151, 45, 15, 75)),
+            }
+            .join()
+            .unwrap(),
+            turn: 0,
+            next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
+            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
+            next_shop: std::thread::spawn(Board::new_shop),
+            level: 0,
+            nav_stepthrough: false,
+            nav_stepthrough_index: None,
+        }
+    }
     // returns if an enemy was hit
     fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
         for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
@@ -601,7 +609,12 @@ impl State {
         if self.player.effects.regen.is_active() {
             self.player.heal(2)
         }
-        self.board.generate_nav_data(self.player.pos);
+        self.board.generate_nav_data(
+            self.player.pos,
+            self.nav_stepthrough,
+            self.nav_stepthrough_index,
+            &mut self.player,
+        );
         let bounds = self.board.get_render_bounds(&self.player);
         let visible = self
             .board
@@ -753,6 +766,8 @@ impl FromBinary for State {
             next_map_settings: settings,
             next_shop: std::thread::spawn(Board::new_shop),
             level: usize::from_binary(binary)?,
+            nav_stepthrough: bool::from_binary(binary)?,
+            nav_stepthrough_index: Option::from_binary(binary)?,
         })
     }
 }
@@ -764,7 +779,9 @@ impl ToBinary for State {
         self.player.to_binary(binary)?;
         self.board.to_binary(binary)?;
         self.turn.to_binary(binary)?;
-        self.level.to_binary(binary)
+        self.level.to_binary(binary)?;
+        self.nav_stepthrough.to_binary(binary)?;
+        self.nav_stepthrough_index.as_ref().to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

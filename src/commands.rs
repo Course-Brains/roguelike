@@ -37,6 +37,7 @@ enum Command {
     SetBench(bool),
     EnableLog(usize, String),
     ListReachableEnemies,
+    NavStepthrough(bool, Option<usize>),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -113,6 +114,13 @@ impl Command {
             )),
             "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
             "list_reachable_enemies" => Ok(Command::ListReachableEnemies),
+            "nav_stepthrough" => Ok(Command::NavStepthrough(
+                parse(iter.next())?,
+                match iter.next() {
+                    Some(s) => Some(parse(Some(s))?),
+                    None => None,
+                },
+            )),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -370,6 +378,10 @@ impl Command {
                         out.send(format!("{index} at {pos}")).unwrap();
                     }
                 }
+            }
+            Command::NavStepthrough(new_state, index) => {
+                state.nav_stepthrough = new_state;
+                state.nav_stepthrough_index = index;
             }
         }
     }

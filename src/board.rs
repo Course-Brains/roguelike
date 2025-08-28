@@ -6,7 +6,7 @@ use crate::{
 };
 use albatrice::{FromBinary, ToBinary};
 use std::collections::{BinaryHeap, HashSet, VecDeque};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::ops::Range;
 use std::sync::RwLock;
 use std::sync::{Arc, Weak};
@@ -535,7 +535,13 @@ impl Board {
 }
 // Enemy logic
 impl Board {
-    pub fn generate_nav_data(&mut self, player: Vector) {
+    pub fn generate_nav_data(
+        &mut self,
+        player: Vector,
+        stepthrough: bool,
+        stepthrough_index: Option<usize>,
+        player_mut: &mut Player,
+    ) {
         if self.enemies.is_empty() {
             return;
         }
@@ -558,7 +564,10 @@ impl Board {
             self.enemies[0].try_read().unwrap().pos,
             0,
         ));
-        for enemy in self.enemies.iter() {
+        let mut specials = Vec::new();
+        let mut skip_stepthrough = false;
+        for (enemy_index, enemy) in self.enemies.clone().iter().enumerate() {
+            let mut skip_stepthrough_single = false;
             if !self.is_reachable(enemy.try_read().unwrap().pos) {
                 continue;
             }
@@ -596,6 +605,30 @@ impl Board {
                     continue;
                 }
                 visited.insert(path_data.pos);
+                if stepthrough
+                    && !skip_stepthrough_single
+                    && !skip_stepthrough
+                    && stepthrough_index.is_none_or(|index| index == enemy_index)
+                    && self.is_visible(
+                        path_data.pos,
+                        self.get_render_bounds(player_mut),
+                        player_mut.effects.full_vis.is_active(),
+                    )
+                {
+                    specials.push(self.add_special(Special::new(
+                        path_data.pos,
+                        ' ',
+                        Some(*Style::new().background_green()),
+                    )));
+                    self.smart_render(player_mut);
+                    let mut buf = [0];
+                    std::io::stdin().read_exact(&mut buf).unwrap();
+                    if buf[0] == b's' {
+                        skip_stepthrough_single = true
+                    } else if buf[0] == b'S' {
+                        skip_stepthrough = true
+                    }
+                }
                 let adj = self.get_adjacent(path_data.pos, Some(player), true);
                 if adj.up {
                     to_visit.push(PathData::new(

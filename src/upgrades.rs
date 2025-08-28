@@ -167,7 +167,7 @@ impl UpgradeType {
                 true
             }
             Self::BonusKillAll => {
-                if !player.upgrades.map && player.upgrades.mage_eye == 0 {
+                if !player.upgrades.map && player.upgrades.mage_eye == 0 && player.perception < 50 {
                     player.perception += 10;
                 } else if player.detect_mod > -5 {
                     player.detect_mod -= 1;
@@ -210,7 +210,7 @@ impl UpgradeType {
             Self::BonusNoWaste => "A result of your greed",
             Self::BonusNoDamage => "A result of your fear",
             Self::BonusKillAll => "A result of your cruelty",
-            Self::BonusNoEnergy => "A result of your caution",
+            Self::BonusNoEnergy => "A result of your ",
             // Save pint
             Self::SavePint => "A savepint",
         }

@@ -424,7 +424,7 @@ impl Room {
             let low = self.y_bounds.start.max(right.borrow().y_bounds.start);
             let high = self.y_bounds.end.min(right.borrow().y_bounds.end);
             debug!(assert!(low < high));
-            board[Vector::new(self.x_bounds.start, low.midpoint(high))] =
+            board[Vector::new(self.x_bounds.end, low.midpoint(high))] =
                 Some(Piece::Door(Door { open: false }));
         }
     }

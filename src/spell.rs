@@ -314,7 +314,7 @@ impl NormalSpell {
                     aim,
                     board,
                     None,
-                    false,
+                    caster.is_none(),
                     player.pos,
                 );
                 // visuals for the charge
@@ -524,6 +524,7 @@ impl std::str::FromStr for NormalSpell {
             "charge" => Ok(Self::Charge),
             "big_explode" => Ok(Self::BigExplode),
             "teleport" => Ok(Self::Teleport),
+            "summon_spirit" => Ok(Self::SummonSpirit),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }

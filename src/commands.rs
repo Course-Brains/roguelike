@@ -19,7 +19,7 @@ enum Command {
     WakeAll,
     OpenAllDoors,
     KillAllEnemies,
-    SetPiece(Vector, String),
+    SetPiece(SmartVector, String),
     LoadNext,
     LoadShop,
     Effect(String),
@@ -36,6 +36,7 @@ enum Command {
     Checksum,
     SetBench(bool),
     EnableLog(usize, String),
+    ListReachableEnemies,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -69,7 +70,7 @@ impl Command {
             "open_all_doors" => Ok(Command::OpenAllDoors),
             "kill_all_enemies" => Ok(Command::KillAllEnemies),
             "set_piece" => Ok(Command::SetPiece(
-                parse_vector(iter.next(), iter.next())?,
+                SmartVector::new(iter.next(), iter.next(), false)?,
                 iter.map(|s| s.to_string() + " ").collect(),
             )),
             "load_next" => Ok(Command::LoadNext),
@@ -111,6 +112,7 @@ impl Command {
                     .map_err(|e| e.to_string())?,
             )),
             "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
+            "list_reachable_enemies" => Ok(Command::ListReachableEnemies),
             _ => Err("unknown command".to_string()),
         }
     }
@@ -175,6 +177,7 @@ impl Command {
                 state.board.enemies = Vec::new();
             }
             Command::SetPiece(pos, args) => {
+                let pos = pos.to_absolute(&state.player);
                 state.board[pos] = Some(match args.parse() {
                     Ok(piece) => piece,
                     Err(error) => {
@@ -360,6 +363,14 @@ impl Command {
                 state.board.enemies[index].try_write().unwrap().log =
                     Some(std::fs::File::create(path).unwrap());
             }
+            Command::ListReachableEnemies => {
+                for (index, enemy) in state.board.enemies.iter().enumerate() {
+                    let pos = enemy.try_read().unwrap().pos;
+                    if state.board.is_reachable(pos) {
+                        out.send(format!("{index} at {pos}")).unwrap();
+                    }
+                }
+            }
         }
     }
 }
@@ -415,9 +426,6 @@ where
         Some(Err(error)) => Err(error.to_string()),
         None => Err("Expected argument".to_string()),
     }
-}
-fn parse_vector(x: Option<&str>, y: Option<&str>) -> Result<Vector, String> {
-    Ok(Vector::new(parse(x)?, parse(y)?))
 }
 #[derive(Clone, Copy)]
 enum Pos {

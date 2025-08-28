@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 pub type Rand = u8;
 // static so that it doesn't get inlined
-static RANDOM_TABLE: [Rand; Rand::MAX as usize + 1] = [
+pub static RANDOM_TABLE: [Rand; Rand::MAX as usize + 1] = [
     0, 8, 109, 220, 222, 241, 155, 115, 75, 248, 245, 137, 16, 66, 74, 21, 209, 47, 80, 238, 154,
     27, 205, 130, 161, 89, 65, 36, 95, 110, 85, 48, 210, 142, 211, 240, 22, 67, 200, 50, 28, 188,
     52, 140, 208, 120, 68, 151, 62, 51, 184, 190, 91, 204, 152, 215, 149, 104, 25, 178, 252, 183,

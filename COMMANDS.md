@@ -197,3 +197,7 @@ set\_bench \[state\]
 enable\_log \[index\] \[path\]
     Enables detailed logging for the enemy at \[index\] and writes it
     to the file at \[path\]
+
+list\_reachable\_enemies
+    Do I really need to explain this one? It lists the enemies that
+    are reachable, shocking.

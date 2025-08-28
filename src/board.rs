@@ -138,10 +138,21 @@ impl Board {
         }
         None
     }
+    // player pos will be 44 14
+    pub const BONUS_NO_DAMAGE: Vector = Vector::new(43, 13);
+    pub const BONUS_NO_WASTE: Vector = Vector::new(45, 13);
+    pub const BONUS_KILL_ALL: Vector = Vector::new(43, 15);
+    pub const BONUS_NO_ENERGY: Vector = Vector::new(45, 15);
     pub fn new_shop() -> Board {
         let mut out = Board::new(90, 30, 45, 15);
+
+        // Creating room
         out.make_room(Vector::new(0, 0), Vector::new(90, 30));
+
+        // Placing exit
         out[Vector::new(88, 15)] = Some(Piece::Exit(Exit::Level));
+
+        // Placing items and upgrades
         for x in 1..=88 {
             std::thread::sleep(std::time::Duration::from_millis(1000));
             out[Vector::new(x, 1)] = Some(Piece::Item(Item::new(None)));
@@ -150,9 +161,28 @@ impl Board {
                 out[Vector::new(x, 28)] = Some(Piece::Upgrade(Upgrade::new(None)));
             }
         }
+
+        // Placing save pint
         out[Vector::new(1, 14)] = Some(Piece::Upgrade(Upgrade::new(Some(
             crate::upgrades::UpgradeType::SavePint,
         ))));
+
+        // Placing Bonus fail signs(will be replaced on load if condition is met)
+        // Take no damage
+        out[Board::BONUS_NO_DAMAGE] = Some(Piece::Sign("Don't get hurt".to_string()));
+        // Waste no kill rewards, might make it easier at some point because it can be impossible
+        // to get both this and the no damage bonus
+        out[Board::BONUS_NO_WASTE] = Some(Piece::Sign("Be a miser".to_string()));
+        // Kill every enemy
+        out[Board::BONUS_KILL_ALL] = Some(Piece::Sign("Be more thorough".to_string()));
+        // Spend no energy directly(not counting conversion)
+        out[Board::BONUS_NO_ENERGY] = Some(Piece::Sign("Be more stingy".to_string()));
+
+        out
+    }
+    pub fn new_empty() -> Board {
+        let mut out = Board::new(90, 30, 45, 15);
+        out.make_room(Vector::new(0, 0), Vector::new(90, 30));
         out
     }
     pub fn contact_spell_at(&self, pos: Vector) -> Option<(&SpellCircle, usize)> {
@@ -211,14 +241,14 @@ impl Board {
     pub fn is_reachable(&self, pos: Vector) -> bool {
         self.reachable[self.to_index(pos)]
     }
-    pub fn count_visible_enemies(&self, bounds: Range<Vector>, full_vis: bool) -> usize {
-        let mut count = 0;
-        for enemy in self.enemies.iter() {
+    pub fn get_visible_indexes(&self, bounds: Range<Vector>, full_vis: bool) -> Vec<usize> {
+        let mut out = Vec::new();
+        for (index, enemy) in self.enemies.iter().enumerate() {
             if self.is_visible(enemy.try_read().unwrap().pos, bounds.clone(), full_vis) {
-                count += 1;
+                out.push(index)
             }
         }
-        count
+        out
     }
 }
 // Rendering
@@ -1036,6 +1066,7 @@ pub enum Piece {
     Exit(Exit),
     Item(Item),
     Upgrade(Upgrade),
+    Sign(String),
 }
 impl Piece {
     fn render(&self, pos: Vector, board: &Board, player: &Player) -> (char, Option<Style>) {
@@ -1045,6 +1076,7 @@ impl Piece {
             Piece::Exit(_) => Exit::render(),
             Piece::Item(item) => item.render(player),
             Piece::Upgrade(upgrade) => upgrade.render(player),
+            Piece::Sign(_) => ('S', None),
         }
     }
     pub fn has_collision(&self) -> bool {
@@ -1066,8 +1098,7 @@ impl Piece {
     pub fn projectile_collision(&self) -> bool {
         match self {
             Piece::Door(door) => !door.open,
-            Piece::Item(_) => false,
-            Piece::Upgrade(_) => false,
+            Piece::Item(_) | Piece::Upgrade(_) | Piece::Sign(_) => false,
             _ => true,
         }
     }
@@ -1097,6 +1128,7 @@ impl Piece {
             Self::Exit(_) => write!(lock, "The exit").unwrap(),
             Self::Item(item) => item.get_desc(lock),
             Self::Upgrade(upgrade) => upgrade.get_desc(lock),
+            Self::Sign(text) => write!(lock, "{text}").unwrap(),
         }
     }
     pub fn on_map(&self) -> bool {
@@ -1111,6 +1143,7 @@ impl std::fmt::Display for Piece {
             Piece::Exit(exit) => exit.fmt(f),
             Piece::Item(item) => item.fmt(f),
             Piece::Upgrade(upgrade) => upgrade.fmt(f),
+            Piece::Sign(text) => write!(f, "sign with text: {text}"),
         }
     }
 }
@@ -1127,6 +1160,7 @@ impl std::str::FromStr for Piece {
                     "exit" => Ok(Piece::Exit(args.parse()?)),
                     "item" => Ok(Piece::Item(args.parse()?)),
                     "upgrade" => Ok(Piece::Upgrade(args.parse()?)),
+                    "sign" => Ok(Piece::Sign(args)),
                     invalid => Err(format!("{invalid} is not a valid piece type")),
                 }
             }
@@ -1145,6 +1179,7 @@ impl FromBinary for Piece {
             2 => Self::Exit(Exit::from_binary(binary)?),
             3 => Self::Item(Item::from_binary(binary)?),
             4 => Self::Upgrade(Upgrade::from_binary(binary)?),
+            5 => Self::Sign(String::from_binary(binary)?),
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -1176,6 +1211,10 @@ impl ToBinary for Piece {
             Self::Upgrade(upgrade) => {
                 4_u8.to_binary(binary)?;
                 upgrade.to_binary(binary)
+            }
+            Self::Sign(text) => {
+                5_u8.to_binary(binary)?;
+                text.to_binary(binary)
             }
         }
     }

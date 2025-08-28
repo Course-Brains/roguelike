@@ -1,7 +1,6 @@
 use crate::{FromBinary, Player, Random, Style, ToBinary, player::Duration, random};
 use std::io::Read;
 
-const SYMBOL: char = 'U';
 const AVAILABLE: Style = *Style::new().green();
 const UNAVAILABLE: Style = *Style::new().red();
 
@@ -54,14 +53,28 @@ pub enum UpgradeType {
     SoftShoes,
     SavePint, // no corresponding upgrade field
     PreciseConvert,
-    EnergyBoost, // max energy (exponential cost?)
-    HealthBoost, // max health ...
-    Lifesteal,   // health on kill
+    EnergyBoost,   // max energy (exponential cost?)
+    HealthBoost,   // max health ...
+    Lifesteal,     // health on kill
+    BonusNoWaste,  // double money
+    BonusNoDamage, // +50% max health & full heal
+    BonusKillAll,  // complicated, look at on_pickup
+    BonusNoEnergy, // +50% max energy
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
+        let symbol = match self {
+            // P for Pint
+            Self::SavePint => 'P',
+            // B for Bonus
+            Self::BonusNoWaste | Self::BonusNoDamage | Self::BonusKillAll | Self::BonusNoEnergy => {
+                'B'
+            }
+            // U for Upgrade
+            _ => 'U',
+        };
         (
-            SYMBOL,
+            symbol,
             Some(
                 match self.cost() <= player.get_money() && self.can_pickup(player) {
                     true => AVAILABLE,
@@ -75,11 +88,15 @@ impl UpgradeType {
             Self::MageEye => 200,
             Self::Map => 300,
             Self::SoftShoes => 200,
-            Self::SavePint => 0,
             Self::PreciseConvert => 150,
             Self::EnergyBoost => 100,
             Self::HealthBoost => 100,
             Self::Lifesteal => 150,
+            Self::SavePint
+            | Self::BonusNoWaste
+            | Self::BonusNoDamage
+            | Self::BonusKillAll
+            | Self::BonusNoEnergy => 0,
         }
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
@@ -140,6 +157,33 @@ impl UpgradeType {
                 player.upgrades.lifesteal = true;
                 true
             }
+            Self::BonusNoWaste => {
+                player.give_money(player.get_money());
+                true
+            }
+            Self::BonusNoDamage => {
+                player.max_health += (player.max_health / 2).max(1);
+                player.health = player.max_health;
+                true
+            }
+            Self::BonusKillAll => {
+                if !player.upgrades.map && player.upgrades.mage_eye == 0 {
+                    player.perception += 10;
+                } else if player.detect_mod > -5 {
+                    player.detect_mod -= 1;
+                } else if player.effects.unlucky.is_active() {
+                    player.effects.unlucky.remove();
+                } else if player.effects.doomed.is_active() && random() % 7 == 0 {
+                    player.effects.doomed.remove();
+                } else {
+                    player.give_money((player.get_money() / 2).max(1));
+                }
+                true
+            }
+            Self::BonusNoEnergy => {
+                player.max_energy += (player.max_energy / 2).max(1);
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -154,14 +198,21 @@ impl UpgradeType {
     }
     pub fn get_desc(self) -> &'static str {
         match self {
+            // Normal upgrades
             Self::MageEye => "A mage's eye",
             Self::Map => "A map",
             Self::SoftShoes => "A pair of particularly soft shoes",
-            Self::SavePint => "A savepint",
             Self::PreciseConvert => "Clean needles",
             Self::HealthBoost => "Additional flesh",
             Self::EnergyBoost => "An adrenal gland",
             Self::Lifesteal => "A butcher's knife",
+            // Bonuses
+            Self::BonusNoWaste => "A result of your greed",
+            Self::BonusNoDamage => "A result of your fear",
+            Self::BonusKillAll => "A result of your cruelty",
+            Self::BonusNoEnergy => "A result of your caution",
+            // Save pint
+            Self::SavePint => "A savepint",
         }
     }
 }
@@ -176,6 +227,10 @@ impl std::fmt::Display for UpgradeType {
             Self::EnergyBoost => write!(f, "energy boost"),
             Self::HealthBoost => write!(f, "health boost"),
             Self::Lifesteal => write!(f, "lifesteal"),
+            Self::BonusNoWaste => write!(f, "bonus no waste"),
+            Self::BonusNoDamage => write!(f, "bonus no damage"),
+            Self::BonusKillAll => write!(f, "bonus kill all"),
+            Self::BonusNoEnergy => write!(f, "bonus no energy"),
         }
     }
 }
@@ -191,18 +246,22 @@ impl std::str::FromStr for UpgradeType {
             "energy_boost" => Ok(Self::EnergyBoost),
             "health_boost" => Ok(Self::HealthBoost),
             "lifesteal" => Ok(Self::Lifesteal),
+            "bonus_no_waste" => Ok(Self::BonusNoWaste),
+            "bonus_no_damage" => Ok(Self::BonusNoDamage),
+            "bonus_kill_all" => Ok(Self::BonusKillAll),
+            "bonus_no_energy" => Ok(Self::BonusNoEnergy),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
 }
 impl Random for UpgradeType {
     fn random() -> Self {
+        // save pint and bonuses intentionally ommitted
         match random() % 7 {
             0 => Self::MageEye,
             1 => Self::Map,
             2 => Self::SoftShoes,
             3 => Self::PreciseConvert,
-            // Save pint cannot be made from random calls
             4 => Self::EnergyBoost,
             5 => Self::HealthBoost,
             6 => Self::Lifesteal,
@@ -224,6 +283,10 @@ impl FromBinary for UpgradeType {
             5 => Self::EnergyBoost,
             6 => Self::HealthBoost,
             7 => Self::Lifesteal,
+            8 => Self::BonusNoWaste,
+            9 => Self::BonusNoDamage,
+            10 => Self::BonusKillAll,
+            11 => Self::BonusNoEnergy,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -244,6 +307,10 @@ impl ToBinary for UpgradeType {
             Self::EnergyBoost => 5,
             Self::HealthBoost => 6,
             Self::Lifesteal => 7,
+            Self::BonusNoWaste => 8,
+            Self::BonusNoDamage => 9,
+            Self::BonusKillAll => 10,
+            Self::BonusNoEnergy => 11,
         }
         .to_binary(binary)
     }

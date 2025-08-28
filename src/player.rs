@@ -89,6 +89,7 @@ impl Player {
             crate::stats().damage_blocked += damage;
             return Err(());
         }
+        crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
         if self.health <= damage {
             self.killer = Some(attacker);
             crate::stats().damage_taken += self.health;
@@ -113,6 +114,7 @@ impl Player {
             } else if self.health < self.max_health {
                 self.health += health;
             } else {
+                crate::BONUS_NO_WASTE.store(false, crate::RELAXED);
                 crate::stats().energy_wasted += 1;
             }
         }

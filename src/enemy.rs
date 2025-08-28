@@ -73,8 +73,12 @@ impl Enemy {
         self.stun += self.variant.dash_stun();
     }
     // returns whether or not it was killed
-    pub fn attacked(&mut self, damage: usize) -> bool {
+    pub fn attacked(&mut self, mut damage: usize) -> bool {
         self.log(format!("Attacked for {damage} damage"));
+        if self.is_stunned() {
+            damage += 1;
+            self.log(format!("  Is stunned, increasing damage to {damage}"));
+        }
         if damage >= self.health {
             self.log("  And died".to_string());
             self.dead = true
@@ -831,8 +835,8 @@ impl Variant {
             Variant::BasicBoss(_) => "Specialized Automata",
             Variant::Mage(_) => "Mage Construct",
             Variant::MageBoss(_) => "Lazy Mage",
-            Variant::Fighter(_) => "fighter",
-            Variant::FighterBoss { .. } => "fighter_boss",
+            Variant::Fighter(_) => "Squire",
+            Variant::FighterBoss { .. } => "Knight",
         }
     }
     pub fn precise_teleport(&self) -> bool {

@@ -30,10 +30,13 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use albatrice::{FromBinary, ToBinary};
 
+// Convenience constant
+const RELAXED: Ordering = Ordering::Relaxed;
+
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 3;
+const SAVE_VERSION: Version = 4;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -123,6 +126,16 @@ static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 // Save and quit
 static SAVE: AtomicBool = AtomicBool::new(false);
 
+// Global toggles
+static BONUS_NO_DAMAGE: AtomicBool = AtomicBool::new(true);
+static BONUS_NO_WASTE: AtomicBool = AtomicBool::new(true);
+static BONUS_NO_ENERGY: AtomicBool = AtomicBool::new(true);
+fn reset_bonuses() {
+    BONUS_NO_DAMAGE.store(true, Ordering::Relaxed);
+    BONUS_NO_WASTE.store(true, Ordering::Relaxed);
+    BONUS_NO_ENERGY.store(true, RELAXED);
+}
+
 fn main() {
     #[cfg(feature = "log")]
     {
@@ -136,6 +149,7 @@ fn main() {
     let mut args = std::env::args();
     let mut counting = false;
     let mut testing = false;
+    let mut empty = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--seed" | "-s" => {
@@ -158,6 +172,11 @@ fn main() {
             "bench" => {
                 log!("Enabling benchmark through command line argument");
                 enable_benchmark();
+            }
+            "empty" => {
+                log!("Loading debug map and disabling stats");
+                CHEATS.store(true, Ordering::Relaxed);
+                empty = true;
             }
             "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
             _ => {}
@@ -210,9 +229,12 @@ fn main() {
         // there is not a save file
         false => State {
             player: Player::new(Vector::new(1, 1)),
-            board: generate(MapGenSettings::new(151, 151, 45, 15, 75))
-                .join()
-                .unwrap(),
+            board: match empty {
+                true => std::thread::spawn(Board::new_empty),
+                false => generate(MapGenSettings::new(151, 151, 45, 15, 75)),
+            }
+            .join()
+            .unwrap(),
             turn: 0,
             next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
             next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
@@ -299,6 +321,7 @@ fn main() {
                     if state.board.has_collision(checking) {
                         continue;
                     }
+                    BONUS_NO_ENERGY.store(false, RELAXED);
                     state.attack_enemy(state.player.pos + direction, false, true);
                     state.attack_enemy(checking - direction, false, true);
                     state.player.energy -= 1;
@@ -397,6 +420,7 @@ fn main() {
             }
             Input::Block => {
                 if state.player.energy != 0 {
+                    BONUS_NO_ENERGY.store(false, RELAXED);
                     stats().energy_used += 1;
                     state.player.was_hit = false;
                     state.player.blocking = true;
@@ -422,9 +446,28 @@ fn main() {
             }
             Input::Enter => {
                 if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
+                    // Closing the door
                     if door.open {
                         door.open = false;
+                        // If the boss is alive and was reachable before closing the door
+                        if state
+                            .board
+                            .boss
+                            .clone()
+                            .is_some_and(|boss| boss.upgrade().is_some())
+                            && state.board.is_reachable(state.board.boss_pos)
+                        {
+                            state.board.flood(state.player.pos);
+                            // And is not reachable anymore after closing the door
+                            if !state.board.is_reachable(state.board.boss_pos) {
+                                // Then the player ran away from the boss
+                                stats().cowardice += 1;
+                            }
+                        }
+                        // we don't need to explicitly set the closed door as unreachable because
+                        // the flood will do that for us
                         re_flood();
+                    // Opening the door
                     } else {
                         state.board.open_door_flood(state.player.selector);
                         state.board[state.player.selector] =
@@ -560,17 +603,18 @@ impl State {
         }
         self.board.generate_nav_data(self.player.pos);
         let bounds = self.board.get_render_bounds(&self.player);
-        let last_index = self
+        let visible = self
             .board
-            .count_visible_enemies(bounds.clone(), self.player.effects.full_vis.is_active())
-            - 1;
+            .get_visible_indexes(bounds.clone(), self.player.effects.full_vis.is_active());
         for (index, enemy) in self.board.enemies.clone().iter().enumerate() {
             self.board.move_and_think(
                 &mut self.player,
                 enemy.clone(),
                 bounds.clone(),
                 time,
-                index != last_index,
+                visible
+                    .last()
+                    .is_some_and(|last_index| *last_index == index),
             );
         }
         self.board.purge_dead();
@@ -629,6 +673,7 @@ impl State {
         .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
         let settings = MapGenSettings::new(501, 501, 45, 15, self.turn / 10);
+        reset_bonuses();
         self.next_map = generate(settings);
         self.next_map_settings = settings;
         self.level += 1;
@@ -639,11 +684,35 @@ impl State {
     }
     fn load_shop(&mut self) {
         stats().level_turns.push(self.board.turns_spent);
+        let bonus_kill_all = self.board.enemies.len() == 0;
         self.board = std::mem::replace(&mut self.next_shop, std::thread::spawn(Board::new_shop))
             .join()
             .unwrap();
         self.player.pos = Vector::new(44, 14);
         self.player.selector = Vector::new(44, 14);
+
+        // bonuses
+        if BONUS_NO_WASTE.load(RELAXED) {
+            self.board[Board::BONUS_NO_WASTE] = Some(board::Piece::Upgrade(
+                pieces::upgrade::Upgrade::new(Some(upgrades::UpgradeType::BonusNoWaste)),
+            ));
+        }
+        if BONUS_NO_DAMAGE.load(Ordering::Relaxed) {
+            self.board[Board::BONUS_NO_DAMAGE] = Some(board::Piece::Upgrade(
+                pieces::upgrade::Upgrade::new(Some(upgrades::UpgradeType::BonusNoDamage)),
+            ));
+        }
+        if bonus_kill_all {
+            self.board[Board::BONUS_KILL_ALL] = Some(board::Piece::Upgrade(
+                pieces::upgrade::Upgrade::new(Some(upgrades::UpgradeType::BonusKillAll)),
+            ));
+        }
+        if BONUS_NO_ENERGY.load(RELAXED) {
+            self.board[Board::BONUS_NO_ENERGY] = Some(board::Piece::Upgrade(
+                pieces::upgrade::Upgrade::new(Some(upgrades::UpgradeType::BonusNoEnergy)),
+            ));
+        }
+
         stats().shop_money.push(self.player.get_money());
         self.render();
     }
@@ -704,7 +773,7 @@ struct Vector {
     y: usize,
 }
 impl Vector {
-    fn new(x: usize, y: usize) -> Vector {
+    const fn new(x: usize, y: usize) -> Vector {
         Vector { x, y }
     }
     fn to_move(self) -> crossterm::cursor::MoveTo {
@@ -1122,6 +1191,8 @@ struct Stats {
     energy_used: usize,
     // reward energy that was lost
     energy_wasted: usize,
+    // Number of times a door was closed on a boss
+    cowardice: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1144,6 +1215,7 @@ impl Stats {
             kills: HashMap::new(),
             energy_used: 0,
             energy_wasted: 0,
+            cowardice: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1213,6 +1285,7 @@ impl FromBinary for Stats {
             kills: HashMap::from_binary(binary)?,
             energy_used: usize::from_binary(binary)?,
             energy_wasted: usize::from_binary(binary)?,
+            cowardice: usize::from_binary(binary)?,
         })
     }
 }
@@ -1235,7 +1308,8 @@ impl ToBinary for Stats {
         self.num_saves.to_binary(binary)?;
         self.kills.to_binary(binary)?;
         self.energy_used.to_binary(binary)?;
-        self.energy_wasted.to_binary(binary)
+        self.energy_wasted.to_binary(binary)?;
+        self.cowardice.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1386,6 +1460,7 @@ fn view_stats() {
                         "kills" => list!(kills, index, list_kills),
                         "energy_used" => list!(energy_used, index),
                         "energy_wasted" => list!(energy_wasted, index),
+                        "cowardice" => list!(cowardice, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

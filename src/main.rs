@@ -796,25 +796,6 @@ impl Vector {
     fn is_near(self, other: Vector, range: usize) -> bool {
         self.x.abs_diff(other.x) < range && self.y.abs_diff(other.y) < range
     }
-    fn list_near(self, range: usize) -> Vec<Vector> {
-        let range = range as isize;
-        let mut out = Vec::new();
-        for x in -range..=range {
-            if x < 0 && x.abs_diff(0) > self.x {
-                continue;
-            }
-            for y in -range..=range {
-                if (y < 0 && y.abs_diff(0) > self.y) || (x == 0 && y == 0) {
-                    continue;
-                }
-                out.push(Vector::new(
-                    (self.x as isize + x) as usize,
-                    (self.y as isize + y) as usize,
-                ));
-            }
-        }
-        out
-    }
     fn up(self) -> Vector {
         Vector::new(self.x, self.y - 1)
     }

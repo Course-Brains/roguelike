@@ -79,7 +79,7 @@ impl Player {
     // Returns whether the attack was successful(Ok) and whether the player died
     // true: died
     // false: alive
-    pub fn attacked(&mut self, damage: usize, attacker: &'static str) -> Result<bool, ()> {
+    pub fn attacked(&mut self, mut damage: usize, attacker: &'static str) -> Result<bool, ()> {
         if self.effects.invincible.is_active() {
             crate::stats().damage_invulned += damage;
             return Err(());
@@ -88,6 +88,13 @@ impl Player {
         if self.blocking {
             crate::stats().damage_blocked += damage;
             return Err(());
+        }
+        if self.health == self.max_health && damage > self.health {
+            crate::log!(
+                "Player was hit for {damage}, but one shot protection is reducing to {}",
+                self.health - 1
+            );
+            damage = self.health - 1;
         }
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
         if self.health <= damage {
@@ -162,6 +169,10 @@ impl Player {
                 .is_ok_and(|file| file.metadata().is_ok_and(|meta| meta.len() > 10000))
         {
             write!(out, "Just roll better next time, lmao.").unwrap();
+            return;
+        }
+        if crate::stats().cowardice > state.level / 3 && crate::random() & 3 == 0 {
+            write!(out, "Coward.").unwrap();
             return;
         }
         match crate::random() % 5 {

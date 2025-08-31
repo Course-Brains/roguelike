@@ -38,6 +38,7 @@ enum Command {
     EnableLog(usize, String),
     ListReachableEnemies,
     NavStepthrough(bool, Option<usize>),
+    ShowLineOfSight(bool, Option<usize>),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -115,6 +116,13 @@ impl Command {
             "enable_log" => Ok(Command::EnableLog(parse(iter.next())?, parse(iter.next())?)),
             "list_reachable_enemies" => Ok(Command::ListReachableEnemies),
             "nav_stepthrough" => Ok(Command::NavStepthrough(
+                parse(iter.next())?,
+                match iter.next() {
+                    Some(s) => Some(parse(Some(s))?),
+                    None => None,
+                },
+            )),
+            "show_line_of_sight" => Ok(Command::ShowLineOfSight(
                 parse(iter.next())?,
                 match iter.next() {
                     Some(s) => Some(parse(Some(s))?),
@@ -321,6 +329,8 @@ impl Command {
                         crate::enemy::Variant::MageBoss(_) => 3,
                         crate::enemy::Variant::Fighter(_) => 4,
                         crate::enemy::Variant::FighterBoss { .. } => 5,
+                        crate::enemy::Variant::Archer(_) => 6,
+                        crate::enemy::Variant::ArcherBoss(_) => 7,
                     };
                     let prev = count.get(&variant_num).unwrap_or(&0);
                     count.insert(variant_num, prev + 1);
@@ -344,6 +354,13 @@ impl Command {
                 out.send(format!(
                     "There are {} fighter_boss",
                     count.get(&5).unwrap_or(&0)
+                ))
+                .unwrap();
+                out.send(format!("There are {} archer", count.get(&6).unwrap_or(&0)))
+                    .unwrap();
+                out.send(format!(
+                    "There are {} archer_boss",
+                    count.get(&7).unwrap_or(&0)
                 ))
                 .unwrap();
             }
@@ -383,6 +400,19 @@ impl Command {
                 state.nav_stepthrough = new_state;
                 state.nav_stepthrough_index = index;
             }
+            Command::ShowLineOfSight(new_state, index) => match index {
+                Some(index) => {
+                    state.board.enemies[index]
+                        .try_write()
+                        .unwrap()
+                        .show_line_of_sight = new_state;
+                }
+                None => {
+                    for enemy in state.board.enemies.iter() {
+                        enemy.try_write().unwrap().show_line_of_sight = new_state;
+                    }
+                }
+            },
         }
     }
 }

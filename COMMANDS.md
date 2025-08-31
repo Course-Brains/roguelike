@@ -216,7 +216,12 @@ list\_reachable\_enemies
 
 nav\_stepthrough \[state\] {index}
     Enables or disables nav stepthrough based on \[state\] which can
-    be either true or false, and optionally can be given an index for
+    be either true or false, and optionally can be given an {index} for
     which it will only step through for that enemy.
     's' can be used while stepping through to 's'kip the current enemy
     and 'S' can be used to skip all enemies that turn.
+
+show\_line\_of\_sight \[state\] {index}
+    Sets whether or not an enemy if specified or all enemies if
+    unspecified should visually show their line of sight check when
+    they make it by setting \[state\] to true or false

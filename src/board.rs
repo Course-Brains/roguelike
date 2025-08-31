@@ -532,6 +532,12 @@ impl Board {
         self.specials.push(Arc::downgrade(&arc));
         arc
     }
+    pub fn add_one_turn_special(&mut self, special: Special) {
+        crate::ONE_TURN_SPECIALS
+            .lock()
+            .unwrap()
+            .push(self.add_special(special));
+    }
 }
 // Enemy logic
 impl Board {
@@ -957,7 +963,7 @@ impl Board {
             return false;
         }
         enemy.pos = new_pos;
-        if let Some(boss) = self.boss.as_ref().unwrap().upgrade() {
+        if let Some(boss) = self.boss.as_ref().map(|boss| boss.upgrade()).flatten() {
             if Arc::ptr_eq(&boss, &arc) {
                 self.boss_pos = enemy.pos;
             }

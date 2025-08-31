@@ -112,7 +112,9 @@ fn log(string: String) {
     writeln!(LOG.lock().unwrap().as_ref().unwrap(), "{string}").unwrap();
 }
 
-// Global trigger flags
+//////////////////////////
+// Global trigger flags //
+//////////////////////////
 use std::sync::atomic::{AtomicBool, Ordering};
 // Trigger the enemies to be rechecked for reachability
 static RE_FLOOD: AtomicBool = AtomicBool::new(false);
@@ -126,7 +128,9 @@ static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 // Save and quit
 static SAVE: AtomicBool = AtomicBool::new(false);
 
-// Global toggles
+////////////////////
+// Global toggles //
+////////////////////
 static BONUS_NO_DAMAGE: AtomicBool = AtomicBool::new(true);
 static BONUS_NO_WASTE: AtomicBool = AtomicBool::new(true);
 static BONUS_NO_ENERGY: AtomicBool = AtomicBool::new(true);
@@ -135,6 +139,14 @@ fn reset_bonuses() {
     BONUS_NO_WASTE.store(true, Ordering::Relaxed);
     BONUS_NO_ENERGY.store(true, RELAXED);
 }
+
+/////////////////////////////
+// General purpose globals //
+/////////////////////////////
+
+// Stores specials that will last one turn and will be reset at the end of the current turn, every
+// turn.
+static ONE_TURN_SPECIALS: Mutex<Vec<Arc<board::Special>>> = Mutex::new(Vec::new());
 
 fn main() {
     #[cfg(feature = "log")]
@@ -670,6 +682,7 @@ impl State {
         self.turn += 1;
         self.board.turns_spent += 1;
         self.render();
+        *ONE_TURN_SPECIALS.lock().unwrap() = Vec::new();
         time += start.elapsed();
         if bench() {
             writeln!(bench::total(), "{}", time.as_millis()).unwrap();
@@ -903,42 +916,12 @@ impl<'a> Entity<'a> {
             None => player.into(),
         }
     }
-    /*fn unwrap_player(self) -> &'a mut Player {
-        match self {
-            Self::Player(player) => player,
-            Self::Enemy(_) => panic!("Expected player, found enemy"),
-        }
-    }*/
     fn unwrap_enemy(self) -> Arc<RwLock<Enemy>> {
         match self {
             Self::Player(_) => panic!("Expected enemy, found player"),
             Self::Enemy(enemy) => enemy,
         }
     }
-    /*fn get_pos(&self) -> Vector {
-        match self {
-            Entity::Enemy(arc) => arc.try_read().unwrap().pos,
-            Entity::Player(player) => player.pos,
-        }
-    }
-    fn is_within_flood(&self) -> bool {
-        match self {
-            Entity::Player(_) => true,
-            Entity::Enemy(arc) => arc.try_read().unwrap().reachable,
-        }
-    }
-    fn is_player(&self) -> bool {
-        match self {
-            Entity::Player(_) => true,
-            Entity::Enemy(_) => false,
-        }
-    }
-    fn is_entity(&self) -> bool {
-        match self {
-            Entity::Player(_) => false,
-            Entity::Enemy(_) => true,
-        }
-    }*/
 }
 impl<'a> From<&'a mut Player> for Entity<'a> {
     fn from(value: &'a mut Player) -> Self {
@@ -1098,8 +1081,8 @@ fn ray_cast(
         }
         precise_x += delta_x;
         precise_y += delta_y;
-        x = precise_x as usize;
-        y = precise_y as usize;
+        x = precise_x.round() as usize;
+        y = precise_y.round() as usize;
         let pos = Vector::new(x, y);
 
         if !out.last().is_some_and(|prev| *prev == Vector::new(x, y)) {
@@ -1153,7 +1136,7 @@ impl From<Vector> for Collision {
 }
 #[derive(Clone, Debug)]
 struct Stats {
-    // The amo unt of money when entering each shop
+    // The amount of money when entering each shop
     shop_money: Vec<usize>,
     // The total amount of money gained in a run
     total_money: usize,
@@ -1237,6 +1220,8 @@ impl Stats {
             enemy::Variant::MageBoss(_) => 3,
             enemy::Variant::Fighter(_) => 4,
             enemy::Variant::FighterBoss { .. } => 5,
+            enemy::Variant::Archer(_) => 6,
+            enemy::Variant::ArcherBoss(_) => 7,
         };
         let prev = self.kills.get(&key).unwrap_or(&0);
         self.kills.insert(key, prev + 1);
@@ -1252,6 +1237,8 @@ impl Stats {
                     3 => "mage_boss",
                     4 => "fighter",
                     5 => "fighter_boss",
+                    6 => "archer",
+                    7 => "archer_boss",
                     _ => unreachable!("We done fucked up the save version"),
                 }
             );
@@ -1468,4 +1455,33 @@ fn view_stats() {
             other => println!("\"{other}\" is not a valid command"),
         }
     }
+}
+// Need release lock so that rendering can happen
+fn arrow<'a>(
+    from: Vector,
+    to: Vector,
+    board: &mut Board,
+    player: &'a mut Player,
+    time: &mut std::time::Duration,
+) -> Option<Entity<'a>> {
+    let mut start = std::time::Instant::now();
+    let (path, collision) = ray_cast(from, to, board, None, false, player.pos);
+    let bounds = board.get_render_bounds(player);
+    // Visuals
+    for pos in path.iter() {
+        if !board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
+            continue;
+        }
+        let special = board.add_special(board::Special::new(*pos, '●', None));
+        board.smart_render(player);
+        drop(special);
+        *time += start.elapsed();
+        proj_delay();
+        start = std::time::Instant::now();
+    }
+    // Returning the hit
+    *time += start.elapsed();
+    collision
+        .map(|collision| collision.into_entity(player))
+        .flatten()
 }

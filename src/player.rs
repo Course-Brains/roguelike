@@ -280,7 +280,7 @@ impl Player {
     }
     pub fn stat_choice(&mut self) {
         crate::log!("Granting stats");
-        crate::set_desc("1: more health, 2: more energy");
+        crate::set_desc("1: more health, 2: more energy, 3: more perception");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
         loop {
@@ -293,6 +293,10 @@ impl Player {
                 b'2' => {
                     crate::log!("  Chosen energy");
                     self.max_energy += (self.max_energy / 5).max(1)
+                }
+                b'3' => {
+                    crate::log!("  Chosen perception");
+                    self.perception += (self.perception / 5).max(1);
                 }
                 other => {
                     crate::log!("  Recieved \"{}\", trying again", char::from(other));

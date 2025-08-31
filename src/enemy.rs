@@ -23,6 +23,7 @@ pub struct Enemy {
     // If it should give rewards when killed
     pub reward: bool,
     pub log: Option<std::fs::File>,
+    pub show_line_of_sight: bool,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -37,6 +38,7 @@ impl Enemy {
             dead: false,
             reward: true,
             log: None,
+            show_line_of_sight: false,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -44,7 +46,8 @@ impl Enemy {
             match self.variant {
                 Variant::Basic | Variant::BasicBoss(_) => '1',
                 Variant::Mage(_) | Variant::MageBoss(_) => '2',
-                Variant::Fighter(_) | Variant::FighterBoss { .. } => '3',
+                Variant::Fighter(_) | Variant::FighterBoss { .. } => '4',
+                Variant::Archer(_) | Variant::ArcherBoss(_) => '3',
             },
             Some({
                 let mut out = crate::Style::new();
@@ -131,20 +134,38 @@ impl Enemy {
         }
         let pos = this.as_ref().unwrap().pos;
         let player_pos = player.pos;
+        let show_line_of_sight = this.as_ref().unwrap().show_line_of_sight;
         // put in a lazycell because that way the expensive ray cast is only done when needed
         let line_of_sight = std::cell::LazyCell::new(|| {
-            if let Some(crate::Collision::Player) = crate::ray_cast(
+            let (ray, collision) = crate::ray_cast(
                 pos,
                 player_pos,
                 board,
                 Some(Arc::as_ptr(&arc).addr()),
                 false,
                 player_pos,
-            )
-            .1
-            {
+            );
+            if let Some(crate::Collision::Player) = collision {
+                if show_line_of_sight {
+                    for pos in ray.into_iter() {
+                        board.add_one_turn_special(crate::board::Special::new(
+                            pos,
+                            ' ',
+                            Some(*crate::Style::new().background_green()),
+                        ));
+                    }
+                }
                 true
             } else {
+                if show_line_of_sight {
+                    for pos in ray.into_iter() {
+                        board.add_one_turn_special(crate::board::Special::new(
+                            pos,
+                            ' ',
+                            Some(*crate::Style::new().background_red()),
+                        ));
+                    }
+                }
                 false
             }
         });
@@ -675,6 +696,165 @@ impl Enemy {
                     false
                 }
             }
+            Variant::Archer(aim) => {
+                if this.as_ref().unwrap().windup > 0 {
+                    if this.as_ref().unwrap().windup == 1 {
+                        // Shooting time
+                        let pos = this.as_ref().unwrap().pos;
+                        this.take();
+                        *time += start.elapsed();
+                        let hit = crate::arrow(pos, aim, board, player, time);
+                        start = std::time::Instant::now();
+                        this = Some(arc.try_write().unwrap());
+                        match hit {
+                            Some(crate::Entity::Player(player)) => {
+                                // if we hit a player, then deal 1 - 16 damage
+                                let _ = player.attacked(
+                                    (luck_roll8(player) as usize) << 1,
+                                    this.as_ref().unwrap().variant.kill_name(),
+                                );
+                            }
+                            Some(crate::Entity::Enemy(arc)) => {
+                                // If we hit an enemy, then deal 1 - 4 damage
+                                arc.try_write().unwrap().attacked(random4() as usize);
+                            }
+                            None => {}
+                        }
+                    }
+                    this.as_mut().unwrap().windup -= 1;
+                    *time += start.elapsed();
+                    this.as_ref().unwrap().windup == 0
+                } else {
+                    // Deciding
+                    if *line_of_sight {
+                        this.as_mut().unwrap().variant = Variant::Archer(player.pos);
+                        this.as_mut().unwrap().windup = 3;
+                        this.as_mut().unwrap().attacking = true;
+                    } else {
+                        this.as_mut().unwrap().attacking = false;
+                    }
+                    *time += start.elapsed();
+                    false
+                }
+            }
+            Variant::ArcherBoss(action) => {
+                if this.as_ref().unwrap().windup > 0 {
+                    if this.as_ref().unwrap().windup == 1 {
+                        // Doing stuff
+                        let pos = this.as_ref().unwrap().pos;
+                        match action {
+                            ArcherBossAction::Shoot(aim) => {
+                                this.as_mut().unwrap().log(format!("Firing at {aim}"));
+                                this.take();
+                                *time += start.elapsed();
+                                let hit = crate::arrow(pos, aim, board, player, time);
+                                start = std::time::Instant::now();
+                                this = Some(arc.try_write().unwrap());
+                                if let Some(entity) = hit {
+                                    match entity {
+                                        crate::Entity::Player(player) => {
+                                            let damage = (luck_roll8(player) << 4) as usize;
+                                            this.as_mut().unwrap().log(format!(
+                                                "Hit player, dealing {damage} damage"
+                                            ));
+                                            let _ = player.attacked(
+                                                damage,
+                                                this.as_ref().unwrap().variant.kill_name(),
+                                            );
+                                        }
+                                        crate::Entity::Enemy(arc) => {
+                                            let damage = random8() as usize;
+                                            this.as_mut().unwrap().log(format!(
+                                                "Hit enemy at {} for {damage}",
+                                                arc.try_read().unwrap().pos
+                                            ));
+                                            arc.try_write().unwrap().attacked(damage);
+                                        }
+                                    }
+                                }
+                            }
+                            ArcherBossAction::Barrage(mut targets) => {
+                                this.as_mut()
+                                    .unwrap()
+                                    .log(format!("Barrage has {} targets", targets.len()));
+                                if targets.len() == 5 {
+                                    // we have all the targets so we can now shoot
+                                    for aim in targets.into_iter() {
+                                        this.as_mut().unwrap().log(format!("Firing at {aim}"));
+                                        this.take();
+                                        *time += start.elapsed();
+                                        let hit = crate::arrow(pos, aim, board, player, time);
+                                        start = std::time::Instant::now();
+                                        this = Some(arc.try_write().unwrap());
+                                        match hit {
+                                            Some(crate::Entity::Player(player)) => {
+                                                let damage = (luck_roll8(player) << 1) as usize;
+                                                this.as_mut()
+                                                    .unwrap()
+                                                    .log(format!("Hit player for {damage}"));
+                                                let _ = player.attacked(
+                                                    damage,
+                                                    this.as_ref().unwrap().variant.kill_name(),
+                                                );
+                                            }
+                                            Some(crate::Entity::Enemy(arc)) => {
+                                                let damage = random4() as usize;
+                                                this.as_mut().unwrap().log(format!(
+                                                    "Hit enemy at {} for {damage}",
+                                                    arc.try_read().unwrap().pos
+                                                ));
+                                                arc.try_write()
+                                                    .unwrap()
+                                                    .attacked(random4() as usize);
+                                            }
+                                            None => {
+                                                this.as_mut().unwrap().log("Missed".to_string())
+                                            }
+                                        }
+                                    }
+                                } else if *line_of_sight {
+                                    // still getting targets
+                                    targets.push(player.pos);
+                                    this.as_mut()
+                                        .unwrap()
+                                        .log(format!("Adding {} to targets", player.pos));
+                                    this.as_mut().unwrap().variant =
+                                        Variant::ArcherBoss(ArcherBossAction::Barrage(targets));
+                                    // every other turn it adds the current position meaning 10
+                                    // turns total
+                                    this.as_mut().unwrap().windup = 2;
+                                }
+                            }
+                        }
+                    }
+                    this.as_mut().unwrap().windup -= 1;
+                    *time += start.elapsed();
+                    false
+                } else {
+                    if *line_of_sight {
+                        if random4() == 4 {
+                            // Barrage
+                            this.as_mut().unwrap().log("Decided to barrage".to_string());
+                            this.as_mut().unwrap().variant =
+                                Variant::ArcherBoss(ArcherBossAction::Barrage(Vec::new()));
+                            this.as_mut().unwrap().windup = 2;
+                        } else {
+                            // Regular shot
+                            this.as_mut()
+                                .unwrap()
+                                .log(format!("Decided to shoot at {}", player.pos));
+                            this.as_mut().unwrap().variant =
+                                Variant::ArcherBoss(ArcherBossAction::Shoot(player.pos));
+                            this.as_mut().unwrap().windup = 3;
+                        }
+                        this.as_mut().unwrap().attacking = true;
+                    } else {
+                        this.as_mut().unwrap().log("Cannot see player".to_string());
+                        this.as_mut().unwrap().attacking = false;
+                    }
+                    false
+                }
+            }
         }
     }
     pub fn is_near(&self, pos: Vector, range: usize) -> bool {
@@ -685,7 +865,11 @@ impl Enemy {
             Variant::Basic => *self = Enemy::new(self.pos, Variant::basic_boss()),
             Variant::Mage(_) => *self = Enemy::new(self.pos, Variant::mage_boss()),
             Variant::Fighter(_) => *self = Enemy::new(self.pos, Variant::fighter_boss()),
-            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => {
+            Variant::Archer(_) => *self = Enemy::new(self.pos, Variant::archer_boss()),
+            Variant::BasicBoss(_)
+            | Variant::MageBoss(_)
+            | Variant::FighterBoss { .. }
+            | Variant::ArcherBoss(_) => {
                 return Err(());
             }
         }
@@ -725,6 +909,7 @@ impl Clone for Enemy {
             dead: self.dead,
             reward: self.reward,
             log: self.log.as_ref().map(|file| file.try_clone().unwrap()),
+            show_line_of_sight: self.show_line_of_sight,
         }
     }
 }
@@ -739,55 +924,65 @@ pub enum Variant {
         buff: usize,
         action: FighterBossAction,
     },
+    Archer(Vector),
+    ArcherBoss(ArcherBossAction),
 }
 impl Variant {
     fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
+        let cost = {
+            match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
+                Some(cost) => cost,
+                None => return false,
+            }
+        };
         match self {
-            Variant::Basic => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => advantage_pass(
-                    || cost < luck_roll8(player) as usize,
-                    player.get_detect_mod(),
-                ),
-                None => false,
-            },
-            Variant::Mage(_) => match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
-                Some(cost) => advantage_pass(
-                    || cost < ((luck_roll8(player) + 1) << 2) as usize,
-                    player.get_detect_mod(),
-                ),
-                None => false,
-            },
-            Variant::Fighter(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
-                .cost
-                .is_some_and(|cost| {
-                    advantage_pass(
-                        || cost < (luck_roll8(player) << 1) as usize,
-                        player.get_detect_mod(),
-                    )
-                }),
-            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. } => board
-                .backtraces[board.x * enemy.pos.y + enemy.pos.x]
+            Variant::Basic => advantage_pass(
+                || cost < luck_roll8(player) as usize,
+                player.get_detect_mod(),
+            ),
+            Variant::Mage(_) => advantage_pass(
+                || cost < ((luck_roll8(player) + 1) << 2) as usize,
+                player.get_detect_mod(),
+            ),
+            Variant::Fighter(_) => advantage_pass(
+                || cost < (luck_roll8(player) << 1) as usize,
+                player.get_detect_mod(),
+            ),
+            Variant::Archer(_) => advantage_pass(
+                || cost < (luck_roll8(player) << 2) as usize,
+                player.get_detect_mod(),
+            ),
+            Variant::BasicBoss(_)
+            | Variant::MageBoss(_)
+            | Variant::FighterBoss { .. }
+            | Variant::ArcherBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
                 .cost
                 .is_some(),
         }
     }
     fn windup_color(&self) -> Color {
-        // red is physical
+        // red is melee physical
+        // yellow is ranged physical
         // purple is magic
         match self {
-            Variant::Basic | Variant::BasicBoss(_) => Color::Red,
-            Variant::Mage(_) | Variant::MageBoss(_) => Color::Purple,
-            Variant::FighterBoss { action, .. } => {
-                if let FighterBossAction::Smack = action {
-                    Color::Red
-                } else {
-                    Color::Purple
-                }
-            }
-            Variant::Fighter(action) => match action {
-                FighterAction::Teleport(_) => Color::Purple,
-                FighterAction::Smack => Color::Red,
-            },
+            // Non magic melee
+            Variant::Basic
+            | Variant::BasicBoss(_)
+            | Variant::Fighter(FighterAction::Smack)
+            | Variant::FighterBoss {
+                action: FighterBossAction::Smack,
+                ..
+            } => Color::Red,
+
+            // Magic
+            Variant::Mage(_)
+            | Variant::MageBoss(_)
+            | Variant::Fighter(FighterAction::Teleport(_))
+            | Variant::FighterBoss { .. }
+            | Variant::ArcherBoss(ArcherBossAction::Barrage(_)) => Color::Purple,
+
+            // Non magic ranged
+            Variant::Archer(_) | Variant::ArcherBoss(ArcherBossAction::Shoot(_)) => Color::Yellow,
         }
     }
     fn max_health(&self) -> usize {
@@ -798,23 +993,37 @@ impl Variant {
             Variant::MageBoss(_) => 10,
             Variant::Fighter(_) => 5,
             Variant::FighterBoss { .. } => 15,
+            Variant::Archer(_) => 3,
+            Variant::ArcherBoss(_) => 3,
         }
     }
     fn parry_stun(&self) -> usize {
         match self {
             Variant::Basic => 5,
             Variant::BasicBoss(_) => 2,
-            Variant::Mage(_) | Variant::MageBoss(_) => 0,
+            // Mage, MageBoss, Archer, and ArcherBoss, don't attack directly so they can't be stunned through a
+            // parry
+            Variant::Mage(_)
+            | Variant::MageBoss(_)
+            | Variant::Archer(_)
+            | Variant::ArcherBoss(_) => {
+                unimplemented!("The filthy casual actually parried it!")
+            }
             Variant::Fighter(_) => 5,
             Variant::FighterBoss { .. } => 2,
         }
     }
     fn dash_stun(&self) -> usize {
         match self {
-            Variant::Basic => 1,
-            Variant::Mage(_) => 2,
-            Variant::Fighter(_) => 2,
-            Variant::MageBoss(_) | Variant::BasicBoss(_) | Variant::FighterBoss { .. } => 0,
+            // Strong in melee
+            Variant::BasicBoss(_) | Variant::FighterBoss { .. } => 1,
+            // Decent in melee
+            Variant::Basic | Variant::Fighter(_) => 2,
+            // Weak in melee
+            Variant::Mage(_)
+            | Variant::MageBoss(_)
+            | Variant::Archer(_)
+            | Variant::ArcherBoss(_) => 3,
         }
     }
     // returns kill reward in energy, then health
@@ -827,6 +1036,8 @@ impl Variant {
             Variant::MageBoss(_) => (20, 5),
             Variant::Fighter(_) => (10, 2),
             Variant::FighterBoss { .. } => (15, 10),
+            Variant::Archer(_) => (3, 10),
+            Variant::ArcherBoss(_) => (10, 5),
         }
     }
     pub fn kill_name(&self) -> &'static str {
@@ -837,6 +1048,8 @@ impl Variant {
             Variant::MageBoss(_) => "Lazy Mage",
             Variant::Fighter(_) => "Squire",
             Variant::FighterBoss { .. } => "Knight",
+            Variant::Archer(_) => "archer",
+            Variant::ArcherBoss(_) => "archer_boss",
         }
     }
     pub fn precise_teleport(&self) -> bool {
@@ -845,7 +1058,10 @@ impl Variant {
     pub fn is_boss(&self) -> bool {
         matches!(
             self,
-            Variant::BasicBoss(_) | Variant::MageBoss(_) | Variant::FighterBoss { .. }
+            Variant::BasicBoss(_)
+                | Variant::MageBoss(_)
+                | Variant::FighterBoss { .. }
+                | Variant::ArcherBoss(_)
         )
     }
     // used to get which type should be promoted into the boss
@@ -853,8 +1069,12 @@ impl Variant {
         match self {
             Variant::Basic => Ok(1),
             Variant::Mage(_) => Ok(2),
+            Variant::Archer(_) => Ok(2),
             Variant::Fighter(_) => Ok(3),
-            Variant::MageBoss(_) | Variant::BasicBoss(_) | Variant::FighterBoss { .. } => Err(()),
+            Variant::MageBoss(_)
+            | Variant::BasicBoss(_)
+            | Variant::FighterBoss { .. }
+            | Variant::ArcherBoss(_) => Err(()),
         }
     }
     fn mage_aggro(&self) -> bool {
@@ -871,12 +1091,19 @@ impl Variant {
         let mage = Variant::mage().get_cost().unwrap();
         let basic = Variant::basic().get_cost().unwrap();
 
+        // At every tier there is a 1 in 8 chance for it to move to the next unoptimally, unless
+        // this has been disabled
+
         // Fighter
         if available > fighter && (optimal || random8() != 0) {
             (Variant::fighter(), available / fighter)
         // Mage
         } else if available > mage && (optimal || random8() != 0) {
-            (Variant::mage(), available / mage)
+            if bool::random() {
+                (Variant::mage(), available / mage)
+            } else {
+                (Variant::archer(), available / mage)
+            }
         // Basic
         } else {
             (Variant::basic(), available / basic)
@@ -885,7 +1112,7 @@ impl Variant {
     pub const fn get_cost(&self) -> Option<usize> {
         Some(match self {
             Variant::Basic => 1,
-            Variant::Mage(_) => 5,
+            Variant::Mage(_) | Variant::Archer(_) => 5,
             Variant::Fighter(_) => 10,
             _ => return None,
         })
@@ -916,6 +1143,12 @@ impl Variant {
             action: FighterBossAction::Smack,
         }
     }
+    pub const fn archer() -> Variant {
+        Variant::Archer(Vector::new(0, 0))
+    }
+    pub const fn archer_boss() -> Variant {
+        Variant::ArcherBoss(ArcherBossAction::Shoot(Vector::new(0, 0)))
+    }
 }
 impl std::fmt::Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -926,6 +1159,8 @@ impl std::fmt::Display for Variant {
             Variant::MageBoss(_) => write!(f, "mage_boss"),
             Variant::Fighter(_) => write!(f, "fighter"),
             Variant::FighterBoss { .. } => write!(f, "fighter_boss"),
+            Variant::Archer(_) => write!(f, "archer"),
+            Variant::ArcherBoss(_) => write!(f, "archer_boss"),
         }
     }
 }
@@ -939,6 +1174,8 @@ impl std::str::FromStr for Variant {
             "mage_boss" => Ok(Variant::mage_boss()),
             "fighter" => Ok(Variant::fighter()),
             "fighter_boss" => Ok(Variant::fighter_boss()),
+            "archer" => Ok(Variant::archer()),
+            "archer_boss" => Ok(Variant::archer_boss()),
             _ => Err("invalid variant".to_string()),
         }
     }
@@ -969,6 +1206,12 @@ pub enum FighterBossAction {
     BigExplode(Vector),
     ApplyBuff,
     Smack,
+}
+#[derive(Clone, Debug)]
+pub enum ArcherBossAction {
+    Shoot(Vector),
+    // Add player's position every other turn 5 times, then shoot all at once
+    Barrage(Vec<Vector>),
 }
 pub fn luck_roll8(player: &Player) -> u8 {
     let base = crate::random() & 7;

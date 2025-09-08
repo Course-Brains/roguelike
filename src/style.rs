@@ -11,7 +11,7 @@ pub struct Style {
     underline: bool,
 }
 macro_rules! color {
-    ($background: ident, $name:ident, $variant:ident) => {
+    ($background: ident, $name: ident, $variant: ident) => {
         pub const fn $name(&mut self) -> &mut Self {
             self.color = Color::$variant;
             self

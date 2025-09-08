@@ -11,7 +11,6 @@ pub enum Input {
     SwapFocus,             // swap camera focus(player/selector)
     Item(usize),           // Use an item(1-6)
     Convert,               // Convert energy to money
-    Inspect,               // Toggle inspect mode
     Aim,                   // Show a raytrace from the player
     Fast,                  // Toggle fast selector movement
 }
@@ -55,7 +54,6 @@ impl Input {
                 b'5' => return Input::Item(5),
                 b'6' => return Input::Item(6),
                 b'c' => return Input::Convert,
-                b'i' => return Input::Inspect,
                 b'z' => return Input::Aim,
                 b'f' => return Input::Fast,
                 _ => {}

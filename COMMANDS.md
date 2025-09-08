@@ -36,6 +36,9 @@ neither of them.
 Relative positioning specific: If a relative position is marked as
 optional, then unless otherwise stated, the default is the position of
 the selector
+If "..." is within the argument list, it means that the arguments are
+expanded in a way that the reader is supposed to be able to figure
+out.
 
 ==============================================================================
 
@@ -225,3 +228,14 @@ show\_line\_of\_sight \[state\] {index}
     Sets whether or not an enemy if specified or all enemies if
     unspecified should visually show their line of sight check when
     they make it by setting \[state\] to true or false
+
+set\_limb \[limb\] \[replacement\]
+    Sets the specified \[limb\] to the chosen \[replacement\].
+    The valid \[limb\]s with their valid \[replacement\]s are:
+        left\_eye | right\_eye
+            normal
+            mage
+            seer
+
+set\_feedback \[text\] ...
+    Sets the player feedback row to contain the given \[text\].

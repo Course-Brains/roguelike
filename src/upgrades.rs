@@ -6,7 +6,6 @@ const UNAVAILABLE: Style = *Style::new().red();
 
 #[derive(Clone, Copy, Debug)]
 pub struct Upgrades {
-    pub mage_eye: usize,
     pub map: bool,
     pub soft_shoes: bool,
     pub precise_convert: bool,
@@ -15,7 +14,6 @@ pub struct Upgrades {
 impl Upgrades {
     pub const fn new() -> Upgrades {
         Upgrades {
-            mage_eye: 0,
             map: false,
             soft_shoes: false,
             precise_convert: false,
@@ -29,7 +27,6 @@ impl FromBinary for Upgrades {
         Self: Sized,
     {
         Ok(Upgrades {
-            mage_eye: usize::from_binary(binary)?,
             map: bool::from_binary(binary)?,
             soft_shoes: bool::from_binary(binary)?,
             precise_convert: bool::from_binary(binary)?,
@@ -39,7 +36,6 @@ impl FromBinary for Upgrades {
 }
 impl ToBinary for Upgrades {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-        self.mage_eye.to_binary(binary)?;
         self.map.to_binary(binary)?;
         self.soft_shoes.to_binary(binary)?;
         self.precise_convert.to_binary(binary)?;
@@ -48,7 +44,6 @@ impl ToBinary for Upgrades {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum UpgradeType {
-    MageEye,
     Map,
     SoftShoes,
     SavePint, // no corresponding upgrade field
@@ -60,6 +55,8 @@ pub enum UpgradeType {
     BonusNoDamage, // +50% max health & full heal
     BonusKillAll,  // complicated, look at on_pickup
     BonusNoEnergy, // +50% max energy
+    LimbMageEye,
+    LimbSeerEye,
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -70,6 +67,8 @@ impl UpgradeType {
             Self::BonusNoWaste | Self::BonusNoDamage | Self::BonusKillAll | Self::BonusNoEnergy => {
                 'B'
             }
+            // L for limb
+            Self::LimbMageEye | Self::LimbSeerEye => 'L',
             // U for Upgrade
             _ => 'U',
         };
@@ -85,13 +84,11 @@ impl UpgradeType {
     }
     pub fn cost(self) -> usize {
         match self {
-            Self::MageEye => 200,
             Self::Map => 300,
             Self::SoftShoes => 200,
-            Self::PreciseConvert => 150,
-            Self::EnergyBoost => 100,
-            Self::HealthBoost => 100,
-            Self::Lifesteal => 150,
+            Self::PreciseConvert | Self::Lifesteal => 150,
+            Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => 100,
+            // The free shit
             Self::SavePint
             | Self::BonusNoWaste
             | Self::BonusNoDamage
@@ -101,21 +98,6 @@ impl UpgradeType {
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
         match self {
-            Self::MageEye => {
-                player.effects.mage_sight = Duration::Infinite;
-                player.upgrades.mage_eye += 1;
-                let _ = player.attacked(
-                    ((crate::enemy::luck_roll8(player) as usize / 2) + 1) * 5,
-                    "stupidity",
-                );
-                if player.upgrades.mage_eye == 2 && player.effects.unlucky.is_active() {
-                    player.inspect = false;
-                    crate::set_desc("You feel whole");
-                    player.max_energy += 1;
-                    player.effects.unlucky.remove();
-                }
-                true
-            }
             Self::Map => {
                 player.upgrades.map = true;
                 true
@@ -167,7 +149,10 @@ impl UpgradeType {
                 true
             }
             Self::BonusKillAll => {
-                if !player.upgrades.map && player.upgrades.mage_eye == 0 && player.perception < 50 {
+                if !player.upgrades.map
+                    && player.limbs.count_mage_eyes() == 0
+                    && player.perception < 50
+                {
                     player.perception += 10;
                 } else if player.detect_mod > -5 {
                     player.detect_mod -= 1;
@@ -184,11 +169,26 @@ impl UpgradeType {
                 player.max_energy += (player.max_energy / 2).max(1);
                 true
             }
+            Self::LimbMageEye => {
+                if let Some(eye) = player.limbs.pick_eye() {
+                    *eye = crate::limbs::Eye::Mage;
+                    true
+                } else {
+                    false
+                }
+            }
+            Self::LimbSeerEye => {
+                if let Some(eye) = player.limbs.pick_eye() {
+                    *eye = crate::limbs::Eye::Seer;
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
         match self {
-            Self::MageEye => player.upgrades.mage_eye < 2,
             Self::Map => !player.upgrades.map,
             Self::SoftShoes => !player.upgrades.soft_shoes,
             Self::PreciseConvert => !player.upgrades.precise_convert,
@@ -199,7 +199,6 @@ impl UpgradeType {
     pub fn get_desc(self) -> &'static str {
         match self {
             // Normal upgrades
-            Self::MageEye => "A mage's eye",
             Self::Map => "A map",
             Self::SoftShoes => "A pair of particularly soft shoes",
             Self::PreciseConvert => "Clean needles",
@@ -213,13 +212,15 @@ impl UpgradeType {
             Self::BonusNoEnergy => "A result of your ",
             // Save pint
             Self::SavePint => "A savepint",
+            // Limbs
+            Self::LimbMageEye => "A mage's eye",
+            Self::LimbSeerEye => "A seer's eye",
         }
     }
 }
 impl std::fmt::Display for UpgradeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MageEye => write!(f, "mage eye"),
             Self::Map => write!(f, "map"),
             Self::SoftShoes => write!(f, "soft shoes"),
             Self::SavePint => write!(f, "save pint"),
@@ -231,6 +232,8 @@ impl std::fmt::Display for UpgradeType {
             Self::BonusNoDamage => write!(f, "bonus no damage"),
             Self::BonusKillAll => write!(f, "bonus kill all"),
             Self::BonusNoEnergy => write!(f, "bonus no energy"),
+            Self::LimbMageEye => write!(f, "limb mage eye"),
+            Self::LimbSeerEye => write!(f, "limb seer eye"),
         }
     }
 }
@@ -238,7 +241,6 @@ impl std::str::FromStr for UpgradeType {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim() {
-            "mage_eye" => Ok(Self::MageEye),
             "map" => Ok(Self::Map),
             "soft_shoes" => Ok(Self::SoftShoes),
             "save_pint" => Ok(Self::SavePint),
@@ -250,6 +252,8 @@ impl std::str::FromStr for UpgradeType {
             "bonus_no_damage" => Ok(Self::BonusNoDamage),
             "bonus_kill_all" => Ok(Self::BonusKillAll),
             "bonus_no_energy" => Ok(Self::BonusNoEnergy),
+            "limb_mage_eye" => Ok(Self::LimbMageEye),
+            "limb_seer_eye" => Ok(Self::LimbSeerEye),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
@@ -257,14 +261,15 @@ impl std::str::FromStr for UpgradeType {
 impl Random for UpgradeType {
     fn random() -> Self {
         // save pint and bonuses intentionally ommitted
-        match random() % 7 {
-            0 => Self::MageEye,
-            1 => Self::Map,
-            2 => Self::SoftShoes,
-            3 => Self::PreciseConvert,
-            4 => Self::EnergyBoost,
-            5 => Self::HealthBoost,
-            6 => Self::Lifesteal,
+        match random() % 8 {
+            0 => Self::Map,
+            1 => Self::SoftShoes,
+            2 => Self::PreciseConvert,
+            3 => Self::EnergyBoost,
+            4 => Self::HealthBoost,
+            5 => Self::Lifesteal,
+            6 => Self::LimbMageEye,
+            7 => Self::LimbSeerEye,
             _ => unreachable!("Le fucked is up"),
         }
     }
@@ -275,18 +280,19 @@ impl FromBinary for UpgradeType {
         Self: Sized,
     {
         Ok(match u8::from_binary(binary)? {
-            0 => Self::MageEye,
-            1 => Self::Map,
-            2 => Self::SoftShoes,
-            3 => Self::SavePint,
-            4 => Self::PreciseConvert,
-            5 => Self::EnergyBoost,
-            6 => Self::HealthBoost,
-            7 => Self::Lifesteal,
-            8 => Self::BonusNoWaste,
-            9 => Self::BonusNoDamage,
-            10 => Self::BonusKillAll,
-            11 => Self::BonusNoEnergy,
+            0 => Self::Map,
+            1 => Self::SoftShoes,
+            2 => Self::SavePint,
+            3 => Self::PreciseConvert,
+            4 => Self::EnergyBoost,
+            5 => Self::HealthBoost,
+            6 => Self::Lifesteal,
+            7 => Self::BonusNoWaste,
+            8 => Self::BonusNoDamage,
+            9 => Self::BonusKillAll,
+            10 => Self::BonusNoEnergy,
+            11 => Self::LimbMageEye,
+            12 => Self::LimbSeerEye,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -299,18 +305,19 @@ impl FromBinary for UpgradeType {
 impl ToBinary for UpgradeType {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         match self {
-            Self::MageEye => 0_u8,
-            Self::Map => 1,
-            Self::SoftShoes => 2,
-            Self::SavePint => 3,
-            Self::PreciseConvert => 4,
-            Self::EnergyBoost => 5,
-            Self::HealthBoost => 6,
-            Self::Lifesteal => 7,
-            Self::BonusNoWaste => 8,
-            Self::BonusNoDamage => 9,
-            Self::BonusKillAll => 10,
-            Self::BonusNoEnergy => 11,
+            Self::Map => 0_u8,
+            Self::SoftShoes => 1,
+            Self::SavePint => 2,
+            Self::PreciseConvert => 3,
+            Self::EnergyBoost => 4,
+            Self::HealthBoost => 5,
+            Self::Lifesteal => 6,
+            Self::BonusNoWaste => 7,
+            Self::BonusNoDamage => 8,
+            Self::BonusKillAll => 9,
+            Self::BonusNoEnergy => 10,
+            Self::LimbMageEye => 11,
+            Self::LimbSeerEye => 12,
         }
         .to_binary(binary)
     }

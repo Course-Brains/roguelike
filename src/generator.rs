@@ -1,6 +1,6 @@
 use crate::{
     Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
-    pieces::wall::Wall, random::*,
+    random::*,
 };
 use albatrice::debug;
 use std::cell::RefCell;

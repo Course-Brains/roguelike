@@ -178,6 +178,8 @@ impl Board {
         // Spend no energy directly(not counting conversion)
         out[Board::BONUS_NO_ENERGY] = Some(Piece::Sign("Be more stingy".to_string()));
 
+        // Placing limbs
+
         out
     }
     pub fn new_empty() -> Board {
@@ -249,6 +251,14 @@ impl Board {
             }
         }
         out
+    }
+    pub fn is_enemy_aiming(&self) -> bool {
+        for arc in self.enemies.iter() {
+            if arc.try_read().unwrap().is_aiming() {
+                return true;
+            }
+        }
+        false
     }
 }
 // Rendering
@@ -325,6 +335,13 @@ impl Board {
         .unwrap();
         self.generate_visible(player);
         self.render(bounds.clone(), &mut lock, player);
+        if player.limbs.count_seer_eyes() == 2 {
+            self.draw_premonition(
+                &mut lock,
+                bounds.clone(),
+                player.effects.full_vis.is_active(),
+            )
+        }
         self.draw_spells(
             &mut lock,
             bounds.clone(),
@@ -337,6 +354,7 @@ impl Board {
             player.effects.full_vis.is_active(),
         );
         self.draw_desc(player, &mut lock);
+        self.draw_feedback(&mut lock);
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         player.draw(self, bounds.clone());
         player.reposition_cursor(self.has_background(player.pos, player), bounds.clone());
@@ -353,18 +371,23 @@ impl Board {
             if !bounds.contains(&pos) {
                 continue;
             }
-            if player.effects.full_vis.is_active() {
-            } else if player.effects.mage_sight.is_active() {
-                if !self.is_reachable(enemy.try_read().unwrap().pos) {
-                    continue;
-                }
-            } else if !self.visible[self.to_index(pos)] {
+            let mage_eyes = player.limbs.count_mage_eyes();
+            let directly_seen =
+                player.effects.full_vis.is_active() || self.is_visible(pos, bounds.clone(), false);
+            let magically_seen = mage_eyes > 0 && self.is_reachable(pos);
+            let obfuscated = magically_seen && !directly_seen && mage_eyes == 1;
+            if !(magically_seen || directly_seen) {
                 continue;
             }
+
             crossterm::queue!(lock, (pos - bounds.start).to_move()).unwrap();
-            match enemy.try_read().unwrap().render() {
-                (ch, Some(style)) => write!(lock, "{style}{ch}\x1b[0m").unwrap(),
-                (ch, None) => write!(lock, "{ch}").unwrap(),
+            if obfuscated {
+                write!(lock, "?").unwrap();
+            } else {
+                match enemy.try_read().unwrap().render() {
+                    (ch, Some(style)) => write!(lock, "{style}{ch}\x1b[0m").unwrap(),
+                    (ch, None) => write!(lock, "{ch}").unwrap(),
+                }
             }
         }
     }
@@ -437,9 +460,6 @@ impl Board {
         base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
     }
     pub fn draw_desc(&self, player: &Player, lock: &mut impl Write) {
-        if !player.inspect {
-            return;
-        }
         Board::go_to_desc(lock);
         crossterm::queue!(
             lock,
@@ -460,7 +480,7 @@ impl Board {
                     None => write!(lock, "Nothing").unwrap(),
                 }
             }
-        } else if player.effects.mage_sight.is_active() {
+        } else if player.limbs.count_mage_eyes() == 2 {
             if let Some(enemy) = self.get_enemy(player.selector, None) {
                 if self.is_reachable(enemy.try_read().unwrap().pos) {
                     write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
@@ -469,7 +489,7 @@ impl Board {
         }
     }
     pub fn go_to_desc(lock: &mut impl Write) {
-        crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 93),).unwrap();
+        crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 36),).unwrap();
     }
     pub fn set_desc(lock: &mut impl Write, text: &str) {
         Board::go_to_desc(lock);
@@ -537,6 +557,32 @@ impl Board {
             .lock()
             .unwrap()
             .push(self.add_special(special));
+    }
+    pub fn draw_premonition(&self, lock: &mut impl Write, bounds: Range<Vector>, full_vis: bool) {
+        let mut targets = Vec::new();
+        for arc in self.enemies.iter() {
+            arc.try_read().unwrap().get_aim_pos(&mut targets);
+        }
+        for pos in targets.iter() {
+            if self.is_visible(*pos, bounds.clone(), full_vis) {
+                crossterm::queue!(lock, (*pos - bounds.start).to_move()).unwrap();
+                write!(
+                    lock,
+                    "{} \x1b[0m",
+                    Style::new().background_red().intense_background(true)
+                )
+                .unwrap()
+            }
+        }
+    }
+    pub fn draw_feedback(&self, lock: &mut impl Write) {
+        crossterm::queue!(
+            lock,
+            crossterm::cursor::MoveTo(0, 35),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+        )
+        .unwrap();
+        write!(lock, "{}", crate::feedback()).unwrap();
     }
 }
 // Enemy logic
@@ -1345,16 +1391,16 @@ impl Adj {
     pub fn to_vec(self, base: Vector) -> Vec<Vector> {
         let mut out = Vec::new();
         if self.up {
-            out.push(base + Direction::Up)
+            out.push(base + Direction::Up);
         }
         if self.down {
-            out.push(base + Direction::Down)
+            out.push(base + Direction::Down);
         }
         if self.left {
-            out.push(base + Direction::Left)
+            out.push(base + Direction::Left);
         }
         if self.right {
-            out.push(base + Direction::Right)
+            out.push(base + Direction::Right);
         }
         out
     }

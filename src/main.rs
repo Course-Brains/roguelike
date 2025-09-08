@@ -22,6 +22,7 @@ mod upgrades;
 use upgrades::Upgrades;
 mod spell;
 use spell::Spell;
+mod limbs;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -147,7 +148,18 @@ fn reset_bonuses() {
 // Stores specials that will last one turn and will be reset at the end of the current turn, every
 // turn.
 static ONE_TURN_SPECIALS: Mutex<Vec<Arc<board::Special>>> = Mutex::new(Vec::new());
+// Consistently rendered feedback for the player so that they know more confusing details
+static FEEDBACK: Mutex<String> = Mutex::new(String::new());
+fn feedback<'a>() -> std::sync::MutexGuard<'a, String> {
+    FEEDBACK.lock().unwrap()
+}
+fn set_feedback(new: String) {
+    *FEEDBACK.lock().unwrap() = new;
+}
 
+/////////////////
+// Actual code //
+/////////////////
 fn main() {
     #[cfg(feature = "log")]
     {
@@ -204,6 +216,7 @@ fn main() {
         let mut basic = 0;
         let mut mage = 0;
         let mut fighter = 0;
+        let mut archer = 0;
         for index in 0..Rand::MAX {
             random::initialize_with(index);
             let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
@@ -221,10 +234,11 @@ fn main() {
                 enemy::Variant::BasicBoss(_) => basic += 1,
                 enemy::Variant::MageBoss(_) => mage += 1,
                 enemy::Variant::FighterBoss { .. } => fighter += 1,
+                enemy::Variant::ArcherBoss(_) => archer += 1,
                 _ => unreachable!("non boss boss"),
             }
         }
-        println!("basic: {basic}\nmage: {mage}\nfighter: {fighter}");
+        println!("basic: {basic}\nmage: {mage}\nfighter: {fighter}\narcher: {archer}");
         return;
     }
 
@@ -250,9 +264,14 @@ fn main() {
     state.board.flood(state.player.pos);
     state.render();
     loop {
-        if Player::handle_death(&state) {
+        if let Some(show_stats) = Player::handle_death(&state) {
             stats().collect_death(&state);
             save_stats();
+            if show_stats {
+                log!("Showing end of game stats:\n{:#?}", stats());
+                println!("\n\n\n{:#?}\n\n\nPress enter to quit.", stats());
+                std::io::stdin().read_line(&mut String::new()).unwrap();
+            }
             break;
         }
         if SAVE.load(Ordering::Relaxed) {
@@ -497,16 +516,6 @@ fn main() {
                     state.player.energy = 0;
                 }
                 state.increment();
-            }
-            Input::Inspect => {
-                if state.player.inspect {
-                    Board::set_desc(&mut std::io::stdout(), "Inspect mode disabled");
-                } else {
-                    Board::set_desc(&mut std::io::stdout(), "Inspect mode enabled");
-                }
-                state.reposition_cursor();
-                std::io::stdout().flush().unwrap();
-                state.player.inspect ^= true;
             }
             Input::Aim => {
                 state.player.aiming ^= true;
@@ -946,6 +955,17 @@ impl Weirdifier {
         Weirdifier
     }
 }
+impl Drop for Weirdifier {
+    fn drop(&mut self) {
+        print!("\x1b[?1049l");
+        std::process::Command::new("stty")
+            .arg("icanon")
+            .arg("echo")
+            .status()
+            .unwrap();
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnableLineWrap).unwrap()
+    }
+}
 #[derive(Clone, Copy, Debug)]
 struct MapGenSettings {
     x: usize,
@@ -986,17 +1006,6 @@ impl ToBinary for MapGenSettings {
         self.render_x.to_binary(binary)?;
         self.render_y.to_binary(binary)?;
         self.budget.to_binary(binary)
-    }
-}
-impl Drop for Weirdifier {
-    fn drop(&mut self) {
-        print!("\x1b[?1049l");
-        std::process::Command::new("stty")
-            .arg("icanon")
-            .arg("echo")
-            .status()
-            .unwrap();
-        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnableLineWrap).unwrap()
     }
 }
 fn bell(lock: Option<&mut dyn std::io::Write>) {
@@ -1298,13 +1307,16 @@ impl ToBinary for Stats {
     }
 }
 fn save_stats() {
+    if CHEATS.load(RELAXED) {
+        return;
+    }
     let mut stats_saves: Vec<Stats> = Vec::new();
     match std::fs::exists(STAT_PATH).unwrap() {
         true => {
             log!("Stats file exists, checking version");
             let mut file = std::fs::File::open(STAT_PATH).unwrap();
             if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
-                log!("!!! Save version mismatch!!!");
+                log!("!!!Save version mismatch!!!");
                 crossterm::queue!(
                     std::io::stdout(),
                     crossterm::terminal::Clear(crossterm::terminal::ClearType::All)

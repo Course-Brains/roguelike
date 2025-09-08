@@ -1,6 +1,6 @@
 use crate::{
     Board, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
-    commands::parse,
+    commands::parse, limbs::Limbs,
 };
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -25,11 +25,10 @@ pub struct Player {
     pub upgrades: Upgrades,
     // -: harder to detect, +: easier
     pub detect_mod: isize,
-    // Gives you info on what you are hovering over
-    pub inspect: bool,
     pub aiming: bool,
     // Whether or not the selector should move faster
     pub fast: bool,
+    pub limbs: Limbs,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -50,9 +49,9 @@ impl Player {
             effects: Effects::new(),
             upgrades: crate::Upgrades::new(),
             detect_mod: 0,
-            inspect: true,
             aiming: false,
             fast: false,
+            limbs: Limbs::new(),
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -80,6 +79,7 @@ impl Player {
     // true: died
     // false: alive
     pub fn attacked(&mut self, mut damage: usize, attacker: &'static str) -> Result<bool, ()> {
+        // Damage nullification
         if self.effects.invincible.is_active() {
             crate::stats().damage_invulned += damage;
             return Err(());
@@ -89,6 +89,7 @@ impl Player {
             crate::stats().damage_blocked += damage;
             return Err(());
         }
+        // One shot protection
         if self.health == self.max_health && damage > self.health {
             crate::log!(
                 "Player was hit for {damage}, but one shot protection is reducing to {}",
@@ -96,7 +97,13 @@ impl Player {
             );
             damage = self.health - 1;
         }
+        // Damage has been determined
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
+
+        if self.should_remove_limb(damage) {
+            self.limbs.remove_random_limb();
+        }
+
         if self.health <= damage {
             self.killer = Some(attacker);
             crate::stats().damage_taken += self.health;
@@ -105,6 +112,28 @@ impl Player {
         crate::stats().damage_taken += damage;
         self.health -= damage;
         Ok(false)
+    }
+    pub fn should_remove_limb(&self, damage: usize) -> bool {
+        crate::log!("Deciding if a limb should be lost:");
+        let health = self.health as f64;
+        let max_health = self.max_health as f64;
+        let energy = self.energy as f64;
+        let max_energy = self.max_energy as f64;
+        let damage = damage as f64;
+
+        let health_weight =
+            ((max_health - health) / max_health) * crate::limbs::LIMB_LOSS_HEALTH_WEIGHT;
+        crate::log!("  health weight: {health_weight}");
+        let energy_weight =
+            ((max_energy - energy) / max_energy) * crate::limbs::LIMB_LOSS_ENERGY_WEIGHT;
+        crate::log!("  energy_weight: {energy_weight}");
+        let damage_weight = (damage / max_health) * crate::limbs::LIMB_LOSS_DAMAGE_WEIGHT;
+        crate::log!("  damage weight: {damage_weight}");
+
+        let pass = (health_weight + energy_weight + damage_weight) as crate::Rand;
+        crate::log!("  pass value: {pass}");
+
+        pass > crate::random()
     }
     pub fn on_kill(&mut self, enemy: &crate::Enemy) {
         crate::stats().add_kill(enemy.variant.clone());
@@ -139,27 +168,33 @@ impl Player {
             Focus::Selector => self.selector,
         }
     }
-    // returns whether or not the player is dead
-    pub fn handle_death(state: &crate::State) -> bool {
-        match state.player.killer {
-            Some(killer) => {
-                println!(
-                    "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
-                    Style::new().green().intense(true),
-                    killer
-                );
-                Player::death_message(state);
-                print!("\nPress {}Enter\x1b[0m to exit.", Style::new().cyan());
-                std::io::stdout().flush().unwrap();
-                loop {
-                    if let crate::input::Input::Enter = crate::input::Input::get() {
-                        break;
-                    }
+    // returns whether or not the player is dead and if they are, whether or not they want to see
+    // their stats
+    pub fn handle_death(state: &crate::State) -> Option<bool> {
+        state.player.killer.map(|killer| {
+            println!(
+                "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
+                Style::new().green().intense(true),
+                killer
+            );
+            Player::death_message(state);
+            print!(
+                "\nPress {}Enter\x1b[0m to exit. Or press {}S\x1b[0m to see stats.",
+                Style::new().cyan(),
+                Style::new().cyan()
+            );
+            std::io::stdout().flush().unwrap();
+            let mut buf = [0];
+            let mut stdin = std::io::stdin().lock();
+            loop {
+                stdin.read_exact(&mut buf).unwrap();
+                match buf[0].to_ascii_uppercase() {
+                    b'S' => break true,
+                    b'\n' => break false,
+                    _ => {}
                 }
-                true
             }
-            None => false,
-        }
+        })
     }
     pub fn death_message(state: &crate::State) {
         let mut out = std::io::stdout().lock();
@@ -264,6 +299,9 @@ impl Player {
     pub fn get_money(&self) -> usize {
         self.money
     }
+    // not actually unsafe in the sense of undefined behavior, but it does bypass all the stat
+    // saving mechanisms so you shouldn't use this unless you actually know that it doesn't cause
+    // problems
     pub unsafe fn mut_money(&mut self) -> &mut usize {
         &mut self.money
     }
@@ -307,11 +345,18 @@ impl Player {
         }
     }
     pub fn get_perception(&self) -> usize {
-        if self.effects.drunk.is_active() {
-            self.perception / 2
-        } else {
-            self.perception
+        let mut perception = self.perception;
+        let eyes = self.limbs.count_eyes();
+        if eyes == 1 {
+            perception /= 2;
+        } else if eyes == 0 {
+            perception = 0;
         }
+        perception += self.limbs.count_normal_eyes() * 5;
+        if self.effects.drunk.is_active() {
+            perception /= 2
+        }
+        perception
     }
     pub fn get_detect_mod(&self) -> isize {
         if self.effects.drunk.is_active() {
@@ -325,17 +370,22 @@ impl Player {
 impl Player {
     pub fn draw(&self, board: &Board, bounds: Range<Vector>) {
         let mut lock = std::io::stdout().lock();
-        self.draw_player(&mut lock, bounds);
+        self.draw_player(&mut lock, bounds, board);
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock);
         self.draw_items(board, &mut lock);
     }
-    fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>) {
+    fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>, board: &Board) {
         if !bounds.contains(&self.pos) {
             return;
         }
+        let style = if self.limbs.count_seer_eyes() == 1 && board.is_enemy_aiming() {
+            *STYLE.clone().background_red().intense_background(true)
+        } else {
+            STYLE
+        };
         crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
-        write!(lock, "{STYLE}{SYMBOL}\x1b[0m").unwrap();
+        write!(lock, "{style}{SYMBOL}\x1b[0m").unwrap();
     }
     fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
         crossterm::queue!(
@@ -431,9 +481,9 @@ impl FromBinary for Player {
             effects: Effects::from_binary(binary)?,
             upgrades: Upgrades::from_binary(binary)?,
             detect_mod: isize::from_binary(binary)?,
-            inspect: bool::from_binary(binary)?,
             aiming: bool::from_binary(binary)?,
             fast: bool::from_binary(binary)?,
+            limbs: Limbs::from_binary(binary)?,
         })
     }
 }
@@ -458,9 +508,9 @@ impl ToBinary for Player {
         self.effects.to_binary(binary)?;
         self.upgrades.to_binary(binary)?;
         self.detect_mod.to_binary(binary)?;
-        self.inspect.to_binary(binary)?;
         self.aiming.to_binary(binary)?;
-        self.fast.to_binary(binary)
+        self.fast.to_binary(binary)?;
+        self.limbs.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -500,8 +550,6 @@ impl ToBinary for Focus {
 pub struct Effects {
     // self explanitory
     pub invincible: Duration,
-    // No perception check on enemies, but aggro all mage types
-    pub mage_sight: Duration,
     // Heal 2 health per turn
     pub regen: Duration,
     // make enemies roll better(+2 on 1-8)
@@ -520,7 +568,6 @@ impl Effects {
     fn new() -> Effects {
         Effects {
             invincible: Duration::None,
-            mage_sight: Duration::None,
             regen: Duration::None,
             unlucky: Duration::None,
             doomed: Duration::None,
@@ -532,7 +579,6 @@ impl Effects {
     // Decreases all effect durations by 1 turn
     fn decriment(&mut self) {
         self.invincible.decriment();
-        self.mage_sight.decriment();
         self.regen.decriment();
         self.unlucky.decriment();
         self.doomed.decriment();
@@ -548,7 +594,6 @@ impl Effects {
                 let args: String = split.map(|s| s.to_string() + " ").collect();
                 match effect {
                     "invincible" => self.invincible = args.parse()?,
-                    "mage_sight" => self.mage_sight = args.parse()?,
                     "regen" => self.regen = args.parse()?,
                     "unlucky" => self.unlucky = args.parse()?,
                     "doomed" => self.doomed = args.parse()?,
@@ -566,10 +611,6 @@ impl Effects {
         if self.invincible.is_active() {
             println!("    and is invincible for ");
             self.invincible.list();
-        }
-        if self.mage_sight.is_active() {
-            println!("    and has mage sight for ");
-            self.mage_sight.list();
         }
         if self.regen.is_active() {
             println!("    and is regenerating for ");
@@ -598,7 +639,6 @@ impl Effects {
     }
     pub fn has_none(&self) -> bool {
         !(self.invincible.is_active()
-            || self.mage_sight.is_active()
             || self.regen.is_active()
             || self.unlucky.is_active()
             || self.doomed.is_active()
@@ -614,7 +654,6 @@ impl FromBinary for Effects {
     {
         Ok(Effects {
             invincible: Duration::from_binary(binary)?,
-            mage_sight: Duration::from_binary(binary)?,
             regen: Duration::from_binary(binary)?,
             unlucky: Duration::from_binary(binary)?,
             doomed: Duration::from_binary(binary)?,
@@ -627,7 +666,6 @@ impl FromBinary for Effects {
 impl ToBinary for Effects {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         self.invincible.to_binary(binary)?;
-        self.mage_sight.to_binary(binary)?;
         self.regen.to_binary(binary)?;
         self.unlucky.to_binary(binary)?;
         self.doomed.to_binary(binary)?;

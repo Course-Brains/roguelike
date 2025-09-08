@@ -39,6 +39,8 @@ enum Command {
     ListReachableEnemies,
     NavStepthrough(bool, Option<usize>),
     ShowLineOfSight(bool, Option<usize>),
+    SetLimb(String, String),
+    SetFeedback(String),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -71,7 +73,7 @@ impl Command {
             "wake_all" => Ok(Command::WakeAll),
             "open_all_doors" => Ok(Command::OpenAllDoors),
             "kill_all_enemies" => Ok(Command::KillAllEnemies),
-            "set_piece" => Ok(Command::SetPiece(
+            "set_piece" | "piece" => Ok(Command::SetPiece(
                 SmartVector::new(iter.next(), iter.next(), false)?,
                 iter.map(|s| s.to_string() + " ").collect(),
             )),
@@ -128,6 +130,10 @@ impl Command {
                     Some(s) => Some(parse(Some(s))?),
                     None => None,
                 },
+            )),
+            "set_limb" | "limb" => Ok(Command::SetLimb(parse(iter.next())?, parse(iter.next())?)),
+            "set_feedback" => Ok(Command::SetFeedback(
+                iter.map(|s| s.to_string() + " ").collect(),
             )),
             _ => Err("unknown command".to_string()),
         }
@@ -413,6 +419,14 @@ impl Command {
                     }
                 }
             },
+            Command::SetLimb(slot, choice) => {
+                if let Err(error) = state.player.limbs.set(slot, choice) {
+                    out.send(error).unwrap();
+                }
+            }
+            Command::SetFeedback(feedback) => {
+                *crate::feedback() = feedback;
+            }
         }
     }
 }

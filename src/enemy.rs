@@ -106,8 +106,8 @@ impl Enemy {
         }
         let addr = Arc::as_ptr(&arc).addr();
         if !this.as_ref().unwrap().active {
-            if this.as_ref().unwrap().variant.mage_aggro() && player.effects.mage_sight.is_active()
-            {
+            log(&mut this, "Attempting wake up".to_string());
+            if this.as_ref().unwrap().variant.mage_aggro() && player.limbs.count_mage_eyes() > 0 {
                 this.as_mut()
                     .unwrap()
                     .log("Woke up due to mage sight".to_string());
@@ -822,7 +822,7 @@ impl Enemy {
                                         Variant::ArcherBoss(ArcherBossAction::Barrage(targets));
                                     // every other turn it adds the current position meaning 10
                                     // turns total
-                                    this.as_mut().unwrap().windup = 2;
+                                    this.as_mut().unwrap().windup = 3;
                                 }
                             }
                         }
@@ -895,6 +895,36 @@ impl Enemy {
             log.write_all((msg + "\n").as_bytes()).unwrap();
         }
     }
+    pub fn is_aiming(&self) -> bool {
+        self.windup != 0
+            && matches!(
+                self.variant,
+                Variant::BasicBoss(_)
+                    | Variant::Mage(MageSpell::Circle(_))
+                    | Variant::MageBoss(MageBossSpell::Obamehameha(_))
+                    | Variant::FighterBoss {
+                        action: FighterBossAction::BigExplode(_),
+                        ..
+                    }
+                    | Variant::Archer(_)
+                    | Variant::ArcherBoss(_)
+            )
+    }
+    pub fn get_aim_pos(&self, out: &mut Vec<Vector>) {
+        match &self.variant {
+            Variant::Mage(MageSpell::Circle(pos)) => out.push(*pos),
+            Variant::FighterBoss {
+                action: FighterBossAction::BigExplode(pos),
+                ..
+            } => out.push(*pos),
+            Variant::Archer(pos) => out.push(*pos),
+            Variant::ArcherBoss(ArcherBossAction::Shoot(pos)) => out.push(*pos),
+            Variant::ArcherBoss(ArcherBossAction::Barrage(targets)) => {
+                out.extend_from_slice(&targets)
+            }
+            _ => {}
+        }
+    }
 }
 impl Clone for Enemy {
     fn clone(&self) -> Self {
@@ -932,24 +962,30 @@ impl Variant {
         let cost = {
             match board.backtraces[board.x * enemy.pos.y + enemy.pos.x].cost {
                 Some(cost) => cost,
-                None => return false,
+                None => {
+                    if enemy.pos.is_near(player.pos, 2) {
+                        1
+                    } else {
+                        unreachable!("I'm curious if I'm right");
+                    }
+                }
             }
         };
         match self {
             Variant::Basic => advantage_pass(
-                || cost < luck_roll8(player) as usize,
+                || cost <= luck_roll8(player) as usize,
                 player.get_detect_mod(),
             ),
             Variant::Mage(_) => advantage_pass(
-                || cost < ((luck_roll8(player) + 1) << 2) as usize,
+                || cost <= ((luck_roll8(player) + 1) << 2) as usize,
                 player.get_detect_mod(),
             ),
             Variant::Fighter(_) => advantage_pass(
-                || cost < (luck_roll8(player) << 1) as usize,
+                || cost <= (luck_roll8(player) << 1) as usize,
                 player.get_detect_mod(),
             ),
             Variant::Archer(_) => advantage_pass(
-                || cost < (luck_roll8(player) << 2) as usize,
+                || cost <= (luck_roll8(player) << 2) as usize,
                 player.get_detect_mod(),
             ),
             Variant::BasicBoss(_)
@@ -1221,4 +1257,7 @@ pub fn luck_roll8(player: &Player) -> u8 {
         return (base + 2).min(7);
     }
     base
+}
+pub fn log(this: &mut Option<RwLockWriteGuard<'_, Enemy>>, msg: String) {
+    this.as_mut().unwrap().log(msg)
 }

@@ -41,6 +41,7 @@ enum Command {
     ShowLineOfSight(bool, Option<usize>),
     SetLimb(String, String),
     SetFeedback(String),
+    ToggleShowReachable,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -135,7 +136,8 @@ impl Command {
             "set_feedback" => Ok(Command::SetFeedback(
                 iter.map(|s| s.to_string() + " ").collect(),
             )),
-            _ => Err("unknown command".to_string()),
+            "toggle_show_reachable" => Ok(Command::ToggleShowReachable),
+            _ => Err(format!("Unknown command: ({string})")),
         }
     }
     fn enact(self, state: &mut State, out: &mut Sender<String>) {
@@ -265,24 +267,59 @@ impl Command {
             Command::GetData(pos) => {
                 let pos = pos.to_absolute(&state.player);
                 let index = state.board.to_index(pos);
-                if state.board.seen[index] {
-                    out.send("It has been seen".to_string()).unwrap();
-                }
-                if state.board.visible[index] {
-                    out.send("It is within the visibility flood".to_string())
-                        .unwrap();
-                } else if state.is_visible(pos) {
-                    out.send("It is visible".to_string()).unwrap()
-                }
-                if state.board.reachable[index] {
-                    out.send("It is reachable".to_string()).unwrap();
-                }
-                if let Some(piece) = &state.board[pos] {
-                    out.send(format!("It is a {piece}")).unwrap();
-                }
-                if state.player.pos == pos {
-                    out.send("It contains the player".to_string()).unwrap();
-                }
+                out.send(
+                    if state.board.seen[index] {
+                        "It has been seen"
+                    } else {
+                        "It has NOT been seen"
+                    }
+                    .to_string(),
+                )
+                .unwrap();
+                out.send(
+                    if state.board.visible[index] {
+                        "It is within the visibility flood"
+                    } else {
+                        "It is NOT within the visibility flood"
+                    }
+                    .to_string(),
+                )
+                .unwrap();
+                out.send(
+                    if state.is_visible(pos) {
+                        "It is visible"
+                    } else {
+                        "It is NOT visible"
+                    }
+                    .to_string(),
+                )
+                .unwrap();
+                out.send(
+                    if state.board.reachable[index] {
+                        "It is reachable"
+                    } else {
+                        "It is NOT reachable"
+                    }
+                    .to_string(),
+                )
+                .unwrap();
+                out.send(if let Some(piece) = &state.board[pos] {
+                    format!("It is a {piece}")
+                } else {
+                    "It does NOT contain a piece".to_string()
+                })
+                .unwrap();
+                out.send(
+                    if state.player.pos == pos {
+                        "It contains the player"
+                    } else {
+                        "It does NOT contain the player"
+                    }
+                    .to_string(),
+                )
+                .unwrap();
+
+                let mut has_enemy = false;
                 for (index, enemy) in state.board.enemies.iter().enumerate() {
                     if enemy.try_read().unwrap().pos == pos {
                         out.send(format!(
@@ -291,8 +328,14 @@ impl Command {
                             enemy.try_read().unwrap().variant
                         ))
                         .unwrap();
+                        has_enemy = true;
                     }
                 }
+                if !has_enemy {
+                    out.send("It does NOT contain an enemy".to_string())
+                        .unwrap()
+                }
+                let mut has_special = false;
                 for special in state.board.specials.iter() {
                     if let Some(special) = special.upgrade() {
                         if special.pos == pos {
@@ -302,8 +345,38 @@ impl Command {
                                 special.ch
                             ))
                             .unwrap();
+                            has_special = true;
                         }
                     }
+                }
+                if !has_special {
+                    out.send("It does NOT contain a special".to_string())
+                        .unwrap()
+                }
+                let mut has_spell = false;
+                for circle in state.board.spells.iter() {
+                    if circle.pos == pos {
+                        out.send(format!("It contains the spell circle: ({})", circle.spell))
+                            .unwrap();
+                        match &circle.caster {
+                            Some(arc) => {
+                                for (index, enemy) in state.board.enemies.iter().enumerate() {
+                                    if std::sync::Arc::ptr_eq(arc, enemy) {
+                                        out.send(format!("  And was cast by enemy {index}"))
+                                            .unwrap();
+                                    }
+                                }
+                            }
+                            None => out
+                                .send("  And was cast by the player".to_string())
+                                .unwrap(),
+                        }
+                        has_spell = true;
+                    }
+                }
+                if !has_spell {
+                    out.send("It does NOT contain a spell circle".to_string())
+                        .unwrap();
                 }
             }
             Command::GetBoss => match state.board.boss.as_ref().map(|weak| weak.upgrade()) {
@@ -328,16 +401,7 @@ impl Command {
             Command::CountEnemies => {
                 let mut count = std::collections::HashMap::new();
                 for enemy in state.board.enemies.iter() {
-                    let variant_num = match enemy.try_read().unwrap().variant {
-                        crate::enemy::Variant::Basic => 0,
-                        crate::enemy::Variant::BasicBoss(_) => 1,
-                        crate::enemy::Variant::Mage(_) => 2,
-                        crate::enemy::Variant::MageBoss(_) => 3,
-                        crate::enemy::Variant::Fighter(_) => 4,
-                        crate::enemy::Variant::FighterBoss { .. } => 5,
-                        crate::enemy::Variant::Archer(_) => 6,
-                        crate::enemy::Variant::ArcherBoss(_) => 7,
-                    };
+                    let variant_num = enemy.try_read().unwrap().variant.to_key();
                     let prev = count.get(&variant_num).unwrap_or(&0);
                     count.insert(variant_num, prev + 1);
                 }
@@ -426,6 +490,9 @@ impl Command {
             }
             Command::SetFeedback(feedback) => {
                 *crate::feedback() = feedback;
+            }
+            Command::ToggleShowReachable => {
+                crate::SHOW_REACHABLE.fetch_xor(true, crate::RELAXED);
             }
         }
     }

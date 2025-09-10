@@ -136,7 +136,7 @@ impl Eye {
         if (player.energy * 10) / player.max_energy < 4 {
             damage += 2;
         }
-        let _ = player.attacked(damage, "stupidity");
+        let _ = player.attacked(damage, "stupidity", None);
     }
 }
 impl Limbs {

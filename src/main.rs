@@ -37,7 +37,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 4;
+const SAVE_VERSION: Version = 5;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -129,9 +129,9 @@ static LOAD_SHOP: AtomicBool = AtomicBool::new(false);
 // Save and quit
 static SAVE: AtomicBool = AtomicBool::new(false);
 
-////////////////////
-// Global toggles //
-////////////////////
+///////////////////////
+// Global data flags //
+///////////////////////
 static BONUS_NO_DAMAGE: AtomicBool = AtomicBool::new(true);
 static BONUS_NO_WASTE: AtomicBool = AtomicBool::new(true);
 static BONUS_NO_ENERGY: AtomicBool = AtomicBool::new(true);
@@ -155,6 +155,14 @@ fn feedback<'a>() -> std::sync::MutexGuard<'a, String> {
 }
 fn set_feedback(new: String) {
     *FEEDBACK.lock().unwrap() = new;
+}
+
+///////////////////
+// Debug toggles //
+///////////////////
+static SHOW_REACHABLE: AtomicBool = AtomicBool::new(false);
+fn show_reachable() -> bool {
+    SHOW_REACHABLE.load(RELAXED)
 }
 
 /////////////////
@@ -361,6 +369,19 @@ fn main() {
                         if state.is_valid_move(direction) {
                             state.player.do_move(direction, &mut state.board);
                             state.increment()
+                        } else if state
+                            .board
+                            .get_enemy(state.player.pos + direction, None)
+                            .is_some()
+                        {
+                            state.attack_enemy(state.player.pos + direction, false, false);
+                            state.increment();
+                        } else if let Some(board::Piece::Door(door)) =
+                            state.board[state.player.pos + direction]
+                        {
+                            if !door.open {
+                                state.open_door(state.player.pos + direction);
+                            }
                         }
                     }
                 }
@@ -419,21 +440,10 @@ fn main() {
                     std::io::stdout().flush().unwrap();
                     continue;
                 }
-                for (index, enemy) in state.board.enemies.iter_mut().enumerate() {
-                    if enemy.try_read().unwrap().pos == state.player.selector {
-                        if enemy
-                            .try_write()
-                            .unwrap()
-                            .attacked(state.player.get_damage())
-                        {
-                            state.player.on_kill(
-                                &state.board.enemies.swap_remove(index).try_read().unwrap(),
-                            )
-                        }
-                        stats().damage_dealt += 1;
-                        state.increment();
-                        break;
-                    }
+                if state.board.contains_enemy(state.player.selector, None)
+                    && state.attack_enemy(state.player.selector, false, false)
+                {
+                    state.increment();
                 }
             }
             Input::Block => {
@@ -463,36 +473,7 @@ fn main() {
                 state.render();
             }
             Input::Enter => {
-                if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
-                    // Closing the door
-                    if door.open {
-                        door.open = false;
-                        // If the boss is alive and was reachable before closing the door
-                        if state
-                            .board
-                            .boss
-                            .clone()
-                            .is_some_and(|boss| boss.upgrade().is_some())
-                            && state.board.is_reachable(state.board.boss_pos)
-                        {
-                            state.board.flood(state.player.pos);
-                            // And is not reachable anymore after closing the door
-                            if !state.board.is_reachable(state.board.boss_pos) {
-                                // Then the player ran away from the boss
-                                stats().cowardice += 1;
-                            }
-                        }
-                        // we don't need to explicitly set the closed door as unreachable because
-                        // the flood will do that for us
-                        re_flood();
-                    // Opening the door
-                    } else {
-                        state.board.open_door_flood(state.player.selector);
-                        state.board[state.player.selector] =
-                            Some(Piece::Door(pieces::door::Door { open: true }));
-                    }
-                    state.increment();
-                }
+                state.open_door(state.player.selector);
             }
             Input::Item(index) => {
                 debug_assert!(index < 7);
@@ -583,13 +564,18 @@ impl State {
                 if dashstun {
                     enemy.try_write().unwrap().apply_dashstun()
                 }
-                if enemy.try_write().unwrap().attacked(1) {
+                if enemy
+                    .try_write()
+                    .unwrap()
+                    .attacked(self.player.get_damage())
+                {
                     self.player
                         .on_kill(&self.board.enemies.swap_remove(index).try_read().unwrap());
                     if redrawable {
                         self.render()
                     }
                 }
+                stats().damage_dealt += self.player.get_damage();
                 return true;
             }
         }
@@ -692,6 +678,7 @@ impl State {
         self.board.turns_spent += 1;
         self.render();
         *ONE_TURN_SPECIALS.lock().unwrap() = Vec::new();
+        self.board.reset_took_damage();
         time += start.elapsed();
         if bench() {
             writeln!(bench::total(), "{}", time.as_millis()).unwrap();
@@ -764,6 +751,37 @@ impl State {
             self.board.get_render_bounds(&self.player),
             self.player.effects.full_vis.is_active(),
         )
+    }
+    fn open_door(&mut self, pos: Vector) {
+        if let Some(Piece::Door(door)) = &mut self.board[pos] {
+            // Closing the door
+            if door.open {
+                door.open = false;
+                // If the boss is alive and was reachable before closing the door
+                if self
+                    .board
+                    .boss
+                    .clone()
+                    .is_some_and(|boss| boss.upgrade().is_some())
+                    && self.board.is_reachable(self.board.boss_pos)
+                {
+                    self.board.flood(self.player.pos);
+                    // And is not reachable anymore after closing the door
+                    if !self.board.is_reachable(self.board.boss_pos) {
+                        // Then the player ran away from the boss
+                        stats().cowardice += 1;
+                    }
+                }
+                // we don't need to explicitly set the closed door as unreachable because
+                // the flood will do that for us
+                re_flood();
+            // Opening the door
+            } else {
+                self.board.open_door_flood(pos);
+                self.board[pos] = Some(Piece::Door(pieces::door::Door { open: true }));
+            }
+            self.increment();
+        }
     }
 }
 impl FromBinary for State {
@@ -1183,6 +1201,8 @@ struct Stats {
     energy_wasted: usize,
     // Number of times a door was closed on a boss
     cowardice: usize,
+    // What enemy type did the killing blow, or none if it was the player
+    killer: Option<u8>,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1206,12 +1226,20 @@ impl Stats {
             energy_used: 0,
             energy_wasted: 0,
             cowardice: 0,
+            killer: None,
         }
     }
     fn collect_death(&mut self, state: &State) {
         self.depth = state.level;
         self.upgrades = state.player.upgrades;
         self.death_turn = state.turn;
+        self.killer = state
+            .player
+            .killer
+            .map(|im_too_tired_to_come_up_with_a_good_variable_name| {
+                im_too_tired_to_come_up_with_a_good_variable_name.1
+            })
+            .flatten();
     }
     fn add_item(&mut self, item: ItemType) {
         self.buy_list
@@ -1222,16 +1250,7 @@ impl Stats {
             .insert(spell, self.spell_list.get(&spell).unwrap_or(&0) + 1);
     }
     fn add_kill(&mut self, variant: enemy::Variant) {
-        let key = match variant {
-            enemy::Variant::Basic => 0,
-            enemy::Variant::BasicBoss(_) => 1,
-            enemy::Variant::Mage(_) => 2,
-            enemy::Variant::MageBoss(_) => 3,
-            enemy::Variant::Fighter(_) => 4,
-            enemy::Variant::FighterBoss { .. } => 5,
-            enemy::Variant::Archer(_) => 6,
-            enemy::Variant::ArcherBoss(_) => 7,
-        };
+        let key = variant.to_key();
         let prev = self.kills.get(&key).unwrap_or(&0);
         self.kills.insert(key, prev + 1);
     }
@@ -1280,6 +1299,7 @@ impl FromBinary for Stats {
             energy_used: usize::from_binary(binary)?,
             energy_wasted: usize::from_binary(binary)?,
             cowardice: usize::from_binary(binary)?,
+            killer: Option::from_binary(binary)?,
         })
     }
 }
@@ -1303,7 +1323,8 @@ impl ToBinary for Stats {
         self.kills.to_binary(binary)?;
         self.energy_used.to_binary(binary)?;
         self.energy_wasted.to_binary(binary)?;
-        self.cowardice.to_binary(binary)
+        self.cowardice.to_binary(binary)?;
+        self.killer.as_ref().to_binary(binary)
     }
 }
 fn save_stats() {

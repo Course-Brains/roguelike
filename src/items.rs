@@ -240,7 +240,7 @@ impl std::fmt::Display for ItemType {
 }
 impl crate::Random for crate::ItemType {
     fn random() -> Self {
-        match crate::random() % 7 {
+        match crate::random() % 6 {
             0 => Self::HealthPotion,
             1 => Self::BossFinder,
             2 => Self::Gamba,

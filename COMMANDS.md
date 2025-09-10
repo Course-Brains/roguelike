@@ -239,3 +239,6 @@ set\_limb \[limb\] \[replacement\]
 
 set\_feedback \[text\] ...
     Sets the player feedback row to contain the given \[text\].
+
+toggle\_show\_reachable
+    Toggles graphics for showing reachable tiles.

@@ -171,7 +171,12 @@ impl UpgradeType {
             }
             Self::LimbMageEye => {
                 if let Some(eye) = player.limbs.pick_eye() {
+                    // If we don't have an eye there, then we don't need to pull it out
+                    let damage = !eye.is_none();
                     *eye = crate::limbs::Eye::Mage;
+                    if damage {
+                        crate::limbs::Eye::deal_pickup_damage(player);
+                    }
                     true
                 } else {
                     false
@@ -179,7 +184,11 @@ impl UpgradeType {
             }
             Self::LimbSeerEye => {
                 if let Some(eye) = player.limbs.pick_eye() {
+                    let damage = !eye.is_none();
                     *eye = crate::limbs::Eye::Seer;
+                    if damage {
+                        crate::limbs::Eye::deal_pickup_damage(player);
+                    }
                     true
                 } else {
                     false

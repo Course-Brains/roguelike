@@ -252,13 +252,26 @@ impl Board {
         }
         out
     }
-    pub fn is_enemy_aiming(&self) -> bool {
+    // Returns if there is an enemy aiming at the player, and if there is, then if there is an
+    // enemy that is about to fire at the player
+    pub fn is_enemy_aiming(&self) -> Option<bool> {
+        let mut out = None;
         for arc in self.enemies.iter() {
-            if arc.try_read().unwrap().is_aiming() {
-                return true;
+            if let Some(urgent) = arc.try_read().unwrap().is_aiming() {
+                if urgent {
+                    out = Some(true);
+                    break;
+                } else if out.is_none() {
+                    out = Some(false)
+                }
             }
         }
-        false
+        out
+    }
+    pub fn reset_took_damage(&self) {
+        for arc in self.enemies.iter() {
+            arc.try_write().unwrap().took_damage = false;
+        }
     }
 }
 // Rendering
@@ -355,6 +368,9 @@ impl Board {
         );
         self.draw_desc(player, &mut lock);
         self.draw_feedback(&mut lock);
+        if crate::show_reachable() {
+            self.draw_reachable(&mut lock, bounds.clone());
+        }
         std::io::stdout().write_all(lock.make_contiguous()).unwrap();
         player.draw(self, bounds.clone());
         player.reposition_cursor(self.has_background(player.pos, player), bounds.clone());
@@ -563,13 +579,20 @@ impl Board {
         for arc in self.enemies.iter() {
             arc.try_read().unwrap().get_aim_pos(&mut targets);
         }
-        for pos in targets.iter() {
+        for (pos, urgent) in targets.iter() {
             if self.is_visible(*pos, bounds.clone(), full_vis) {
                 crossterm::queue!(lock, (*pos - bounds.start).to_move()).unwrap();
                 write!(
                     lock,
                     "{} \x1b[0m",
-                    Style::new().background_red().intense_background(true)
+                    match urgent {
+                        true => {
+                            *Style::new().background_red().intense_background(true)
+                        }
+                        false => {
+                            *Style::new().background_red()
+                        }
+                    }
                 )
                 .unwrap()
             }
@@ -583,6 +606,16 @@ impl Board {
         )
         .unwrap();
         write!(lock, "{}", crate::feedback()).unwrap();
+    }
+    pub fn draw_reachable(&self, lock: &mut impl Write, bounds: Range<Vector>) {
+        for x in bounds.start.x..bounds.end.x {
+            for y in bounds.start.y..bounds.end.y {
+                if self.is_reachable(Vector::new(x, y)) {
+                    crossterm::queue!(lock, (Vector::new(x, y) - bounds.start).to_move()).unwrap();
+                    write!(lock, "{} \x1b[0m", Style::new().background_green()).unwrap();
+                }
+            }
+        }
     }
 }
 // Enemy logic
@@ -1016,7 +1049,7 @@ impl Board {
         }
         true
     }
-    fn contains_enemy(&self, pos: Vector, addr: Option<usize>) -> bool {
+    pub fn contains_enemy(&self, pos: Vector, addr: Option<usize>) -> bool {
         for enemy in self.enemies.iter() {
             if let Some(addr) = addr {
                 if Arc::as_ptr(enemy).addr() == addr {

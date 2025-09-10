@@ -45,6 +45,14 @@ impl SpellCircle {
         }
     }
 }
+impl std::fmt::Display for SpellCircle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.aim {
+            Some(aim) => write!(f, "{} aimed at {aim}", self.spell),
+            None => write!(f, "{}", self.spell),
+        }
+    }
+}
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Spell {
     Contact(ContactSpell),
@@ -84,6 +92,14 @@ impl std::str::FromStr for Spell {
                 }
             }
             None => Err("You must specify the spell".to_string()),
+        }
+    }
+}
+impl std::fmt::Display for Spell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Contact(spell) => write!(f, "contact {spell}"),
+            Self::Normal(spell) => write!(f, "normal {spell}"),
         }
     }
 }
@@ -133,7 +149,11 @@ impl ContactSpell {
                         let binding = caster.unwrap_enemy();
                         let mut caster = binding.try_write().unwrap();
                         let damage = (crate::enemy::luck_roll8(player) as usize / 2) + 1;
-                        let _ = player.attacked(damage * 5, caster.variant.kill_name());
+                        let _ = player.attacked(
+                            damage * 5,
+                            caster.variant.kill_name(),
+                            Some(caster.variant.to_key()),
+                        );
                         caster.health += damage;
                     }
                     Entity::Enemy(target) => {
@@ -166,6 +186,17 @@ impl std::str::FromStr for ContactSpell {
             "drain_health" => Ok(Self::DrainHealth),
             other => Err(format!("\"{other}\" is not a contact spell")),
         }
+    }
+}
+impl std::fmt::Display for ContactSpell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::DrainHealth => "drain_health",
+            }
+        )
     }
 }
 impl FromBinary for ContactSpell {
@@ -345,7 +376,22 @@ impl NormalSpell {
                             Entity::Player(player) => {
                                 let _ = player.attacked(
                                     damage * 5,
-                                    caster.unwrap().try_read().unwrap().variant.kill_name(),
+                                    caster
+                                        .as_ref()
+                                        .unwrap()
+                                        .try_read()
+                                        .unwrap()
+                                        .variant
+                                        .kill_name(),
+                                    Some(
+                                        caster
+                                            .as_ref()
+                                            .unwrap()
+                                            .try_read()
+                                            .unwrap()
+                                            .variant
+                                            .to_key(),
+                                    ),
                                 );
                             }
                             Entity::Enemy(arc) => {
@@ -502,7 +548,7 @@ impl NormalSpell {
         board.smart_render(player);
         for pos in board.flood_within(*epicenter, explosion_size, false).iter() {
             if player.pos == *pos {
-                let _ = player.attacked(player_damage, death_name);
+                let _ = player.attacked(player_damage, death_name, get_variant_id(&caster));
             }
             if let Some(enemy) = board.get_enemy(*pos, None) {
                 enemy.try_write().unwrap().attacked(damage);
@@ -527,6 +573,23 @@ impl std::str::FromStr for NormalSpell {
             "summon_spirit" => Ok(Self::SummonSpirit),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
+    }
+}
+impl std::fmt::Display for NormalSpell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Swap => "swap",
+                Self::BidenBlast => "biden_blast",
+                Self::Identify => "identify",
+                Self::Charge => "charge",
+                Self::BigExplode => "big_explode",
+                Self::Teleport => "teleport",
+                Self::SummonSpirit => "summon_spirit",
+            }
+        )
     }
 }
 impl FromBinary for NormalSpell {
@@ -574,6 +637,12 @@ fn get_pos(caster: &Option<Arc<RwLock<Enemy>>>, player: &Player) -> Vector {
     match caster {
         Some(arc) => arc.try_read().unwrap().pos,
         None => player.pos,
+    }
+}
+fn get_variant_id(caster: &Option<Arc<RwLock<Enemy>>>) -> Option<u8> {
+    match caster {
+        Some(arc) => Some(arc.try_read().unwrap().variant.to_key()),
+        None => None,
     }
 }
 fn is_within_flood(caster: &Option<Arc<RwLock<Enemy>>>, board: &Board) -> bool {

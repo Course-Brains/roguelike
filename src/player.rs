@@ -17,7 +17,9 @@ pub struct Player {
     pub blocking: bool,
     pub was_hit: bool,
     pub focus: Focus,
-    killer: Option<&'static str>,
+    // If the player was killed, it has the killer's name to be shown and if applicable, the
+    // numerical id of killing variant
+    pub killer: Option<(&'static str, Option<u8>)>,
     pub items: Items,
     money: usize,
     pub perception: usize,
@@ -78,7 +80,12 @@ impl Player {
     // Returns whether the attack was successful(Ok) and whether the player died
     // true: died
     // false: alive
-    pub fn attacked(&mut self, mut damage: usize, attacker: &'static str) -> Result<bool, ()> {
+    pub fn attacked(
+        &mut self,
+        mut damage: usize,
+        attacker: &'static str,
+        variant_id: Option<u8>,
+    ) -> Result<bool, ()> {
         // Damage nullification
         if self.effects.invincible.is_active() {
             crate::stats().damage_invulned += damage;
@@ -105,7 +112,7 @@ impl Player {
         }
 
         if self.health <= damage {
-            self.killer = Some(attacker);
+            self.killer = Some((attacker, variant_id));
             crate::stats().damage_taken += self.health;
             return Ok(true);
         }
@@ -175,7 +182,7 @@ impl Player {
             println!(
                 "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
                 Style::new().green().intense(true),
-                killer
+                killer.0
             );
             Player::death_message(state);
             print!(
@@ -210,7 +217,7 @@ impl Player {
             write!(out, "Coward.").unwrap();
             return;
         }
-        match crate::random() % 5 {
+        match crate::random() % 6 {
             0 => write!(out, "Do better next time."),
             1 => write!(
                 out,
@@ -219,6 +226,7 @@ impl Player {
             2 => write!(out, "You CAN prevail."),
             3 => write!(out, "Have you ever heard of the definition of insanity?"),
             4 => write!(out, "Bad Luck"),
+            5 => write!(out, "Did you know? You died. Now you know."),
             _ => unreachable!("Fuckity wuckity someone is bad at math"),
         }
         .unwrap();
@@ -379,8 +387,12 @@ impl Player {
         if !bounds.contains(&self.pos) {
             return;
         }
-        let style = if self.limbs.count_seer_eyes() == 1 && board.is_enemy_aiming() {
-            *STYLE.clone().background_red().intense_background(true)
+        let is_aiming = board.is_enemy_aiming();
+        let style = if self.limbs.count_seer_eyes() == 1 && is_aiming.is_some() {
+            *STYLE
+                .clone()
+                .background_red()
+                .intense_background(is_aiming.unwrap())
         } else {
             STYLE
         };

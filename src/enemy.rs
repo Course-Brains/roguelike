@@ -24,6 +24,8 @@ pub struct Enemy {
     pub reward: bool,
     pub log: Option<std::fs::File>,
     pub show_line_of_sight: bool,
+    // If it took damage last turn
+    pub took_damage: bool,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -39,6 +41,7 @@ impl Enemy {
             reward: true,
             log: None,
             show_line_of_sight: false,
+            took_damage: false,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -61,6 +64,14 @@ impl Enemy {
                 } else if self.is_windup() {
                     out.set_background(self.variant.windup_color())
                         .intense_background(true);
+                }
+                if self.took_damage {
+                    out.italic(true);
+                    /*if out.has_background() {
+                        out.swap_grounds();
+                    } else {
+                        out.dim(true);
+                    }*/
                 }
                 out
             }),
@@ -88,7 +99,11 @@ impl Enemy {
         } else {
             self.health -= damage;
         }
+        if !self.active {
+            self.log("Waking up due to attack".to_string());
+        }
         self.active = true;
+        self.took_damage = true;
         self.dead
     }
     // returns whether or not it needs to re-render the board after this
@@ -183,7 +198,11 @@ impl Enemy {
                     this.as_mut().unwrap().windup -= 1;
                     if this.as_ref().unwrap().windup == 0 {
                         if player
-                            .attacked(luck_roll8(player) as usize + 3, Variant::Basic.kill_name())
+                            .attacked(
+                                luck_roll8(player) as usize + 3,
+                                Variant::Basic.kill_name(),
+                                Some(Variant::basic().to_key()),
+                            )
                             .is_err()
                         {
                             this.as_mut().unwrap().stun =
@@ -326,7 +345,11 @@ impl Enemy {
                     this.as_mut()
                         .unwrap()
                         .log(format!("Attacking player for {damage}"));
-                    let _ = player.attacked(damage, Variant::BasicBoss(Direction::Up).kill_name());
+                    let _ = player.attacked(
+                        damage,
+                        Variant::BasicBoss(Direction::Up).kill_name(),
+                        Some(Variant::basic_boss().to_key()),
+                    );
                     *time += start.elapsed();
                     true
                 } else if this.as_ref().unwrap().pos.x == player.pos.x && *line_of_sight {
@@ -538,6 +561,7 @@ impl Enemy {
                                     let _ = player.attacked(
                                         crate::random::random8() as usize,
                                         Variant::fighter().kill_name(),
+                                        Some(Variant::fighter().to_key()),
                                     );
                                 }
                             }
@@ -632,6 +656,7 @@ impl Enemy {
                                     let _ = player.attacked(
                                         damage,
                                         this.as_ref().unwrap().variant.kill_name(),
+                                        Some(Variant::fighter_boss().to_key()),
                                     );
                                     if let Variant::FighterBoss { buff, .. } =
                                         &mut this.as_mut().unwrap().variant
@@ -712,6 +737,7 @@ impl Enemy {
                                 let _ = player.attacked(
                                     (luck_roll8(player) as usize) << 1,
                                     this.as_ref().unwrap().variant.kill_name(),
+                                    Some(Variant::archer().to_key()),
                                 );
                             }
                             Some(crate::Entity::Enemy(arc)) => {
@@ -760,6 +786,7 @@ impl Enemy {
                                             let _ = player.attacked(
                                                 damage,
                                                 this.as_ref().unwrap().variant.kill_name(),
+                                                Some(Variant::archer_boss().to_key()),
                                             );
                                         }
                                         crate::Entity::Enemy(arc) => {
@@ -795,6 +822,7 @@ impl Enemy {
                                                 let _ = player.attacked(
                                                     damage,
                                                     this.as_ref().unwrap().variant.kill_name(),
+                                                    Some(Variant::archer_boss().to_key()),
                                                 );
                                             }
                                             Some(crate::Entity::Enemy(arc)) => {
@@ -895,8 +923,9 @@ impl Enemy {
             log.write_all((msg + "\n").as_bytes()).unwrap();
         }
     }
-    pub fn is_aiming(&self) -> bool {
-        self.windup != 0
+    // if it is aiming, returns whether or not it is urgent
+    pub fn is_aiming(&self) -> Option<bool> {
+        if self.windup != 0
             && matches!(
                 self.variant,
                 Variant::BasicBoss(_)
@@ -909,18 +938,25 @@ impl Enemy {
                     | Variant::Archer(_)
                     | Variant::ArcherBoss(_)
             )
+        {
+            Some(self.windup == 1)
+        } else {
+            None
+        }
     }
-    pub fn get_aim_pos(&self, out: &mut Vec<Vector>) {
+    // Pushes aim position and whether or not it is about to fire
+    pub fn get_aim_pos(&self, out: &mut Vec<(Vector, bool)>) {
+        let urgent = self.windup == 1;
         match &self.variant {
-            Variant::Mage(MageSpell::Circle(pos)) => out.push(*pos),
+            Variant::Mage(MageSpell::Circle(pos)) => out.push((*pos, urgent)),
             Variant::FighterBoss {
                 action: FighterBossAction::BigExplode(pos),
                 ..
-            } => out.push(*pos),
-            Variant::Archer(pos) => out.push(*pos),
-            Variant::ArcherBoss(ArcherBossAction::Shoot(pos)) => out.push(*pos),
+            } => out.push((*pos, urgent)),
+            Variant::Archer(pos) => out.push((*pos, urgent)),
+            Variant::ArcherBoss(ArcherBossAction::Shoot(pos)) => out.push((*pos, urgent)),
             Variant::ArcherBoss(ArcherBossAction::Barrage(targets)) => {
-                out.extend_from_slice(&targets)
+                out.extend(targets.iter().map(|target| (*target, urgent)));
             }
             _ => {}
         }
@@ -940,6 +976,7 @@ impl Clone for Enemy {
             reward: self.reward,
             log: self.log.as_ref().map(|file| file.try_clone().unwrap()),
             show_line_of_sight: self.show_line_of_sight,
+            took_damage: self.took_damage,
         }
     }
 }
@@ -966,7 +1003,7 @@ impl Variant {
                     if enemy.pos.is_near(player.pos, 2) {
                         1
                     } else {
-                        unreachable!("I'm curious if I'm right");
+                        return false;
                     }
                 }
             }
@@ -1184,6 +1221,18 @@ impl Variant {
     }
     pub const fn archer_boss() -> Variant {
         Variant::ArcherBoss(ArcherBossAction::Shoot(Vector::new(0, 0)))
+    }
+    pub const fn to_key(&self) -> u8 {
+        match self {
+            Variant::Basic => 0,
+            Variant::BasicBoss(_) => 1,
+            Variant::Mage(_) => 2,
+            Variant::MageBoss(_) => 3,
+            Variant::Fighter(_) => 4,
+            Variant::FighterBoss { .. } => 5,
+            Variant::Archer(_) => 6,
+            Variant::ArcherBoss(_) => 7,
+        }
     }
 }
 impl std::fmt::Display for Variant {

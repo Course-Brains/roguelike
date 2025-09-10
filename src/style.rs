@@ -57,6 +57,13 @@ impl Style {
         }
         true
     }
+    // Swap background color and foreground color
+    // (and respective intensity/dim/whatever)
+    pub const fn swap_grounds(&mut self) -> &mut Self {
+        std::mem::swap(&mut self.color, &mut self.background);
+        std::mem::swap(&mut self.intense, &mut self.intense_background);
+        self
+    }
 
     set!(intense);
     set!(intense_background);

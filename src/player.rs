@@ -106,6 +106,7 @@ impl Player {
         }
         // Damage has been determined
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
+        crate::stats().hits_taken += 1;
 
         if self.should_remove_limb(damage) {
             self.limbs.remove_random_limb();
@@ -168,6 +169,9 @@ impl Player {
             self.health,
             self.energy
         );
+        if self.upgrades.full_energy_ding && self.energy == self.max_energy {
+            crate::bell(Some(&mut std::io::stdout()));
+        }
     }
     pub fn get_focus(&self) -> Vector {
         match self.focus {

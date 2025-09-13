@@ -656,6 +656,9 @@ impl Board {
             if !self.is_reachable(enemy.try_read().unwrap().pos) {
                 continue;
             }
+            if enemy.try_read().unwrap().pos.is_near(player, 2) {
+                continue;
+            }
             if self.backtraces[self.to_index(enemy.try_read().unwrap().pos)]
                 .cost
                 .is_some()
@@ -750,13 +753,21 @@ impl Board {
             }
         }
         let elapsed = start.elapsed();
-        crate::log!(
-            "path calc time: {}({})",
-            elapsed.as_millis(),
-            elapsed.as_nanos()
-        );
-        if crate::bench() {
-            writeln!(crate::bench::nav(), "{}", elapsed.as_millis()).unwrap();
+        if stepthrough {
+            crate::log!(
+                "path calc time: {}({}) [WITH STEPTHROUGH]",
+                elapsed.as_millis(),
+                elapsed.as_nanos()
+            );
+        } else {
+            crate::log!(
+                "path calc time: {}({})",
+                elapsed.as_millis(),
+                elapsed.as_nanos()
+            );
+            if crate::bench() {
+                writeln!(crate::bench::nav(), "{}", elapsed.as_millis()).unwrap();
+            }
         }
     }
     pub fn get_adjacent(&self, pos: Vector, player: Option<Vector>, enemy_collision: bool) -> Adj {
@@ -989,6 +1000,13 @@ impl Board {
                 std::thread::sleep(crate::DELAY);
             }
         }
+        if self.is_reachable(enemy.try_read().unwrap().pos) && enemy.try_read().unwrap().active {
+            enemy.try_read().unwrap().alert_nearby(
+                Arc::as_ptr(&enemy).addr(),
+                self,
+                crate::random() as usize & 7,
+            );
+        }
         let think = Enemy::think(enemy.clone(), self, player, time);
         if think
             && self.is_visible(
@@ -1009,7 +1027,6 @@ impl Board {
         if !enemy.active || !self.is_reachable(enemy.pos) || enemy.attacking || enemy.is_stunned() {
             return false;
         }
-        enemy.alert_nearby(addr, self, crate::random() as usize & 7);
         let mut new_dir = self.backtraces[self.to_index(enemy.pos)].from;
         if self.contains_enemy(enemy.pos + new_dir, Some(addr))
             || crate::random() & 0b0001_1111 == 0

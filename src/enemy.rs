@@ -1234,6 +1234,21 @@ impl Variant {
             Variant::ArcherBoss(_) => 7,
         }
     }
+    pub fn from_key(key: u8) -> Variant {
+        match key {
+            0 => Variant::basic(),
+            1 => Variant::basic_boss(),
+            2 => Variant::mage(),
+            3 => Variant::mage_boss(),
+            4 => Variant::fighter(),
+            5 => Variant::fighter_boss(),
+            6 => Variant::archer(),
+            7 => Variant::archer_boss(),
+            _ => unreachable!(
+                "Whoever updated the key producer is blind and covers half of their screen"
+            ),
+        }
+    }
 }
 impl std::fmt::Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

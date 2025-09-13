@@ -1,4 +1,4 @@
-use crate::{FromBinary, Player, Random, Style, ToBinary, player::Duration, random};
+use crate::{FromBinary, Player, Random, Style, ToBinary, random};
 use std::io::Read;
 
 const AVAILABLE: Style = *Style::new().green();
@@ -10,6 +10,7 @@ pub struct Upgrades {
     pub soft_shoes: bool,
     pub precise_convert: bool,
     pub lifesteal: bool,
+    pub full_energy_ding: bool,
 }
 impl Upgrades {
     pub const fn new() -> Upgrades {
@@ -18,6 +19,7 @@ impl Upgrades {
             soft_shoes: false,
             precise_convert: false,
             lifesteal: false,
+            full_energy_ding: false,
         }
     }
 }
@@ -31,6 +33,7 @@ impl FromBinary for Upgrades {
             soft_shoes: bool::from_binary(binary)?,
             precise_convert: bool::from_binary(binary)?,
             lifesteal: bool::from_binary(binary)?,
+            full_energy_ding: bool::from_binary(binary)?,
         })
     }
 }
@@ -39,7 +42,8 @@ impl ToBinary for Upgrades {
         self.map.to_binary(binary)?;
         self.soft_shoes.to_binary(binary)?;
         self.precise_convert.to_binary(binary)?;
-        self.lifesteal.to_binary(binary)
+        self.lifesteal.to_binary(binary)?;
+        self.full_energy_ding.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -48,15 +52,16 @@ pub enum UpgradeType {
     SoftShoes,
     SavePint, // no corresponding upgrade field
     PreciseConvert,
-    EnergyBoost,   // max energy (exponential cost?)
-    HealthBoost,   // max health ...
-    Lifesteal,     // health on kill
-    BonusNoWaste,  // double money
-    BonusNoDamage, // +50% max health & full heal
-    BonusKillAll,  // complicated, look at on_pickup
-    BonusNoEnergy, // +50% max energy
-    LimbMageEye,
-    LimbSeerEye,
+    EnergyBoost,    // max energy (exponential cost?)
+    HealthBoost,    // max health ...
+    Lifesteal,      // health on kill
+    BonusNoWaste,   // double money
+    BonusNoDamage,  // +50% max health & full heal
+    BonusKillAll,   // complicated, look at on_pickup
+    BonusNoEnergy,  // +50% max energy
+    LimbMageEye,    // The mage eye
+    LimbSeerEye,    // The seer eye
+    FullEnergyDing, // send bell character when full energy
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -88,6 +93,7 @@ impl UpgradeType {
             Self::SoftShoes => 200,
             Self::PreciseConvert | Self::Lifesteal => 150,
             Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => 100,
+            Self::FullEnergyDing => 50,
             // The free shit
             Self::SavePint
             | Self::BonusNoWaste
@@ -194,6 +200,10 @@ impl UpgradeType {
                     false
                 }
             }
+            Self::FullEnergyDing => {
+                player.upgrades.full_energy_ding = true;
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -202,6 +212,7 @@ impl UpgradeType {
             Self::SoftShoes => !player.upgrades.soft_shoes,
             Self::PreciseConvert => !player.upgrades.precise_convert,
             Self::Lifesteal => !player.upgrades.lifesteal,
+            Self::FullEnergyDing => !player.upgrades.full_energy_ding,
             _ => true,
         }
     }
@@ -224,6 +235,7 @@ impl UpgradeType {
             // Limbs
             Self::LimbMageEye => "A mage's eye",
             Self::LimbSeerEye => "A seer's eye",
+            Self::FullEnergyDing => crate::debug_only!("full_energy_ding"),
         }
     }
 }
@@ -243,6 +255,7 @@ impl std::fmt::Display for UpgradeType {
             Self::BonusNoEnergy => write!(f, "bonus no energy"),
             Self::LimbMageEye => write!(f, "limb mage eye"),
             Self::LimbSeerEye => write!(f, "limb seer eye"),
+            Self::FullEnergyDing => write!(f, "full energy ding"),
         }
     }
 }
@@ -263,6 +276,7 @@ impl std::str::FromStr for UpgradeType {
             "bonus_no_energy" => Ok(Self::BonusNoEnergy),
             "limb_mage_eye" => Ok(Self::LimbMageEye),
             "limb_seer_eye" => Ok(Self::LimbSeerEye),
+            "full_energy_ding" => Ok(Self::FullEnergyDing),
             other => Err(format!("{other} is not a valid upgrade")),
         }
     }
@@ -270,7 +284,7 @@ impl std::str::FromStr for UpgradeType {
 impl Random for UpgradeType {
     fn random() -> Self {
         // save pint and bonuses intentionally ommitted
-        match random() % 8 {
+        match random() % 9 {
             0 => Self::Map,
             1 => Self::SoftShoes,
             2 => Self::PreciseConvert,
@@ -279,6 +293,7 @@ impl Random for UpgradeType {
             5 => Self::Lifesteal,
             6 => Self::LimbMageEye,
             7 => Self::LimbSeerEye,
+            8 => Self::FullEnergyDing,
             _ => unreachable!("Le fucked is up"),
         }
     }
@@ -302,6 +317,7 @@ impl FromBinary for UpgradeType {
             10 => Self::BonusNoEnergy,
             11 => Self::LimbMageEye,
             12 => Self::LimbSeerEye,
+            13 => Self::FullEnergyDing,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -327,6 +343,7 @@ impl ToBinary for UpgradeType {
             Self::BonusNoEnergy => 10,
             Self::LimbMageEye => 11,
             Self::LimbSeerEye => 12,
+            Self::FullEnergyDing => 13,
         }
         .to_binary(binary)
     }

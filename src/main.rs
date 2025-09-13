@@ -37,7 +37,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 5;
+const SAVE_VERSION: Version = 6;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -111,6 +111,21 @@ macro_rules! log {
 #[cfg(feature = "log")]
 fn log(string: String) {
     writeln!(LOG.lock().unwrap().as_ref().unwrap(), "{string}").unwrap();
+}
+
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! debug_only {
+    ($val:tt) => {
+        compile_error!("Someone forgot to replace the placeholder value!")
+    };
+}
+#[cfg(debug_assertions)]
+#[macro_export]
+macro_rules! debug_only {
+    ($val:tt) => {
+        $val
+    };
 }
 
 //////////////////////////
@@ -201,7 +216,7 @@ fn main() {
                 view_stats();
                 return;
             }
-            "bench" => {
+            "--bench" => {
                 log!("Enabling benchmark through command line argument");
                 enable_benchmark();
             }
@@ -348,8 +363,8 @@ fn main() {
                         continue;
                     }
                     BONUS_NO_ENERGY.store(false, RELAXED);
-                    state.attack_enemy(state.player.pos + direction, false, true);
-                    state.attack_enemy(checking - direction, false, true);
+                    state.attack_enemy(state.player.pos + direction, false, true, false);
+                    state.attack_enemy(checking - direction, false, true, false);
                     state.player.energy -= 1;
                     state.player.do_move(direction, &mut state.board);
                     state.player.do_move(direction, &mut state.board);
@@ -374,13 +389,13 @@ fn main() {
                             .get_enemy(state.player.pos + direction, None)
                             .is_some()
                         {
-                            state.attack_enemy(state.player.pos + direction, false, false);
+                            state.attack_enemy(state.player.pos + direction, false, false, true);
                             state.increment();
                         } else if let Some(board::Piece::Door(door)) =
                             state.board[state.player.pos + direction]
                         {
                             if !door.open {
-                                state.open_door(state.player.pos + direction);
+                                state.open_door(state.player.pos + direction, true);
                             }
                         }
                     }
@@ -441,7 +456,7 @@ fn main() {
                     continue;
                 }
                 if state.board.contains_enemy(state.player.selector, None)
-                    && state.attack_enemy(state.player.selector, false, false)
+                    && state.attack_enemy(state.player.selector, false, false, false)
                 {
                     state.increment();
                 }
@@ -473,7 +488,7 @@ fn main() {
                 state.render();
             }
             Input::Enter => {
-                state.open_door(state.player.selector);
+                state.open_door(state.player.selector, false);
             }
             Input::Item(index) => {
                 debug_assert!(index < 7);
@@ -515,6 +530,9 @@ fn main() {
                 );
                 state.reposition_cursor();
                 std::io::stdout().flush().unwrap();
+            }
+            Input::ClearFeedback => {
+                *feedback() = String::new();
             }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
@@ -558,7 +576,13 @@ impl State {
         }
     }
     // returns if an enemy was hit
-    fn attack_enemy(&mut self, pos: Vector, redrawable: bool, dashstun: bool) -> bool {
+    fn attack_enemy(
+        &mut self,
+        pos: Vector,
+        redrawable: bool,
+        dashstun: bool,
+        walking: bool,
+    ) -> bool {
         for (index, enemy) in self.board.enemies.iter_mut().enumerate() {
             if enemy.try_read().unwrap().pos == pos {
                 if dashstun {
@@ -576,6 +600,10 @@ impl State {
                     }
                 }
                 stats().damage_dealt += self.player.get_damage();
+                stats().attacks_done += 1;
+                if walking {
+                    stats().enemies_hit_by_walking += 1;
+                }
                 return true;
             }
         }
@@ -752,11 +780,12 @@ impl State {
             self.player.effects.full_vis.is_active(),
         )
     }
-    fn open_door(&mut self, pos: Vector) {
+    fn open_door(&mut self, pos: Vector, walking: bool) {
         if let Some(Piece::Door(door)) = &mut self.board[pos] {
             // Closing the door
             if door.open {
                 door.open = false;
+                stats().doors_closed += 1;
                 // If the boss is alive and was reachable before closing the door
                 if self
                     .board
@@ -777,6 +806,10 @@ impl State {
                 re_flood();
             // Opening the door
             } else {
+                stats().doors_opened += 1;
+                if walking {
+                    stats().doors_opened_by_walking += 1;
+                }
                 self.board.open_door_flood(pos);
                 self.board[pos] = Some(Piece::Door(pieces::door::Door { open: true }));
             }
@@ -1203,6 +1236,18 @@ struct Stats {
     cowardice: usize,
     // What enemy type did the killing blow, or none if it was the player
     killer: Option<u8>,
+    // Number of times a door was opened
+    doors_opened: usize,
+    // Number of times a door was closed
+    doors_closed: usize,
+    // Number of attacks done by you
+    attacks_done: usize,
+    // Number of attacks that dealt damage to you
+    hits_taken: usize,
+    // Number of doors opened with wasd
+    doors_opened_by_walking: usize,
+    // Number of enemies attacked with wasd
+    enemies_hit_by_walking: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1227,6 +1272,12 @@ impl Stats {
             energy_wasted: 0,
             cowardice: 0,
             killer: None,
+            doors_opened: 0,
+            doors_closed: 0,
+            attacks_done: 0,
+            hits_taken: 0,
+            doors_opened_by_walking: 0,
+            enemies_hit_by_walking: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1255,23 +1306,18 @@ impl Stats {
         self.kills.insert(key, prev + 1);
     }
     fn list_kills(&self) {
-        for (variant, kills) in self.kills.iter() {
-            print!(
-                "{}: {kills}, ",
-                match variant {
-                    0 => "basic",
-                    1 => "basic_boss",
-                    2 => "mage",
-                    3 => "mage_boss",
-                    4 => "fighter",
-                    5 => "fighter_boss",
-                    6 => "archer",
-                    7 => "archer_boss",
-                    _ => unreachable!("We done fucked up the save version"),
-                }
-            );
+        for (key, kills) in self.kills.iter() {
+            println!("{}: {kills}", enemy::Variant::from_key(*key).kill_name());
         }
-        print!("\n");
+        println!("");
+    }
+    fn list_killer(&self) {
+        println!(
+            "{}",
+            self.killer
+                .map(|key| enemy::Variant::from_key(key).kill_name())
+                .unwrap_or("Yourself")
+        )
     }
 }
 impl FromBinary for Stats {
@@ -1300,6 +1346,12 @@ impl FromBinary for Stats {
             energy_wasted: usize::from_binary(binary)?,
             cowardice: usize::from_binary(binary)?,
             killer: Option::from_binary(binary)?,
+            doors_opened: usize::from_binary(binary)?,
+            doors_closed: usize::from_binary(binary)?,
+            attacks_done: usize::from_binary(binary)?,
+            hits_taken: usize::from_binary(binary)?,
+            doors_opened_by_walking: usize::from_binary(binary)?,
+            enemies_hit_by_walking: usize::from_binary(binary)?,
         })
     }
 }
@@ -1324,7 +1376,13 @@ impl ToBinary for Stats {
         self.energy_used.to_binary(binary)?;
         self.energy_wasted.to_binary(binary)?;
         self.cowardice.to_binary(binary)?;
-        self.killer.as_ref().to_binary(binary)
+        self.killer.as_ref().to_binary(binary)?;
+        self.doors_opened.to_binary(binary)?;
+        self.doors_closed.to_binary(binary)?;
+        self.attacks_done.to_binary(binary)?;
+        self.hits_taken.to_binary(binary)?;
+        self.doors_opened_by_walking.to_binary(binary)?;
+        self.enemies_hit_by_walking.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1479,6 +1537,13 @@ fn view_stats() {
                         "energy_used" => list!(energy_used, index),
                         "energy_wasted" => list!(energy_wasted, index),
                         "cowardice" => list!(cowardice, index),
+                        "killer" => list!(killer, index, list_killer),
+                        "doors_opened" => list!(doors_opened, index),
+                        "doors_closed" => list!(doors_closed, index),
+                        "attacks_done" => list!(attacks_done, index),
+                        "hits_taken" => list!(hits_taken, index),
+                        "doors_opened_by_walking" => list!(doors_opened_by_walking, index),
+                        "enemies_hit_by_walking" => list!(enemies_hit_by_walking, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

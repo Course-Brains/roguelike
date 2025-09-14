@@ -171,6 +171,16 @@ fn feedback<'a>() -> std::sync::MutexGuard<'a, String> {
 fn set_feedback(new: String) {
     *FEEDBACK.lock().unwrap() = new;
 }
+fn draw_feedback() {
+    crossterm::queue!(
+        std::io::stdout(),
+        crossterm::cursor::MoveTo(0, 35),
+        crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
+    )
+    .unwrap();
+    write!(std::io::stdout(), "{}", feedback()).unwrap();
+    std::io::stdout().flush().unwrap();
+}
 
 ///////////////////
 // Debug toggles //
@@ -891,6 +901,10 @@ impl Vector {
     }
     fn down(self) -> Vector {
         Vector::new(self.x, self.y + 1)
+    }
+    fn down_mut(&mut self) -> &mut Self {
+        self.y += 1;
+        self
     }
     fn left(self) -> Vector {
         Vector::new(self.x - 1, self.y)

@@ -367,7 +367,7 @@ impl Board {
             player.effects.full_vis.is_active(),
         );
         self.draw_desc(player, &mut lock);
-        self.draw_feedback(&mut lock);
+        self.draw_feedback();
         if crate::show_reachable() {
             self.draw_reachable(&mut lock, bounds.clone());
         }
@@ -598,14 +598,8 @@ impl Board {
             }
         }
     }
-    pub fn draw_feedback(&self, lock: &mut impl Write) {
-        crossterm::queue!(
-            lock,
-            crossterm::cursor::MoveTo(0, 35),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
-        )
-        .unwrap();
-        write!(lock, "{}", crate::feedback()).unwrap();
+    pub fn draw_feedback(&self) {
+        crate::draw_feedback();
     }
     pub fn draw_reachable(&self, lock: &mut impl Write, bounds: Range<Vector>) {
         for x in bounds.start.x..bounds.end.x {

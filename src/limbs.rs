@@ -60,6 +60,7 @@ impl Limbs {
     }
     pub fn pick_eye<'a>(&'a mut self) -> Option<&'a mut Eye> {
         crate::set_feedback("L for left eye, R for right eye, C for cancel".to_string());
+        crate::draw_feedback();
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
         loop {
@@ -71,6 +72,16 @@ impl Limbs {
                 _ => {}
             }
         }
+    }
+    pub fn draw(&self, mut start: crate::Vector, lock: &mut impl std::io::Write) {
+        crossterm::queue!(lock, start.to_move()).unwrap();
+        write!(lock, "left eye: ").unwrap();
+        self.left_eye.get_name(lock);
+
+        start.down_mut();
+        crossterm::queue!(lock, start.to_move()).unwrap();
+        write!(lock, "right eye: ").unwrap();
+        self.right_eye.get_name(lock);
     }
 }
 impl FromBinary for Limbs {
@@ -137,6 +148,15 @@ impl Eye {
             damage += 2;
         }
         let _ = player.attacked(damage, "stupidity", None);
+    }
+    pub fn get_name(&self, lock: &mut impl std::io::Write) {
+        match self {
+            Eye::None => return,
+            Eye::Normal => write!(lock, "normal"),
+            Eye::Mage => write!(lock, "mage"),
+            Eye::Seer => write!(lock, "seer"),
+        }
+        .unwrap()
     }
 }
 impl Limbs {

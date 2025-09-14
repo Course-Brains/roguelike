@@ -386,6 +386,7 @@ impl Player {
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock);
         self.draw_items(board, &mut lock);
+        self.draw_limbs(board, &mut lock);
     }
     fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>, board: &Board) {
         if !bounds.contains(&self.pos) {
@@ -438,17 +439,24 @@ impl Player {
         .unwrap();
     }
     fn draw_items(&self, board: &Board, lock: &mut impl std::io::Write) {
+        // Maximum initial y is 6 * 3 = 18, but accounting for the last item, the last allocated y
+        // is 21
         for (index, item) in self.items.iter().enumerate() {
             if let Some(item) = item {
                 crossterm::queue!(
                     lock,
-                    Vector::new(board.render_x * 2 + 2, index * 5).to_move(),
+                    Vector::new(board.render_x * 2 + 2, index * 3).to_move(),
                     crossterm::cursor::SavePosition
                 )
                 .unwrap();
                 item.name(lock);
             }
         }
+    }
+    fn draw_limbs(&self, board: &Board, lock: &mut impl std::io::Write) {
+        // 1 per line, starting at line 23
+        let start = Vector::new(board.render_x * 2 + 2, 23);
+        self.limbs.draw(start, lock);
     }
     pub fn reposition_cursor(&mut self, underscore: bool, bounds: Range<Vector>) {
         self.selector = self

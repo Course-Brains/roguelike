@@ -156,6 +156,7 @@ impl Player {
             if self.energy < self.max_energy {
                 self.energy += 1;
             } else if self.health < self.max_health {
+                crate::stats().damage_healed += 1;
                 self.health += health;
             } else {
                 crate::BONUS_NO_WASTE.store(false, crate::RELAXED);

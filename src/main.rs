@@ -38,6 +38,10 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
 const SAVE_VERSION: Version = 6;
+// The number that the turn count is divided by to get the budget
+const BUDGET_DIVISOR: usize = 5;
+// The number of bosses in each level starting at the third level
+const NUM_BOSSES: usize = 5;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -240,7 +244,7 @@ fn main() {
         }
     }
     if testing {
-        generate(MapGenSettings::new(151, 151, 45, 15, 75))
+        generate(MapGenSettings::new(151, 151, 45, 15, 75, 1))
             .join()
             .unwrap();
         return;
@@ -252,12 +256,11 @@ fn main() {
         let mut archer = 0;
         for index in 0..Rand::MAX {
             random::initialize_with(index);
-            let board = generate(MapGenSettings::new(151, 151, 45, 15, 75))
+            let board = generate(MapGenSettings::new(151, 151, 45, 15, 75, 1))
                 .join()
                 .unwrap();
-            match board
-                .boss
-                .unwrap()
+            match board.bosses[0]
+                .sibling
                 .upgrade()
                 .unwrap()
                 .try_read()
@@ -572,13 +575,13 @@ impl State {
             player: Player::new(Vector::new(1, 1)),
             board: match empty {
                 true => std::thread::spawn(Board::new_empty),
-                false => generate(MapGenSettings::new(151, 151, 45, 15, 75)),
+                false => generate(MapGenSettings::new(151, 151, 45, 15, 75, 1)),
             }
             .join()
             .unwrap(),
             turn: 0,
             next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
-            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 1000),
+            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 2000, 3),
             next_shop: std::thread::spawn(Board::new_shop),
             level: 0,
             nav_stepthrough: false,
@@ -732,7 +735,8 @@ impl State {
         .join()
         .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
-        let settings = MapGenSettings::new(501, 501, 45, 15, self.turn / 10);
+        let settings =
+            MapGenSettings::new(501, 501, 45, 15, self.turn / BUDGET_DIVISOR, NUM_BOSSES);
         reset_bonuses();
         self.next_map = generate(settings);
         self.next_map_settings = settings;
@@ -796,20 +800,27 @@ impl State {
             if door.open {
                 door.open = false;
                 stats().doors_closed += 1;
-                // If the boss is alive and was reachable before closing the door
-                if self
+
+                let reachable_bosses: Vec<Vector> = self
                     .board
-                    .boss
-                    .clone()
-                    .is_some_and(|boss| boss.upgrade().is_some())
-                    && self.board.is_reachable(self.board.boss_pos)
-                {
+                    .bosses
+                    .iter()
+                    .filter(|boss| boss.sibling.upgrade().is_some())
+                    .map(|boss| boss.last_pos)
+                    .collect::<Vec<Vector>>()
+                    .iter()
+                    .filter(|pos| self.board.is_reachable(**pos))
+                    .map(|pos| *pos)
+                    .collect();
+                if reachable_bosses.len() != 0 {
                     self.board.flood(self.player.pos);
-                    // And is not reachable anymore after closing the door
-                    if !self.board.is_reachable(self.board.boss_pos) {
-                        // Then the player ran away from the boss
+                    if reachable_bosses
+                        .iter()
+                        .any(|pos| self.board.is_reachable(*pos))
+                    {
                         stats().cowardice += 1;
                     }
+                    return;
                 }
                 // we don't need to explicitly set the closed door as unreachable because
                 // the flood will do that for us
@@ -911,6 +922,15 @@ impl Vector {
     }
     fn right(self) -> Vector {
         Vector::new(self.x + 1, self.y)
+    }
+    fn abs_diff(self, other: Vector) -> Vector {
+        Vector {
+            x: self.x.abs_diff(other.x),
+            y: self.y.abs_diff(other.y),
+        }
+    }
+    fn sum_axes(self) -> usize {
+        self.x + self.y
     }
 }
 impl std::ops::Sub for Vector {
@@ -1038,15 +1058,24 @@ struct MapGenSettings {
     render_x: usize,
     render_y: usize,
     budget: usize,
+    num_bosses: usize,
 }
 impl MapGenSettings {
-    fn new(x: usize, y: usize, render_x: usize, render_y: usize, budget: usize) -> MapGenSettings {
+    fn new(
+        x: usize,
+        y: usize,
+        render_x: usize,
+        render_y: usize,
+        budget: usize,
+        num_bosses: usize,
+    ) -> MapGenSettings {
         Self {
             x,
             y,
             render_x,
             render_y,
             budget,
+            num_bosses,
         }
     }
 }
@@ -1061,6 +1090,7 @@ impl FromBinary for MapGenSettings {
             render_x: usize::from_binary(binary)?,
             render_y: usize::from_binary(binary)?,
             budget: usize::from_binary(binary)?,
+            num_bosses: usize::from_binary(binary)?,
         })
     }
 }
@@ -1070,7 +1100,8 @@ impl ToBinary for MapGenSettings {
         self.y.to_binary(binary)?;
         self.render_x.to_binary(binary)?;
         self.render_y.to_binary(binary)?;
-        self.budget.to_binary(binary)
+        self.budget.to_binary(binary)?;
+        self.num_bosses.to_binary(binary)
     }
 }
 fn bell(lock: Option<&mut dyn std::io::Write>) {

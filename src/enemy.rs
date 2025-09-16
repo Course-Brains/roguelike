@@ -1138,6 +1138,7 @@ impl Variant {
         )
     }
     // used to get which type should be promoted into the boss
+    // starts at 1, not 0
     pub fn get_tier(&self) -> Result<usize, ()> {
         match self {
             Variant::Basic => Ok(1),

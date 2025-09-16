@@ -379,25 +379,24 @@ impl Command {
                         .unwrap();
                 }
             }
-            Command::GetBoss => match state.board.boss.as_ref().map(|weak| weak.upgrade()) {
-                Some(Some(arc)) => {
-                    let mut index = None;
-                    for (ind, enemy) in state.board.enemies.iter().enumerate() {
-                        if std::sync::Arc::ptr_eq(&arc, enemy) {
-                            index = Some(ind);
-                        }
+            Command::GetBoss => {
+                for boss in state.board.bosses.iter() {
+                    if let Some(arc) = boss.sibling.upgrade() {
+                        out.send(format!(
+                            "There is a {} at {}",
+                            arc.try_read().unwrap().variant,
+                            arc.try_read().unwrap().pos
+                        ))
+                        .unwrap();
+                    } else {
+                        out.send(format!("There is a gate at {}", boss.last_pos))
+                            .unwrap();
                     }
-                    let enemy = arc.try_read().unwrap();
-                    out.send(format!(
-                        "The boss is a: {} at pos: {} and index: {}",
-                        enemy.variant,
-                        enemy.pos,
-                        index.unwrap()
-                    ))
-                    .unwrap()
                 }
-                _ => out.send("There is no boss".to_string()).unwrap(),
-            },
+                if state.board.bosses.len() == 0 {
+                    out.send("There are no bosses".to_string()).unwrap();
+                }
+            }
             Command::CountEnemies => {
                 let mut count = std::collections::HashMap::new();
                 for enemy in state.board.enemies.iter() {

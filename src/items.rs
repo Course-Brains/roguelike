@@ -44,18 +44,29 @@ impl ItemType {
                 true
             }
             Self::BossFinder => {
-                let target = match state
+                let player_pos = state.player.pos;
+                let mut min_dist = usize::max_value();
+                let mut min_pos = crate::Vector::new(0, 0);
+                for boss_pos in state
                     .board
-                    .boss
-                    .as_ref()
-                    .is_some_and(|boss| boss.upgrade().is_some())
+                    .bosses
+                    .iter()
+                    .filter(|boss| boss.sibling.upgrade().is_some())
+                    .map(|boss| boss.last_pos)
                 {
-                    true => "boss",
-                    false => "exit",
-                };
-                *crate::feedback() = format!("the {} is at {}", target, state.board.boss_pos);
-                std::io::stdout().flush().unwrap();
-                true
+                    let dist = boss_pos.abs_diff(player_pos).sum_axes();
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_pos = boss_pos;
+                    }
+                }
+                if min_dist != usize::max_value() {
+                    crate::set_feedback(format!("The nearest boss is at {min_pos}"));
+                    true
+                } else {
+                    crate::set_feedback("There are no remaining bosses".to_string());
+                    false
+                }
             }
             Self::Gamba => {
                 let random = crate::random();

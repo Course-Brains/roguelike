@@ -1,5 +1,5 @@
 use crate::{
-    Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
+    Board, Enemy, MapGenSettings, Style, Vector, board::Piece, enemy::Variant, pieces::door::Door,
     random::*,
 };
 use albatrice::debug;
@@ -16,10 +16,16 @@ const INTERVAL: usize = 5;
 const MINIMUM: usize = 10;
 const MAXIMUM: usize = 100;
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+const STYLE: Style = *Style::new().green();
 pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
 pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
     std::thread::spawn(move || {
+        crate::log!(
+            "{}Generating map with settings: {:#?}\x1b[0m",
+            STYLE,
+            settings
+        );
         let start = std::time::Instant::now();
         let mut room = Room::new(0..(settings.x - 1), 0..(settings.y - 1), settings.budget);
         room.subdivide();
@@ -28,11 +34,12 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         let mut board = Board::new(settings.x, settings.y, settings.render_x, settings.render_y);
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
+        crate::log!("{STYLE}Begining enemy placement\x1b[0m");
         room.place_enemies(&mut board);
-        promote_boss(&mut board);
+        promote_boss(&mut board, settings.num_bosses);
         let elapsed = start.elapsed();
         crate::log!(
-            "Map gen time: {}s({}ms)",
+            "{STYLE}Map gen time: {}s({}ms)\x1b[0m",
             elapsed.as_secs(),
             elapsed.as_millis()
         );
@@ -40,32 +47,34 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         board
     })
 }
-fn promote_boss(board: &mut Board) {
-    let mut highest = 1;
-    for enemy in board.enemies.iter() {
-        if enemy.try_read().unwrap().variant.get_tier().unwrap() > highest {
-            highest = enemy.try_read().unwrap().variant.get_tier().unwrap();
+fn promote_boss(board: &mut Board, num_bosses: usize) {
+    let mut current_tier = board.get_highest_tier();
+    let mut potential = Vec::new();
+    for _ in 0..num_bosses {
+        crate::log!("{STYLE}Attempting to create boss of tier: {current_tier}\x1b[0m");
+        board.get_all_of_tier(current_tier, &mut potential);
+        let mut failed = true;
+        delay();
+        if let Some(index) = random_index(potential.len()) {
+            crate::log!(
+                "{STYLE}Selected enemy, promoting from {}\x1b[0m",
+                potential[index].try_read().unwrap().variant
+            );
+            board.bosses.push(crate::board::Boss {
+                last_pos: Vector::new(0, 0),
+                sibling: Arc::downgrade(&potential[index]),
+            });
+            potential[index].try_write().unwrap().promote().unwrap();
+            failed = false;
         }
-    }
-    crate::log!("highest enemy is tier {highest}");
-    let mut candidates = Vec::new();
-    for enemy in board.enemies.iter() {
-        if enemy.try_read().unwrap().variant.get_tier().unwrap() == highest {
-            candidates.push(enemy.clone());
+        delay();
+        if current_tier > 1 && (failed || bool::random()) {
+            // > 1 because lowest is 1
+            crate::log!("{STYLE}Decrimenting current tier\x1b[0m");
+            current_tier -= 1;
         }
+        potential.truncate(0);
     }
-    let boss = match candidates.len() > 256 {
-        true => candidates.swap_remove(random() as usize),
-        false => candidates.swap_remove(random() as usize % candidates.len()),
-    };
-    crate::log!(
-        "boss will be a {} at {}",
-        boss.try_read().unwrap().variant,
-        boss.try_read().unwrap().pos
-    );
-    board.boss = Some(Arc::downgrade(&boss));
-    board.boss_pos = boss.try_read().unwrap().pos;
-    boss.try_write().unwrap().promote().unwrap()
 }
 fn attempt_pick_pos(
     board: &mut Board,
@@ -85,6 +94,9 @@ fn attempt_pick_pos(
     None
 }
 fn checksum(board: &Board) {
+    if board.bosses.len() == 0 {
+        panic!("No bosses");
+    }
     for enemy in board.enemies.iter() {
         let pos = enemy.try_read().unwrap().pos;
         let addr = Arc::as_ptr(enemy).addr();
@@ -421,9 +433,17 @@ impl Room {
                 .place_enemies(board);
             return;
         }
+        if self.budget == 0 {
+            return;
+        }
+        crate::log!("{STYLE}Begining enemy placement for room\x1b[0m");
         let mut budget = self.budget;
         let (center_variant, center_num) = Variant::pick_variant(budget, true);
         // Placing centers
+        debug_assert_ne!(center_num, 0, "Attempted to spawn 0 centers");
+        crate::log!(
+            "{STYLE}Attempting to place {center_num} centers of variant: {center_variant}\x1b[0m"
+        );
         let mut centers = Vec::new();
         for _ in 0..center_num {
             if let Some(pos) = attempt_pick_pos(board, &self.x_bounds, &self.y_bounds) {
@@ -436,6 +456,7 @@ impl Room {
             }
         }
         if centers.len() == 0 {
+            crate::log!("{STYLE}Failed to place centers\x1b[0m");
             return;
         }
         let budget_per_center = budget / centers.len();
@@ -453,9 +474,18 @@ impl Room {
         // Placing surroundings
         for (center, mut budget) in centers.into_iter() {
             let mut available = board.flood_within(center, 3, true);
+            let mut fails = 0;
             while budget > 0 {
+                if fails > 10 {
+                    crate::log!("{STYLE}Fails accumulated too much, stopping\x1b[0m");
+                }
                 delay();
                 let pos = available.swap_remove(random_index(available.len()).unwrap());
+                if board.get_enemy(pos, None).is_some() {
+                    fails += 1;
+                    continue;
+                }
+                fails = 0;
                 let variant = Variant::pick_variant(budget, false).0;
                 budget -= variant.get_cost().unwrap();
                 board
@@ -463,6 +493,7 @@ impl Room {
                     .push(Arc::new(RwLock::new(Enemy::new(pos, variant))));
             }
         }
+        crate::log!("{STYLE}Done placing enemies for room\x1b[0m");
     }
 }
 enum Axis {

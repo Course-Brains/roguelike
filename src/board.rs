@@ -21,8 +21,7 @@ pub struct Board {
     pub spells: Vec<SpellCircle>,
     // Stuff that doesn't get calculated but does get drawn
     pub specials: Vec<Weak<Special>>,
-    pub boss_pos: Vector,
-    pub boss: Option<Weak<RwLock<Enemy>>>,
+    pub bosses: Vec<Boss>,
     pub visible: Vec<bool>,
     pub seen: Vec<bool>,
     // The number of turns spent on this board specifically
@@ -47,8 +46,7 @@ impl Board {
             spells: Vec::new(),
             backtraces,
             specials: Vec::new(),
-            boss_pos: Vector::new(0, 0),
-            boss: None,
+            bosses: Vec::new(),
             visible,
             seen,
             turns_spent: 0,
@@ -271,6 +269,32 @@ impl Board {
     pub fn reset_took_damage(&self) {
         for arc in self.enemies.iter() {
             arc.try_write().unwrap().took_damage = false;
+        }
+    }
+    pub fn designate_boss(&mut self, index: usize) {
+        self.bosses.push(Boss {
+            last_pos: Vector::new(0, 0),
+            sibling: Arc::downgrade(&self.enemies[index]),
+        });
+    }
+    pub fn get_highest_tier(&self) -> usize {
+        let mut highest = 0;
+        for enemy in self.enemies.iter() {
+            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier() {
+                if tier > highest {
+                    highest = tier;
+                }
+            }
+        }
+        highest
+    }
+    pub fn get_all_of_tier(&self, target: usize, out: &mut Vec<Arc<RwLock<Enemy>>>) {
+        for enemy in self.enemies.iter() {
+            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier() {
+                if target == tier {
+                    out.push(enemy.clone());
+                }
+            }
         }
     }
 }
@@ -1053,9 +1077,11 @@ impl Board {
             return false;
         }
         enemy.pos = new_pos;
-        if let Some(boss) = self.boss.as_ref().map(|boss| boss.upgrade()).flatten() {
-            if Arc::ptr_eq(&boss, &arc) {
-                self.boss_pos = enemy.pos;
+        for boss in self.bosses.iter_mut() {
+            if let Some(sibling) = boss.sibling.upgrade() {
+                if Arc::ptr_eq(&sibling, &arc) {
+                    boss.last_pos = enemy.pos;
+                }
             }
         }
         true
@@ -1078,9 +1104,14 @@ impl Board {
     }
     // places the exit if the boss is dead
     pub fn place_exit(&mut self) {
-        if let Some(boss) = self.boss.as_ref() {
-            if boss.upgrade().is_none() {
-                let pos = self.boss_pos;
+        for (pos, is_dead) in self
+            .bosses
+            .iter()
+            .map(|boss| (boss.last_pos, boss.sibling.upgrade().is_none()))
+            .collect::<Vec<(Vector, bool)>>()
+            .into_iter()
+        {
+            if is_dead {
                 self[pos] = Some(Piece::Exit(Exit::Shop));
             }
         }
@@ -1127,8 +1158,8 @@ impl FromBinary for Board {
             spells: Vec::new(),
             // Specials do not get maintained
             specials: Vec::new(),
-            boss_pos: Vector::from_binary(binary)?,
-            boss: None,
+            // Bosses cannot be saved
+            bosses: Vec::new(),
             visible: Vec::from_binary(binary)?,
             seen: Vec::from_binary(binary)?,
             turns_spent: usize::from_binary(binary)?,
@@ -1150,8 +1181,7 @@ impl ToBinary for Board {
         self.backtraces.to_binary(binary)?;
         // skipping enemies
         // specials do not get saved
-        self.boss_pos.to_binary(binary)?;
-        // skipping boss because skipping enemies
+        // skipping bosses because skipping enemies
         self.visible.to_binary(binary)?;
         self.seen.to_binary(binary)?;
         self.turns_spent.to_binary(binary)?;
@@ -1482,4 +1512,9 @@ enum ShouldFloodDoor {
     Yes(Vector), // Start point
     NoNeed,
     No,
+}
+#[derive(Clone)]
+pub struct Boss {
+    pub last_pos: Vector,
+    pub sibling: Weak<RwLock<Enemy>>,
 }

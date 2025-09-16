@@ -271,12 +271,6 @@ impl Board {
             arc.try_write().unwrap().took_damage = false;
         }
     }
-    pub fn designate_boss(&mut self, index: usize) {
-        self.bosses.push(Boss {
-            last_pos: Vector::new(0, 0),
-            sibling: Arc::downgrade(&self.enemies[index]),
-        });
-    }
     pub fn get_highest_tier(&self) -> usize {
         let mut highest = 0;
         for enemy in self.enemies.iter() {

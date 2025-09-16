@@ -23,6 +23,8 @@ use upgrades::Upgrades;
 mod spell;
 use spell::Spell;
 mod limbs;
+mod settings;
+use settings::Settings;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -120,15 +122,15 @@ fn log(string: String) {
 #[cfg(not(debug_assertions))]
 #[macro_export]
 macro_rules! debug_only {
-    ($val:tt) => {
+    ($($val:tt)*) => {
         compile_error!("Someone forgot to replace the placeholder value!")
     };
 }
 #[cfg(debug_assertions)]
 #[macro_export]
 macro_rules! debug_only {
-    ($val:tt) => {
-        $val
+    ($($val:tt)*) => {
+        $($val)*
     };
 }
 
@@ -185,6 +187,7 @@ fn draw_feedback() {
     write!(std::io::stdout(), "{}", feedback()).unwrap();
     std::io::stdout().flush().unwrap();
 }
+static SETTINGS: std::sync::LazyLock<Settings> = std::sync::LazyLock::new(Settings::get_from_file);
 
 ///////////////////
 // Debug toggles //
@@ -401,9 +404,12 @@ fn main() {
                             .board
                             .get_enemy(state.player.pos + direction, None)
                             .is_some()
+                            && SETTINGS.kick_enemies
                         {
                             state.attack_enemy(state.player.pos + direction, false, false, true);
                             state.increment();
+                        } else if !SETTINGS.kick_doors {
+                            // Doing it like this because can't do && on if let
                         } else if let Some(board::Piece::Door(door)) =
                             state.board[state.player.pos + direction]
                         {

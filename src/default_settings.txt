@@ -1,0 +1,2 @@
+kick_enemies true
+kick_doors true

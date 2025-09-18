@@ -96,6 +96,10 @@ impl Player {
             crate::stats().damage_blocked += damage;
             return Err(());
         }
+        // Half damage taken on easy
+        if crate::SETTINGS.difficulty.is_easy() && damage > 1 {
+            damage /= 2;
+        }
         // One shot protection
         if self.health == self.max_health && damage > self.health {
             crate::log!(
@@ -138,8 +142,13 @@ impl Player {
         let damage_weight = (damage / max_health) * crate::limbs::LIMB_LOSS_DAMAGE_WEIGHT;
         crate::log!("  damage weight: {damage_weight}");
 
-        let pass = (health_weight + energy_weight + damage_weight) as crate::Rand;
+        let mut pass = (health_weight + energy_weight + damage_weight) as crate::Rand;
         crate::log!("  pass value: {pass}");
+
+        if crate::SETTINGS.difficulty.is_easy() {
+            pass /= 2;
+            crate::log!("Halving pass due to difficulty, now at: {pass}")
+        }
 
         pass > crate::random()
     }
@@ -284,6 +293,9 @@ impl Player {
             self.health = self.max_health;
         }
     }
+    pub fn heal_to_full(&mut self) {
+        self.heal(self.max_health - self.health)
+    }
     pub fn aim(&mut self, board: &mut Board) {
         let mut specials = Vec::new();
         for pos in crate::ray_cast(self.pos, self.selector, board, None, true, self.pos)
@@ -327,6 +339,9 @@ impl Player {
         if self.effects.drunk.is_active() {
             damage += 1
         }
+        if crate::SETTINGS.difficulty.is_easy() {
+            damage += 1
+        }
         damage
     }
     pub fn stat_choice(&mut self) {
@@ -334,15 +349,24 @@ impl Player {
         crate::set_desc("1: more health, 2: more energy, 3: more perception");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
+        let easy = crate::SETTINGS.difficulty.is_easy();
         loop {
             lock.read_exact(&mut buf).unwrap();
             match buf[0] {
                 b'1' => {
                     crate::log!("  Chosen health");
-                    self.max_health += (self.max_health / 5).max(1)
+                    if easy {
+                        self.max_health += (self.max_health / 2).max(1);
+                        self.heal_to_full();
+                    } else {
+                        self.max_health += (self.max_health / 5).max(1)
+                    }
                 }
                 b'2' => {
                     crate::log!("  Chosen energy");
+                    if easy {
+                        self.max_energy += (self.max_energy / 2).max(1);
+                    }
                     self.max_energy += (self.max_energy / 5).max(1)
                 }
                 b'3' => {

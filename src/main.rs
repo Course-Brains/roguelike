@@ -24,7 +24,7 @@ mod spell;
 use spell::Spell;
 mod limbs;
 mod settings;
-use settings::Settings;
+use settings::{Difficulty, Settings};
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -39,11 +39,13 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 6;
+const SAVE_VERSION: Version = 7;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
 const NUM_BOSSES: usize = 5;
+// The budget given per layer (layer * this)
+const BUDGET_PER_LAYER: usize = 100;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -281,7 +283,6 @@ fn main() {
         return;
     }
 
-    let _weirdifier = Weirdifier::new();
     /*crossterm::execute!(
         std::io::stdout(),
         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
@@ -290,7 +291,19 @@ fn main() {
     let save_file = std::fs::exists(PATH).unwrap();
     let mut state = match save_file {
         // There is a save file
-        true => State::from_binary(&mut std::fs::File::open(PATH).unwrap()).unwrap(),
+        true => {
+            match State::from_binary(&mut std::fs::File::open(PATH).unwrap()) {
+                Ok(state) => state,
+                Err(error) => {
+                    if error.kind() == std::io::ErrorKind::Other {
+                        // The player changed the difficulty between save and load time
+                        return;
+                    } else {
+                        panic!("{error}")
+                    }
+                }
+            }
+        }
         // there is not a save file
         false => State::new(empty),
     };
@@ -301,6 +314,7 @@ fn main() {
     state.next_map = generate(state.next_map_settings);
     let mut command_handler = commands::CommandHandler::new();
     state.board.flood(state.player.pos);
+    let _weirdifier = Weirdifier::new();
     state.render();
     loop {
         if let Some(show_stats) = Player::handle_death(&state) {
@@ -523,11 +537,19 @@ fn main() {
             Input::Convert => {
                 if state.player.upgrades.precise_convert {
                     if state.player.energy > 0 {
-                        state.player.give_money(1);
+                        if SETTINGS.difficulty.is_easy() {
+                            state.player.give_money(2);
+                        } else {
+                            state.player.give_money(1);
+                        }
                         state.player.energy -= 1;
                     }
                 } else {
-                    state.player.give_money(state.player.energy);
+                    if SETTINGS.difficulty.is_easy() {
+                        state.player.give_money(2 * state.player.energy);
+                    } else {
+                        state.player.give_money(state.player.energy);
+                    }
                     state.player.energy = 0;
                 }
                 state.increment();
@@ -581,7 +603,14 @@ impl State {
             player: Player::new(Vector::new(1, 1)),
             board: match empty {
                 true => std::thread::spawn(Board::new_empty),
-                false => generate(MapGenSettings::new(151, 151, 45, 15, 75, 1)),
+                false => generate(MapGenSettings::new(
+                    151,
+                    151,
+                    45,
+                    15,
+                    State::level_0_budget(),
+                    1,
+                )),
             }
             .join()
             .unwrap(),
@@ -592,6 +621,18 @@ impl State {
             level: 0,
             nav_stepthrough: false,
             nav_stepthrough_index: None,
+        }
+    }
+    fn level_0_budget() -> usize {
+        match SETTINGS.difficulty {
+            Difficulty::Normal => 75,
+            Difficulty::Easy => 50,
+        }
+    }
+    fn level_1_budget() -> usize {
+        match SETTINGS.difficulty {
+            Difficulty::Normal => 1500,
+            Difficulty::Easy => 1000,
         }
     }
     // returns if an enemy was hit
@@ -741,8 +782,7 @@ impl State {
         .join()
         .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
-        let settings =
-            MapGenSettings::new(501, 501, 45, 15, self.turn / BUDGET_DIVISOR, NUM_BOSSES);
+        let settings = MapGenSettings::new(501, 501, 45, 15, self.get_budget(), NUM_BOSSES);
         reset_bonuses();
         self.next_map = generate(settings);
         self.next_map_settings = settings;
@@ -751,6 +791,13 @@ impl State {
         self.player.selector = Vector::new(1, 1);
         self.board.flood(self.player.pos);
         self.render();
+    }
+    fn get_budget(&self) -> usize {
+        let mut budget = (self.turn / BUDGET_DIVISOR) + (self.level * BUDGET_PER_LAYER);
+        if SETTINGS.difficulty.is_easy() {
+            budget /= 2;
+        }
+        budget
     }
     fn load_shop(&mut self) {
         stats().level_turns.push(self.board.turns_spent);
@@ -856,6 +903,12 @@ impl FromBinary for State {
             ));
         }
         CHEATS.store(bool::from_binary(binary)?, Ordering::Relaxed);
+        let difficulty = settings::Difficulty::from_binary(binary)?;
+        if difficulty != SETTINGS.difficulty {
+            println!("Don't change the difficulty mid run, go set it back to {difficulty}");
+            bell(None);
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
+        }
         generator::DO_DELAY.store(true, Ordering::SeqCst);
         let settings = MapGenSettings::from_binary(binary)?;
         Ok(State {
@@ -875,6 +928,7 @@ impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         SAVE_VERSION.to_binary(binary)?;
         CHEATS.load(Ordering::Relaxed).to_binary(binary)?;
+        SETTINGS.difficulty.to_binary(binary)?;
         self.next_map_settings.to_binary(binary)?;
         self.player.to_binary(binary)?;
         self.board.to_binary(binary)?;
@@ -1299,6 +1353,8 @@ struct Stats {
     doors_opened_by_walking: usize,
     // Number of enemies attacked with wasd
     enemies_hit_by_walking: usize,
+    // The difficulty of the run
+    difficulty: Difficulty,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1329,6 +1385,7 @@ impl Stats {
             hits_taken: 0,
             doors_opened_by_walking: 0,
             enemies_hit_by_walking: 0,
+            difficulty: Difficulty::default(),
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1342,6 +1399,7 @@ impl Stats {
                 im_too_tired_to_come_up_with_a_good_variable_name.1
             })
             .flatten();
+        self.difficulty = SETTINGS.difficulty;
     }
     fn add_item(&mut self, item: ItemType) {
         self.buy_list
@@ -1403,6 +1461,7 @@ impl FromBinary for Stats {
             hits_taken: usize::from_binary(binary)?,
             doors_opened_by_walking: usize::from_binary(binary)?,
             enemies_hit_by_walking: usize::from_binary(binary)?,
+            difficulty: Difficulty::from_binary(binary)?,
         })
     }
 }
@@ -1433,7 +1492,8 @@ impl ToBinary for Stats {
         self.attacks_done.to_binary(binary)?;
         self.hits_taken.to_binary(binary)?;
         self.doors_opened_by_walking.to_binary(binary)?;
-        self.enemies_hit_by_walking.to_binary(binary)
+        self.enemies_hit_by_walking.to_binary(binary)?;
+        self.difficulty.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1595,6 +1655,7 @@ fn view_stats() {
                         "hits_taken" => list!(hits_taken, index),
                         "doors_opened_by_walking" => list!(doors_opened_by_walking, index),
                         "enemies_hit_by_walking" => list!(enemies_hit_by_walking, index),
+                        "difficulty" => list!(difficulty, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

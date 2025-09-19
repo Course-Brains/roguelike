@@ -34,7 +34,7 @@ impl SpellCircle {
                     return false;
                 }
                 if player.pos == self.pos {
-                    if self.caster.is_some() {
+                    if self.caster.is_none() {
                         return true;
                     }
                     spell.cast(player.into(), Entity::Enemy(self.caster.clone().unwrap()));

@@ -220,6 +220,7 @@ fn main() {
         match arg.as_str() {
             "--seed" | "-s" => {
                 let new_index = args.next().unwrap().parse().unwrap();
+                CHEATS.store(true, RELAXED);
                 log!("Setting random index to {new_index}");
                 random::initialize_with(new_index)
             }
@@ -249,9 +250,17 @@ fn main() {
         }
     }
     if testing {
-        generate(MapGenSettings::new(151, 151, 45, 15, 75, 1))
-            .join()
-            .unwrap();
+        generate(MapGenSettings::new(
+            151,
+            151,
+            45,
+            15,
+            75,
+            1,
+            State::level_0_highest_tier(),
+        ))
+        .join()
+        .unwrap();
         return;
     }
     if counting {
@@ -261,9 +270,17 @@ fn main() {
         let mut archer = 0;
         for index in 0..Rand::MAX {
             random::initialize_with(index);
-            let board = generate(MapGenSettings::new(151, 151, 45, 15, 75, 1))
-                .join()
-                .unwrap();
+            let board = generate(MapGenSettings::new(
+                151,
+                151,
+                45,
+                15,
+                75,
+                1,
+                State::level_0_highest_tier(),
+            ))
+            .join()
+            .unwrap();
             match board.bosses[0]
                 .sibling
                 .upgrade()
@@ -610,13 +627,22 @@ impl State {
                     15,
                     State::level_0_budget(),
                     1,
+                    State::level_0_highest_tier(),
                 )),
             }
             .join()
             .unwrap(),
             turn: 0,
             next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
-            next_map_settings: MapGenSettings::new(501, 501, 45, 15, 2000, 3),
+            next_map_settings: MapGenSettings::new(
+                501,
+                501,
+                45,
+                15,
+                2000,
+                3,
+                State::level_1_highest_tier(),
+            ),
             next_shop: std::thread::spawn(Board::new_shop),
             level: 0,
             nav_stepthrough: false,
@@ -634,6 +660,12 @@ impl State {
             Difficulty::Normal => 1500,
             Difficulty::Easy => 1000,
         }
+    }
+    fn level_0_highest_tier() -> Option<usize> {
+        Some(2)
+    }
+    fn level_1_highest_tier() -> Option<usize> {
+        Some(2)
     }
     // returns if an enemy was hit
     fn attack_enemy(
@@ -782,7 +814,7 @@ impl State {
         .join()
         .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
-        let settings = MapGenSettings::new(501, 501, 45, 15, self.get_budget(), NUM_BOSSES);
+        let settings = MapGenSettings::new(501, 501, 45, 15, self.get_budget(), NUM_BOSSES, None);
         reset_bonuses();
         self.next_map = generate(settings);
         self.next_map_settings = settings;
@@ -1119,6 +1151,7 @@ struct MapGenSettings {
     render_y: usize,
     budget: usize,
     num_bosses: usize,
+    max_enemy_tier: Option<usize>,
 }
 impl MapGenSettings {
     fn new(
@@ -1128,6 +1161,7 @@ impl MapGenSettings {
         render_y: usize,
         budget: usize,
         num_bosses: usize,
+        max_enemy_tier: Option<usize>,
     ) -> MapGenSettings {
         Self {
             x,
@@ -1136,6 +1170,7 @@ impl MapGenSettings {
             render_y,
             budget,
             num_bosses,
+            max_enemy_tier,
         }
     }
 }
@@ -1151,6 +1186,7 @@ impl FromBinary for MapGenSettings {
             render_y: usize::from_binary(binary)?,
             budget: usize::from_binary(binary)?,
             num_bosses: usize::from_binary(binary)?,
+            max_enemy_tier: Option::from_binary(binary)?,
         })
     }
 }
@@ -1161,7 +1197,8 @@ impl ToBinary for MapGenSettings {
         self.render_x.to_binary(binary)?;
         self.render_y.to_binary(binary)?;
         self.budget.to_binary(binary)?;
-        self.num_bosses.to_binary(binary)
+        self.num_bosses.to_binary(binary)?;
+        self.max_enemy_tier.as_ref().to_binary(binary)
     }
 }
 fn bell(lock: Option<&mut dyn std::io::Write>) {

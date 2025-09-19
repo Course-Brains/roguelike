@@ -371,7 +371,11 @@ impl Player {
                 }
                 b'3' => {
                     crate::log!("  Chosen perception");
-                    self.perception += (self.perception / 5).max(1);
+                    if easy {
+                        self.perception += (self.perception / 2).max(1);
+                    } else {
+                        self.perception += (self.perception / 5).max(1);
+                    }
                 }
                 other => {
                     crate::log!("  Recieved \"{}\", trying again", char::from(other));

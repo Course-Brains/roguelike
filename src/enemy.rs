@@ -1160,7 +1160,8 @@ impl Variant {
     }
     // returns the highest affordable variant, and how many can be bought
     // Assumes non 0 budget
-    pub fn pick_variant(available: usize, optimal: bool) -> (Variant, usize) {
+    // If given, it can limit the tier of the enemy returned
+    pub fn pick_variant(available: usize, optimal: bool, limit: Option<usize>) -> (Variant, usize) {
         let fighter = Variant::fighter().get_cost().unwrap();
         let mage = Variant::mage().get_cost().unwrap();
         let basic = Variant::basic().get_cost().unwrap();
@@ -1169,10 +1170,16 @@ impl Variant {
         // this has been disabled
 
         // Fighter
-        if available > fighter && (optimal || random8() != 0) {
+        if limit.is_none_or(|limit| limit >= 3)
+            && available > fighter
+            && (optimal || random8() != 0)
+        {
             (Variant::fighter(), available / fighter)
         // Mage
-        } else if available > mage && (optimal || random8() != 0) {
+        } else if limit.is_none_or(|limit| limit >= 2)
+            && available > mage
+            && (optimal || random8() != 0)
+        {
             if bool::random() {
                 (Variant::mage(), available / mage)
             } else {

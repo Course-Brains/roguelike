@@ -35,7 +35,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
         crate::log!("{STYLE}Begining enemy placement\x1b[0m");
-        room.place_enemies(&mut board);
+        room.place_enemies(&mut board, settings.max_enemy_tier);
         promote_boss(&mut board, settings.num_bosses);
         let elapsed = start.elapsed();
         crate::log!(
@@ -43,7 +43,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
             elapsed.as_secs(),
             elapsed.as_millis()
         );
-        //checksum(&board);
+        checksum(&board);
         board
     })
 }
@@ -419,18 +419,18 @@ impl Room {
                 Some(Piece::Door(Door { open: false }));
         }
     }
-    fn place_enemies(&self, board: &mut Board) {
+    fn place_enemies(&self, board: &mut Board, limit: Option<usize>) {
         if self.sub_room1.is_some() {
             self.sub_room1
                 .as_ref()
                 .unwrap()
                 .borrow()
-                .place_enemies(board);
+                .place_enemies(board, limit);
             self.sub_room2
                 .as_ref()
                 .unwrap()
                 .borrow()
-                .place_enemies(board);
+                .place_enemies(board, limit);
             return;
         }
         if self.budget == 0 {
@@ -438,7 +438,7 @@ impl Room {
         }
         crate::log!("{STYLE}Begining enemy placement for room\x1b[0m");
         let mut budget = self.budget;
-        let (center_variant, center_num) = Variant::pick_variant(budget, true);
+        let (center_variant, center_num) = Variant::pick_variant(budget, true, limit);
         // Placing centers
         debug_assert_ne!(center_num, 0, "Attempted to spawn 0 centers");
         crate::log!(
@@ -486,7 +486,7 @@ impl Room {
                     continue;
                 }
                 fails = 0;
-                let variant = Variant::pick_variant(budget, false).0;
+                let variant = Variant::pick_variant(budget, false, limit).0;
                 budget -= variant.get_cost().unwrap();
                 board
                     .enemies

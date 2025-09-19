@@ -1111,12 +1111,14 @@ impl Board {
         }
     }
     pub fn update_spells(&mut self, player: &mut Player) {
+        // Creating fake visual spells
         let mut specials = Vec::new();
         for circle in self.spells.iter() {
             let arc = Arc::new(Special::new(circle.pos, '∆', Some(*Style::new().purple())));
             self.specials.push(Arc::downgrade(&arc));
             specials.push(arc);
         }
+        // Actually updating the circles
         let mut circles = std::mem::take(&mut self.spells);
         circles.retain(|circle| circle.update(self, player));
         self.spells = circles;

@@ -43,7 +43,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
             elapsed.as_secs(),
             elapsed.as_millis()
         );
-        checksum(&board);
+        checksum(&board).unwrap();
         board
     })
 }
@@ -93,20 +93,21 @@ fn attempt_pick_pos(
     }
     None
 }
-fn checksum(board: &Board) {
+pub fn checksum(board: &Board) -> Result<(), String> {
     if board.bosses.len() == 0 {
-        panic!("No bosses");
+        return Err("No bosses".to_string());
     }
     for enemy in board.enemies.iter() {
         let pos = enemy.try_read().unwrap().pos;
         let addr = Arc::as_ptr(enemy).addr();
         if let Some(piece) = &board[pos] {
-            panic!("Enemy spawned inside: {piece}");
+            return Err(format!("Enemy spawned inside: {piece}"));
         }
         if let Some(_) = board.get_enemy(pos, Some(addr)) {
-            panic!("Enemy spawned inside another enemy")
+            return Err(format!("Enemy spawned inside another enemy"));
         }
     }
+    Ok(())
 }
 fn delay() {
     if DO_DELAY.load(Ordering::SeqCst) {

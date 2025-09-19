@@ -42,10 +42,10 @@ enum Command {
     SetLimb(String, String),
     SetFeedback(String),
     ToggleShowReachable,
+    Cheats,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
-        crate::CHEATS.store(true, crate::Ordering::Relaxed);
         let mut iter = string.split(' ');
         match iter.next().unwrap() {
             "get_player_data" => Ok(Command::GetPlayerData),
@@ -137,10 +137,20 @@ impl Command {
                 iter.map(|s| s.to_string() + " ").collect(),
             )),
             "toggle_show_reachable" => Ok(Command::ToggleShowReachable),
+            "cheats" => Ok(Command::Cheats),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
     fn enact(self, state: &mut State, out: &mut Sender<String>) {
+        if self.is_cheat() && crate::CHEATS.load(crate::RELAXED) {
+            out.send(
+                "Attempted to use a command that requires cheats without cheats enabled,\
+                please turn on cheats."
+                    .to_string(),
+            )
+            .unwrap();
+            return;
+        }
         match self {
             Command::GetPlayerData => out.send(format!("{:#?}", state.player)).unwrap(),
             Command::SetHealth(health) => {
@@ -434,17 +444,11 @@ impl Command {
                 .unwrap();
             }
             Command::Checksum => {
-                let mut failed = false;
-                for enemy in state.board.enemies.iter() {
-                    let pos = enemy.try_read().unwrap().pos;
-                    if state.board[pos].is_some() {
-                        out.send(format!("Failure at {pos}")).unwrap();
-                        failed = true;
-                    }
-                }
-                if !failed {
-                    out.send("no faults".to_string()).unwrap()
-                }
+                out.send(match crate::generator::checksum(&state.board) {
+                    Ok(_) => "Checksum passed".to_string(),
+                    Err(error) => error,
+                })
+                .unwrap();
             }
             Command::SetBench(state) => {
                 if state {
@@ -493,7 +497,23 @@ impl Command {
             Command::ToggleShowReachable => {
                 crate::SHOW_REACHABLE.fetch_xor(true, crate::RELAXED);
             }
+            Command::Cheats => {
+                crate::CHEATS.store(true, crate::RELAXED);
+            }
         }
+    }
+    fn is_cheat(&self) -> bool {
+        // All aside from listed require cheats
+        !matches!(
+            self,
+            Self::Redraw
+                | Self::ForceFlood
+                | Self::Checksum
+                | Self::SetBench(_)
+                | Self::SetFeedback(_)
+                | Self::ToggleShowReachable
+                | Self::Cheats
+        )
     }
 }
 pub struct CommandHandler {

@@ -1,5 +1,5 @@
 use crate::{
-    Board, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
+    Board, Difficulty, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
     commands::parse, limbs::Limbs,
 };
 use std::io::{Read, Write};
@@ -37,23 +37,69 @@ impl Player {
         Player {
             pos,
             selector: pos,
-            health: 20,
-            max_health: 50,
-            energy: 2,
-            max_energy: 3,
+            health: Player::starting_health(),
+            max_health: Player::starting_max_health(),
+            energy: Player::starting_energy(),
+            max_energy: Player::starting_max_energy(),
             blocking: false,
             was_hit: false,
             focus: Focus::Player,
             killer: None,
-            items: [None; 6],
-            money: 0,
-            perception: 10,
+            items: Player::starting_items(),
+            money: Player::starting_money(),
+            perception: Player::starting_perception(),
             effects: Effects::new(),
             upgrades: crate::Upgrades::new(),
             detect_mod: 0,
             aiming: false,
             fast: false,
             limbs: Limbs::new(),
+        }
+    }
+    fn starting_max_health() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 50,
+            Difficulty::Easy => 100,
+        }
+    }
+    fn starting_health() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 20,
+            Difficulty::Easy => 100,
+        }
+    }
+    fn starting_max_energy() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 3,
+            Difficulty::Easy => 6,
+        }
+    }
+    fn starting_energy() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 2,
+            Difficulty::Easy => 6,
+        }
+    }
+    fn starting_money() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 0,
+            Difficulty::Easy => 50,
+        }
+    }
+    fn starting_perception() -> usize {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => 10,
+            Difficulty::Easy => 20,
+        }
+    }
+    fn starting_items() -> Items {
+        match crate::SETTINGS.difficulty {
+            Difficulty::Normal => [None; 6],
+            Difficulty::Easy => {
+                let mut out = [None; 6];
+                out[0] = Some(ItemType::HealthPotion);
+                out
+            }
         }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
@@ -189,33 +235,35 @@ impl Player {
             Focus::Selector => self.selector,
         }
     }
-    // returns whether or not the player is dead and if they are, whether or not they want to see
-    // their stats
-    pub fn handle_death(state: &crate::State) -> Option<bool> {
-        state.player.killer.map(|killer| {
-            println!(
-                "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
-                Style::new().green().intense(true),
-                killer.0
-            );
-            Player::death_message(state);
-            print!(
-                "\nPress {}Enter\x1b[0m to exit. Or press {}S\x1b[0m to see stats.",
-                Style::new().cyan(),
-                Style::new().cyan()
-            );
-            std::io::stdout().flush().unwrap();
-            let mut buf = [0];
-            let mut stdin = std::io::stdin().lock();
-            loop {
-                stdin.read_exact(&mut buf).unwrap();
-                match buf[0].to_ascii_uppercase() {
-                    b'S' => break true,
-                    b'\n' => break false,
-                    _ => {}
-                }
+    pub fn is_dead(&self) -> bool {
+        self.killer.is_some()
+    }
+    // returns whether or not they want to see their stats
+    // By this point, death stat collection has happened
+    pub fn handle_death(state: &crate::State) -> bool {
+        let killer = state.player.killer.unwrap();
+        println!(
+            "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
+            Style::new().green().intense(true),
+            killer.0
+        );
+        Player::death_message(state);
+        print!(
+            "\nPress {}Enter\x1b[0m to exit. Or press {}S\x1b[0m to see stats.",
+            Style::new().cyan(),
+            Style::new().cyan()
+        );
+        std::io::stdout().flush().unwrap();
+        let mut buf = [0];
+        let mut stdin = std::io::stdin().lock();
+        loop {
+            stdin.read_exact(&mut buf).unwrap();
+            match buf[0].to_ascii_uppercase() {
+                b'S' => break true,
+                b'\n' => break false,
+                _ => {}
             }
-        })
+        }
     }
     pub fn death_message(state: &crate::State) {
         let mut out = std::io::stdout().lock();
@@ -231,18 +279,54 @@ impl Player {
             write!(out, "Coward.").unwrap();
             return;
         }
-        match crate::random() % 6 {
-            0 => write!(out, "Do better next time."),
-            1 => write!(
-                out,
-                "With enough luck you'll eventually with even without skill."
-            ),
-            2 => write!(out, "You CAN prevail."),
-            3 => write!(out, "Have you ever heard of the definition of insanity?"),
-            4 => write!(out, "Bad Luck"),
-            5 => write!(out, "Did you know? You died. Now you know."),
-            _ => unreachable!("Fuckity wuckity someone is bad at math"),
+
+        let mut valid = vec![
+            "Do better next time.",
+            "You CAN prevail.",
+            "Bad luck.",
+            "Did you know? You died. Now you know.",
+            "With enough luck you'll win eventually even without skill",
+        ];
+        // If it is not on easy mode
+        if !crate::SETTINGS.difficulty.is_easy() {
+            valid.push("You should try easy mode, it suits people like you.");
         }
+        // If the player killed themself
+        if state.player.killer.unwrap().1.is_none() {
+            valid.push("If you kill yourself that well then they'll be out of a job.")
+        }
+        // If the player was killed by a basic
+        else if state.player.killer.unwrap().1.unwrap() == crate::enemy::Variant::basic().to_key()
+        {
+            valid.push(
+                "You do realize how many things were waiting to try and kill you right? \
+                Think of how disapointed they'll be when they find out you were done in by \
+                the absolute weakest of the lot.",
+            )
+        }
+        // If the player is a coward but died to a boss anyway
+        else if crate::enemy::Variant::from_key(state.player.killer.unwrap().1.unwrap()).is_boss()
+            && crate::stats().cowardice > state.level
+        {
+            valid.push("Maybe you should have run from that one like you did with the others.");
+        }
+        // If they died to a basic_boss on level 0
+        if state.level == 0
+            && state
+                .player
+                .killer
+                .unwrap()
+                .1
+                .is_some_and(|key| key == crate::enemy::Variant::basic_boss().to_key())
+        {
+            valid.push("Fair enough, that thing is strong.")
+        }
+
+        write!(
+            out,
+            "{}",
+            valid[crate::random::random_index(valid.len()).unwrap()]
+        )
         .unwrap();
     }
     // returns whether or not the item was added successfully

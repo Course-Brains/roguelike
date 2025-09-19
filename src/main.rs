@@ -334,8 +334,9 @@ fn main() {
     let _weirdifier = Weirdifier::new();
     state.render();
     loop {
-        if let Some(show_stats) = Player::handle_death(&state) {
+        if state.player.is_dead() {
             stats().collect_death(&state);
+            let show_stats = Player::handle_death(&state);
             save_stats();
             if show_stats {
                 log!("Showing end of game stats:\n{:#?}", stats());
@@ -639,7 +640,7 @@ impl State {
                 501,
                 45,
                 15,
-                2000,
+                State::level_1_budget(),
                 3,
                 State::level_1_highest_tier(),
             ),

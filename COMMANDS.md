@@ -242,3 +242,17 @@ set\_feedback \[text\] ...
 
 toggle\_show\_reachable
     Toggles graphics for showing reachable tiles.
+
+cheats
+    Enables cheats, thus enabling most commands. The list of commands
+    that can be used without cheats is as follows (because it is much
+    shorter than the list of ones that require it):
+        redraw
+        force\_flood
+        checksum
+        set\_bench
+        set\_feedback
+        toggle\_show\_reachable
+        cheats
+    The criteria for a command to not require cheats is for it to
+    neither do an illegal action nor give illegal information.

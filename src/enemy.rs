@@ -1061,7 +1061,7 @@ impl Variant {
     fn max_health(&self) -> usize {
         match self {
             Variant::Basic => 3,
-            Variant::BasicBoss(_) => 10,
+            Variant::BasicBoss(_) => 7,
             Variant::Mage(_) => 5,
             Variant::MageBoss(_) => 10,
             Variant::Fighter(_) => 5,

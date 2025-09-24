@@ -43,6 +43,7 @@ enum Command {
     SetFeedback(String),
     ToggleShowReachable,
     Cheats,
+    KillPlayer,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -138,6 +139,7 @@ impl Command {
             )),
             "toggle_show_reachable" => Ok(Command::ToggleShowReachable),
             "cheats" => Ok(Command::Cheats),
+            "kill_player" => Ok(Command::KillPlayer),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
@@ -499,6 +501,9 @@ impl Command {
             }
             Command::Cheats => {
                 crate::CHEATS.store(true, crate::RELAXED);
+            }
+            Command::KillPlayer => {
+                state.player.killer = Some(("falling out of the world", None));
             }
         }
     }

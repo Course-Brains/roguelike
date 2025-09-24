@@ -1,3 +1,4 @@
 kick_enemies true
 kick_doors true
 difficulty normal
+fast_mode false

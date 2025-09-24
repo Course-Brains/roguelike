@@ -256,3 +256,7 @@ cheats
         cheats
     The criteria for a command to not require cheats is for it to
     neither do an illegal action nor give illegal information.
+
+kill\_player
+    It kills the player. Do I really need to explain this any more than
+    the name?

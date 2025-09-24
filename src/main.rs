@@ -50,7 +50,7 @@ const BUDGET_PER_LAYER: usize = 100;
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
 fn stats<'a>() -> std::sync::MutexGuard<'a, Stats> {
-    STATS.lock().unwrap()
+    STATS.try_lock().unwrap()
 }
 // Whether or not the console was used
 static CHEATS: AtomicBool = AtomicBool::new(false);
@@ -326,7 +326,9 @@ fn main() {
     };
     // discourage save scumming by making it so that if it closes non-properly then the file is
     // gone
-    let _ = std::fs::remove_file(PATH);
+    if !SETTINGS.difficulty.is_easy() {
+        let _ = std::fs::remove_file(PATH);
+    }
     generator::DO_DELAY.store(true, Ordering::SeqCst);
     state.next_map = generate(state.next_map_settings);
     let mut command_handler = commands::CommandHandler::new();
@@ -579,16 +581,18 @@ fn main() {
                 }
             }
             Input::Fast => {
-                state.player.fast ^= true;
-                Board::set_desc(
-                    &mut std::io::stdout(),
-                    match state.player.fast {
-                        true => "Fast movement enabled",
-                        false => "Fast movement disabled",
-                    },
-                );
-                state.reposition_cursor();
-                std::io::stdout().flush().unwrap();
+                if SETTINGS.fast_mode {
+                    state.player.fast ^= true;
+                    Board::set_desc(
+                        &mut std::io::stdout(),
+                        match state.player.fast {
+                            true => "Fast movement enabled",
+                            false => "Fast movement disabled",
+                        },
+                    );
+                    state.reposition_cursor();
+                    std::io::stdout().flush().unwrap();
+                }
             }
             Input::ClearFeedback => {
                 *feedback() = String::new();

@@ -4,6 +4,7 @@ pub struct Settings {
     pub kick_enemies: bool,
     pub kick_doors: bool,
     pub difficulty: Difficulty,
+    pub fast_mode: bool,
 }
 const DEFAULT_FILE: &[u8] = include_bytes!("default_settings.txt");
 macro_rules! err_continue {
@@ -41,6 +42,7 @@ impl Settings {
                                 }
                                 "kick_doors" => settings.kick_doors = err_continue!(value.parse()),
                                 "difficulty" => settings.difficulty = err_continue!(value.parse()),
+                                "fast_mode" => settings.fast_mode = err_continue!(value.parse()),
                                 _ => {}
                             }
                         }
@@ -61,6 +63,7 @@ impl Default for Settings {
             kick_enemies: true,
             kick_doors: true,
             difficulty: Difficulty::default(),
+            fast_mode: false,
         }
     }
 }

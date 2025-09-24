@@ -93,14 +93,7 @@ impl Player {
         }
     }
     fn starting_items() -> Items {
-        match crate::SETTINGS.difficulty {
-            Difficulty::Normal => [None; 6],
-            Difficulty::Easy => {
-                let mut out = [None; 6];
-                out[0] = Some(ItemType::HealthPotion);
-                out
-            }
-        }
+        [None; 6]
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         crate::log!("Moving from {} in {direction}", self.pos);
@@ -225,7 +218,10 @@ impl Player {
             self.health,
             self.energy
         );
-        if self.upgrades.full_energy_ding && self.energy == self.max_energy {
+        if self.upgrades.full_energy_ding
+            && self.energy == self.max_energy
+            && self.health == self.max_health
+        {
             crate::bell(Some(&mut std::io::stdout()));
         }
     }
@@ -241,6 +237,7 @@ impl Player {
     // returns whether or not they want to see their stats
     // By this point, death stat collection has happened
     pub fn handle_death(state: &crate::State) -> bool {
+        crate::log!("Handling death of player");
         let killer = state.player.killer.unwrap();
         println!(
             "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
@@ -266,6 +263,7 @@ impl Player {
         }
     }
     pub fn death_message(state: &crate::State) {
+        crate::log!("Getting death message");
         let mut out = std::io::stdout().lock();
         if state.level == 0
             && state.turn < 300
@@ -279,21 +277,38 @@ impl Player {
             write!(out, "Coward.").unwrap();
             return;
         }
+        crate::log!("Decided not to do special death message");
+
+        let mut kills = 0;
+        for kill in crate::stats().kills.values() {
+            kills += kill
+        }
+
+        let mut stat_len = None;
+        if let Ok(file) = std::fs::File::open("stats") {
+            stat_len = Some(file.metadata().unwrap().len());
+        }
+
+        let stats = crate::stats();
+
+        crate::log!("Doing normal death message");
 
         let mut valid = vec![
             "Do better next time.",
             "You CAN prevail.",
             "Bad luck.",
             "Did you know? You died. Now you know.",
-            "With enough luck you'll win eventually even without skill",
+            "With enough luck you'll win eventually, even without skill.",
+            "Try, try, and try again.",
+            "Better luck next time!",
         ];
         // If it is not on easy mode
         if !crate::SETTINGS.difficulty.is_easy() {
-            valid.push("You should try easy mode, it suits people like you.");
+            valid.push("You should try easy mode.");
         }
         // If the player killed themself
         if state.player.killer.unwrap().1.is_none() {
-            valid.push("If you kill yourself that well then they'll be out of a job.")
+            valid.push("If you kill yourself that well then we'll be out of a job.")
         }
         // If the player was killed by a basic
         else if state.player.killer.unwrap().1.unwrap() == crate::enemy::Variant::basic().to_key()
@@ -306,9 +321,9 @@ impl Player {
         }
         // If the player is a coward but died to a boss anyway
         else if crate::enemy::Variant::from_key(state.player.killer.unwrap().1.unwrap()).is_boss()
-            && crate::stats().cowardice > state.level
+            && stats.cowardice > state.level
         {
-            valid.push("Maybe you should have run from that one like you did with the others.");
+            valid.push("Maybe you should have run from that one, like you did with the others.");
         }
         // If they died to a basic_boss on level 0
         if state.level == 0
@@ -321,13 +336,33 @@ impl Player {
         {
             valid.push("Fair enough, that thing is strong.")
         }
+        // If the stats file is more than 500 bytes
+        if let Ok(stats) = std::fs::File::open("stats") {
+            if stats.metadata().unwrap().len() > 500 {
+                valid.push("Have you heard the definition of insanity?")
+            }
+        }
+        // If they have more doors opened than kills
+        if stats.doors_opened / 10 > kills {
+            valid.push(
+                "You should have spent less time opening doors and more time actually \
+            fighting.",
+            )
+        }
+        // If they haven't disabled kicking doors and the stat file is below a certain length and
+        // less than 1% of the doors opened we done so by kicking them
+        if crate::SETTINGS.kick_doors
+            && stat_len.is_none_or(|len| len < 500)
+            && stats.doors_opened_by_walking < stats.doors_opened / 100
+        {
+            valid.push("You can open doors by walking into them.")
+        }
+        crate::log!("Valid death messages {valid:?}");
+        let index = crate::random::random_index(valid.len()).unwrap();
+        crate::log!("Picked {}", valid[index]);
 
-        write!(
-            out,
-            "{}",
-            valid[crate::random::random_index(valid.len()).unwrap()]
-        )
-        .unwrap();
+        write!(out, "{}", valid[index]).unwrap();
+        crate::log!("Done printing death message");
     }
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {

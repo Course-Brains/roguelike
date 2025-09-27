@@ -39,7 +39,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 7;
+const SAVE_VERSION: Version = 8;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -597,6 +597,25 @@ fn main() {
             Input::ClearFeedback => {
                 *feedback() = String::new();
             }
+            Input::Memorize => {
+                state.player.memory = Some(state.player.selector);
+                set_feedback(format!(
+                    "You have memorized the position: {}",
+                    state.player.selector
+                ));
+                stats().times_memorized += 1;
+                state.render();
+            }
+            Input::Remember => {
+                set_feedback(match state.player.memory {
+                    Some(memory) => {
+                        stats().times_remembered += 1;
+                        format!("You remember the position {memory}")
+                    }
+                    None => "You have made no mental notes in this place.".to_string(),
+                });
+                state.render();
+            }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
@@ -827,6 +846,7 @@ impl State {
         self.player.pos = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
         self.board.flood(self.player.pos);
+        self.player.memory = None;
         self.render();
     }
     fn get_budget(&self) -> usize {
@@ -868,6 +888,7 @@ impl State {
         }
 
         stats().shop_money.push(self.player.get_money());
+        self.player.memory = None;
         self.render();
     }
     fn reposition_cursor(&mut self) {
@@ -1395,8 +1416,12 @@ struct Stats {
     doors_opened_by_walking: usize,
     // Number of enemies attacked with wasd
     enemies_hit_by_walking: usize,
-    // The difficulty of the run
-    difficulty: Difficulty,
+    // The settings used at death
+    settings: Settings,
+    // The number of times the player memorized a position
+    times_memorized: usize,
+    // The number of times the player remembered a position
+    times_remembered: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1427,7 +1452,9 @@ impl Stats {
             hits_taken: 0,
             doors_opened_by_walking: 0,
             enemies_hit_by_walking: 0,
-            difficulty: Difficulty::default(),
+            settings: Settings::default(),
+            times_memorized: 0,
+            times_remembered: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
@@ -1441,7 +1468,7 @@ impl Stats {
                 im_too_tired_to_come_up_with_a_good_variable_name.1
             })
             .flatten();
-        self.difficulty = SETTINGS.difficulty;
+        self.settings = SETTINGS.clone();
     }
     fn add_item(&mut self, item: ItemType) {
         self.buy_list
@@ -1503,7 +1530,9 @@ impl FromBinary for Stats {
             hits_taken: usize::from_binary(binary)?,
             doors_opened_by_walking: usize::from_binary(binary)?,
             enemies_hit_by_walking: usize::from_binary(binary)?,
-            difficulty: Difficulty::from_binary(binary)?,
+            settings: Settings::from_binary(binary)?,
+            times_memorized: usize::from_binary(binary)?,
+            times_remembered: usize::from_binary(binary)?,
         })
     }
 }
@@ -1535,7 +1564,9 @@ impl ToBinary for Stats {
         self.hits_taken.to_binary(binary)?;
         self.doors_opened_by_walking.to_binary(binary)?;
         self.enemies_hit_by_walking.to_binary(binary)?;
-        self.difficulty.to_binary(binary)
+        self.settings.to_binary(binary)?;
+        self.times_memorized.to_binary(binary)?;
+        self.times_remembered.to_binary(binary)
     }
 }
 fn save_stats() {
@@ -1697,7 +1728,9 @@ fn view_stats() {
                         "hits_taken" => list!(hits_taken, index),
                         "doors_opened_by_walking" => list!(doors_opened_by_walking, index),
                         "enemies_hit_by_walking" => list!(enemies_hit_by_walking, index),
-                        "difficulty" => list!(difficulty, index),
+                        "settings" => list!(settings, index),
+                        "times_memorized" => list!(times_memorized, index),
+                        "times_remembered" => list!(times_remembered, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

@@ -1087,6 +1087,7 @@ impl Variant {
         }
     }
     fn dash_stun(&self) -> usize {
+        // dash_stun of 1 does not show as visible but does skip their current turn
         match self {
             // Strong in melee
             Variant::BasicBoss(_) | Variant::FighterBoss { .. } => 1,

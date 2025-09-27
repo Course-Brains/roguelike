@@ -26,3 +26,5 @@ c: convert energy to money
 i: toggle inspect mode
 z: toggle aiming
 C: clear feedback
+m: memorize selected position
+R: Remember selected position

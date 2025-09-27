@@ -31,6 +31,8 @@ pub struct Player {
     // Whether or not the selector should move faster
     pub fast: bool,
     pub limbs: Limbs,
+    // The memorized position
+    pub memory: Option<Vector>,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -54,6 +56,7 @@ impl Player {
             aiming: false,
             fast: false,
             limbs: Limbs::new(),
+            memory: None,
         }
     }
     fn starting_max_health() -> usize {
@@ -656,6 +659,7 @@ impl FromBinary for Player {
             aiming: bool::from_binary(binary)?,
             fast: bool::from_binary(binary)?,
             limbs: Limbs::from_binary(binary)?,
+            memory: Option::from_binary(binary)?,
         })
     }
 }
@@ -682,7 +686,8 @@ impl ToBinary for Player {
         self.detect_mod.to_binary(binary)?;
         self.aiming.to_binary(binary)?;
         self.fast.to_binary(binary)?;
-        self.limbs.to_binary(binary)
+        self.limbs.to_binary(binary)?;
+        self.memory.as_ref().to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

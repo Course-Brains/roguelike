@@ -1,5 +1,6 @@
 use crate::{FromBinary, ToBinary};
 use std::io::Read;
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub kick_enemies: bool,
     pub kick_doors: bool,
@@ -7,14 +8,6 @@ pub struct Settings {
     pub fast_mode: bool,
 }
 const DEFAULT_FILE: &[u8] = include_bytes!("default_settings.txt");
-macro_rules! err_continue {
-    ($($token:tt)*) => {
-        match $($token)* {
-            Ok(val) => val,
-            Err(_) => continue,
-        }
-    };
-}
 impl Settings {
     pub fn get_from_file() -> Settings {
         match std::fs::exists("settings").unwrap() {
@@ -36,13 +29,19 @@ impl Settings {
                     let mut iter = line.split(' ');
                     if let Some(field) = iter.next() {
                         if let Some(value) = iter.next() {
+                            macro_rules! thing {
+                                ($field:ident) => {
+                                    settings.$field = match value.parse() {
+                                        Ok(field) => field,
+                                        Err(_) => continue,
+                                    }
+                                };
+                            }
                             match field {
-                                "kick_enemies" => {
-                                    settings.kick_enemies = err_continue!(value.parse())
-                                }
-                                "kick_doors" => settings.kick_doors = err_continue!(value.parse()),
-                                "difficulty" => settings.difficulty = err_continue!(value.parse()),
-                                "fast_mode" => settings.fast_mode = err_continue!(value.parse()),
+                                "kick_enemies" => thing!(kick_enemies),
+                                "kick_doors" => thing!(kick_doors),
+                                "difficulty" => thing!(difficulty),
+                                "fast_mode" => thing!(fast_mode),
                                 _ => {}
                             }
                         }
@@ -65,6 +64,27 @@ impl Default for Settings {
             difficulty: Difficulty::default(),
             fast_mode: false,
         }
+    }
+}
+impl FromBinary for Settings {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Settings {
+            kick_enemies: bool::from_binary(binary)?,
+            kick_doors: bool::from_binary(binary)?,
+            difficulty: Difficulty::from_binary(binary)?,
+            fast_mode: bool::from_binary(binary)?,
+        })
+    }
+}
+impl ToBinary for Settings {
+    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+        self.kick_enemies.to_binary(binary)?;
+        self.kick_doors.to_binary(binary)?;
+        self.difficulty.to_binary(binary)?;
+        self.fast_mode.to_binary(binary)
     }
 }
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]

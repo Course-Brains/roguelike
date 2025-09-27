@@ -151,6 +151,10 @@ impl Player {
             damage = self.health - 1;
         }
         // Damage has been determined
+        if crate::BONUS_NO_DAMAGE.load(crate::RELAXED) {
+            crate::set_feedback("Couldn't you have avoided that hit?".to_string());
+            crate::bell(Some(&mut std::io::stdout()));
+        }
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
         crate::stats().hits_taken += 1;
 
@@ -210,6 +214,10 @@ impl Player {
                 crate::stats().damage_healed += 1;
                 self.health += health;
             } else {
+                if crate::BONUS_NO_WASTE.load(crate::RELAXED) {
+                    crate::set_feedback("So wastefull...".to_string());
+                    crate::bell(Some(&mut std::io::stdout()));
+                }
                 crate::BONUS_NO_WASTE.store(false, crate::RELAXED);
                 crate::stats().energy_wasted += 1;
             }

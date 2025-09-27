@@ -412,6 +412,10 @@ fn main() {
                     if state.board.has_collision(checking) {
                         continue;
                     }
+                    if BONUS_NO_ENERGY.load(RELAXED) {
+                        set_feedback("Was going faster worth it?".to_string());
+                        bell(Some(&mut std::io::stdout()));
+                    }
                     BONUS_NO_ENERGY.store(false, RELAXED);
                     state.attack_enemy(state.player.pos + direction, false, true, false);
                     state.attack_enemy(checking - direction, false, true, false);
@@ -516,12 +520,16 @@ fn main() {
             }
             Input::Block => {
                 if state.player.energy != 0 {
-                    BONUS_NO_ENERGY.store(false, RELAXED);
                     stats().energy_used += 1;
                     state.player.was_hit = false;
                     state.player.blocking = true;
                     state.increment();
                     if state.player.was_hit {
+                        if BONUS_NO_ENERGY.load(RELAXED) {
+                            set_feedback("Did you really need to block that?".to_string());
+                            bell(Some(&mut std::io::stdout()));
+                        }
+                        BONUS_NO_ENERGY.store(false, RELAXED);
                         state.player.energy -= 1;
                     }
                     state.player.blocking = false;

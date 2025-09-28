@@ -1,5 +1,6 @@
 use crate::{FromBinary, ToBinary};
-use std::io::Read;
+use std::io::{Read, Write};
+const PATH: &str = "settings";
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub kick_enemies: bool,
@@ -10,7 +11,31 @@ pub struct Settings {
 const DEFAULT_FILE: &[u8] = include_bytes!("default_settings.txt");
 impl Settings {
     pub fn get_from_file() -> Settings {
-        match std::fs::exists("settings").unwrap() {
+        let difficulty_choice = std::cell::LazyCell::new(|| {
+            crate::log!("Getting difficulty from player choice");
+            // Need to get the player to choose a difficulty
+            println!("Select your difficulty.\n1: easy\n2: normal");
+            std::io::stdout().flush().unwrap();
+            let mut stdin = std::io::stdin().lock();
+            let mut buf = [0];
+            let chosen = loop {
+                stdin.read_exact(&mut buf).unwrap();
+                match buf[0] {
+                    b'1' => break Difficulty::Easy,
+                    b'2' => break Difficulty::Normal,
+                    _ => {}
+                }
+            };
+            std::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(PATH)
+                .unwrap()
+                .write_all(format!("difficulty {chosen}").as_bytes())
+                .unwrap();
+            chosen
+        });
+        match std::fs::exists(PATH).unwrap() {
             true => {
                 let mut contents = String::new();
                 std::fs::File::open("settings")
@@ -18,6 +43,7 @@ impl Settings {
                     .read_to_string(&mut contents)
                     .unwrap();
                 let mut settings = Settings::default();
+                let mut difficulty_was_not_set = true;
                 for line in contents.lines() {
                     let line = line.trim();
                     if line.starts_with("//") {
@@ -40,18 +66,27 @@ impl Settings {
                             match field {
                                 "kick_enemies" => thing!(kick_enemies),
                                 "kick_doors" => thing!(kick_doors),
-                                "difficulty" => thing!(difficulty),
+                                "difficulty" => {
+                                    difficulty_was_not_set = false;
+                                    thing!(difficulty)
+                                }
                                 "fast_mode" => thing!(fast_mode),
                                 _ => {}
                             }
                         }
                     }
                 }
+                if difficulty_was_not_set {
+                    settings.difficulty = *difficulty_choice;
+                }
+                crate::log!("Settings chosen: {settings:?}");
                 settings
             }
             false => {
                 std::fs::write("settings", DEFAULT_FILE).unwrap();
-                Settings::default()
+                let mut settings = Settings::default();
+                settings.difficulty = *difficulty_choice;
+                settings
             }
         }
     }

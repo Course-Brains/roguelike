@@ -212,6 +212,7 @@ fn main() {
         "Recieved args: {:?}",
         std::env::args().collect::<Vec<String>>()
     );
+    std::sync::LazyLock::force(&SETTINGS);
     let mut args = std::env::args();
     let mut counting = false;
     let mut testing = false;

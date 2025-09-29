@@ -18,8 +18,8 @@ pub struct Player {
     pub was_hit: bool,
     pub focus: Focus,
     // If the player was killed, it has the killer's name to be shown and if applicable, the
-    // numerical id of killing variant
-    pub killer: Option<(&'static str, Option<u8>)>,
+    // numerical id of killing variant, and the killing blow's damage
+    pub killer: Option<(&'static str, Option<u8>, usize)>,
     pub items: Items,
     money: usize,
     pub perception: usize,
@@ -163,7 +163,7 @@ impl Player {
         }
 
         if self.health <= damage {
-            self.killer = Some((attacker, variant_id));
+            self.killer = Some((attacker, variant_id, damage));
             crate::stats().damage_taken += self.health;
             return Ok(true);
         }
@@ -231,7 +231,7 @@ impl Player {
         );
         if self.upgrades.full_energy_ding
             && self.energy == self.max_energy
-            && self.health == self.max_health
+            && (self.health == self.max_health || self.upgrades.lifesteal)
         {
             crate::bell(Some(&mut std::io::stdout()));
         }

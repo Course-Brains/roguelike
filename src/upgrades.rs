@@ -221,12 +221,12 @@ impl UpgradeType {
             // Normal upgrades
             Self::Map => "A map",
             Self::SoftShoes => "A pair of particularly soft shoes",
-            Self::PreciseConvert => "Clean needles",
-            Self::HealthBoost => "Additional flesh",
-            Self::EnergyBoost => "An adrenal gland",
-            Self::Lifesteal => "A butcher's knife",
+            Self::PreciseConvert => crate::debug_only!("precise_convert"),
+            Self::HealthBoost => crate::debug_only!("health_boost"),
+            Self::EnergyBoost => crate::debug_only!("energy_boost"),
+            Self::Lifesteal => crate::debug_only!("lifesteal"),
             // Bonuses
-            Self::BonusNoWaste => "A result of your greed",
+            Self::BonusNoWaste => crate::debug_only!("bonus_no_waste"),
             Self::BonusNoDamage => "A result of your fear",
             Self::BonusKillAll => "A result of your cruelty",
             Self::BonusNoEnergy => crate::debug_only!("bonus_no_energy"),

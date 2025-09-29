@@ -44,6 +44,7 @@ enum Command {
     ToggleShowReachable,
     Cheats,
     KillPlayer,
+    GetFeedback,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -140,11 +141,12 @@ impl Command {
             "toggle_show_reachable" => Ok(Command::ToggleShowReachable),
             "cheats" => Ok(Command::Cheats),
             "kill_player" => Ok(Command::KillPlayer),
+            "get_feedback" => Ok(Command::GetFeedback),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
     fn enact(self, state: &mut State, out: &mut Sender<String>) {
-        if self.is_cheat() && crate::CHEATS.load(crate::RELAXED) {
+        if self.is_cheat() && !crate::CHEATS.load(crate::RELAXED) {
             out.send(
                 "Attempted to use a command that requires cheats without cheats enabled,\
                 please turn on cheats."
@@ -503,7 +505,11 @@ impl Command {
                 crate::CHEATS.store(true, crate::RELAXED);
             }
             Command::KillPlayer => {
-                state.player.killer = Some(("falling out of the world", None));
+                state.player.killer = Some(("falling out of the world", None, 0));
+            }
+            Command::GetFeedback => {
+                out.send(format!("Current feedback is: \"{}\"", *crate::feedback()))
+                    .unwrap();
             }
         }
     }
@@ -518,6 +524,7 @@ impl Command {
                 | Self::SetFeedback(_)
                 | Self::ToggleShowReachable
                 | Self::Cheats
+                | Self::GetFeedback
         )
     }
 }

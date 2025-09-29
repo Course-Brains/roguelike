@@ -39,7 +39,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 8;
+const SAVE_VERSION: Version = 9;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -605,6 +605,7 @@ fn main() {
             }
             Input::ClearFeedback => {
                 *feedback() = String::new();
+                state.render();
             }
             Input::Memorize => {
                 state.player.memory = Some(state.player.selector);
@@ -1431,6 +1432,8 @@ struct Stats {
     times_memorized: usize,
     // The number of times the player remembered a position
     times_remembered: usize,
+    // The damage of the attack that killed the player
+    killing_damage: usize,
 }
 impl Stats {
     fn new() -> Stats {
@@ -1464,19 +1467,16 @@ impl Stats {
             settings: Settings::default(),
             times_memorized: 0,
             times_remembered: 0,
+            killing_damage: 0,
         }
     }
     fn collect_death(&mut self, state: &State) {
         self.depth = state.level;
         self.upgrades = state.player.upgrades;
         self.death_turn = state.turn;
-        self.killer = state
-            .player
-            .killer
-            .map(|im_too_tired_to_come_up_with_a_good_variable_name| {
-                im_too_tired_to_come_up_with_a_good_variable_name.1
-            })
-            .flatten();
+        let killing_data = state.player.killer.unwrap();
+        self.killer = killing_data.1;
+        self.killing_damage = killing_data.2;
         self.settings = SETTINGS.clone();
     }
     fn add_item(&mut self, item: ItemType) {
@@ -1542,6 +1542,7 @@ impl FromBinary for Stats {
             settings: Settings::from_binary(binary)?,
             times_memorized: usize::from_binary(binary)?,
             times_remembered: usize::from_binary(binary)?,
+            killing_damage: usize::from_binary(binary)?,
         })
     }
 }
@@ -1575,7 +1576,8 @@ impl ToBinary for Stats {
         self.enemies_hit_by_walking.to_binary(binary)?;
         self.settings.to_binary(binary)?;
         self.times_memorized.to_binary(binary)?;
-        self.times_remembered.to_binary(binary)
+        self.times_remembered.to_binary(binary)?;
+        self.killing_damage.to_binary(binary)
     }
 }
 fn save_stats() {

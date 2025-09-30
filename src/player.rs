@@ -142,6 +142,16 @@ impl Player {
         if crate::SETTINGS.difficulty.is_easy() && damage > 1 {
             damage /= 2;
         }
+        // If no damage was taken then there is no need to punish the player for taking damage
+        if damage == 0 {
+            return Ok(false);
+        }
+
+        // By this point, it has beeen determined that the player is taking damage.
+
+        // Notifying the player that they took damage
+        crate::bell(Some(&mut std::io::stdout()));
+
         // One shot protection
         if self.health == self.max_health && damage > self.health {
             crate::log!(

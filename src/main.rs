@@ -1634,11 +1634,14 @@ fn view_stats() {
     log!("Entering stats viewer");
     let mut input = String::new();
     let mut file = std::fs::File::open(STAT_PATH).unwrap();
-    assert_eq!(
-        SAVE_VERSION,
-        Version::from_binary(&mut file).unwrap(),
-        "Invalid save format"
-    );
+    if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
+        println!(
+            "{}The save version of the file does not match the \
+        current install and therefore cannot be viewed\x1b[0m",
+            Style::new().red()
+        );
+        return;
+    }
     let stats = Vec::<Stats>::from_binary(&mut file).unwrap();
     let mut index = 0;
     macro_rules! list {

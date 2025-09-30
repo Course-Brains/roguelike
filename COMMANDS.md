@@ -264,3 +264,6 @@ kill\_player
 
 get\_feedback
     Gets the current player feedback.
+
+designate\_boss \[index\]
+    Designates the enemy at the given index as a boss.

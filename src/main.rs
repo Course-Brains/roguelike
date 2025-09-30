@@ -791,6 +791,7 @@ impl State {
                     .is_some_and(|last_index| *last_index == index),
             );
         }
+        self.board.update_boss_pos();
         self.board.purge_dead();
         if bench() {
             writeln!(bench::think(), "{}", time.as_millis()).unwrap();
@@ -823,6 +824,18 @@ impl State {
         );
     }
     fn increment(&mut self) {
+        // Order of events:
+        // decriment effects
+        // enemies move and think (in that order)
+        // last known boss positions are updated
+        // dead are purged
+        // spells are updated
+        // exits are placed
+        // turn increments
+        // turn on map increments
+        // rendering
+        // one turn specials reset
+        // enemy damage taken flag reset
         let mut start = std::time::Instant::now();
         self.player.decriment_effects();
         let mut time = start.elapsed();

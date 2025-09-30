@@ -1124,6 +1124,13 @@ impl Board {
         self.spells = circles;
         std::mem::drop(specials);
     }
+    pub fn update_boss_pos(&mut self) {
+        for boss in self.bosses.iter_mut() {
+            if let Some(arc) = boss.sibling.upgrade() {
+                boss.last_pos = arc.try_read().unwrap().pos;
+            }
+        }
+    }
 }
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;

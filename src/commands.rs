@@ -45,6 +45,7 @@ enum Command {
     Cheats,
     KillPlayer,
     GetFeedback,
+    DesignateBoss(usize),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -142,6 +143,7 @@ impl Command {
             "cheats" => Ok(Command::Cheats),
             "kill_player" => Ok(Command::KillPlayer),
             "get_feedback" => Ok(Command::GetFeedback),
+            "designate_boss" => Ok(Command::DesignateBoss(parse(iter.next())?)),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
@@ -510,6 +512,13 @@ impl Command {
             Command::GetFeedback => {
                 out.send(format!("Current feedback is: \"{}\"", *crate::feedback()))
                     .unwrap();
+            }
+            Command::DesignateBoss(index) => {
+                let arc = state.board.enemies[index].clone();
+                state.board.bosses.push(crate::board::Boss {
+                    last_pos: arc.try_read().unwrap().pos,
+                    sibling: std::sync::Arc::downgrade(&arc),
+                });
             }
         }
     }

@@ -225,7 +225,7 @@ impl Player {
                 self.health += health;
             } else {
                 if crate::BONUS_NO_WASTE.load(crate::RELAXED) {
-                    crate::set_feedback("So wastefull...".to_string());
+                    crate::set_feedback("So wasteful...".to_string());
                     crate::bell(Some(&mut std::io::stdout()));
                 }
                 crate::BONUS_NO_WASTE.store(false, crate::RELAXED);
@@ -366,8 +366,8 @@ impl Player {
         // If they have more doors opened than kills
         if stats.doors_opened / 10 > kills {
             valid.push(
-                "You should have spent less time opening doors and more time actually \
-            fighting.",
+                "Maybe if you spent more time actually fighting instead of opening doors \
+                you'd still be alive.",
             )
         }
         // If they haven't disabled kicking doors and the stat file is below a certain length and

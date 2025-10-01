@@ -191,6 +191,30 @@ fn draw_feedback() {
 }
 static SETTINGS: std::sync::LazyLock<Settings> = std::sync::LazyLock::new(Settings::get_from_file);
 
+static INPUT_SYSTEM: std::sync::LazyLock<(
+    std::sync::mpsc::Sender<CommandInput>,
+    Mutex<std::sync::mpsc::Receiver<CommandInput>>,
+)> = std::sync::LazyLock::new(|| {
+    let (send, recv) = std::sync::mpsc::channel();
+    (send, Mutex::new(recv))
+});
+fn initialize_stdin_listener() -> std::thread::Thread {
+    std::thread::spawn(|| {
+        let send = INPUT_SYSTEM.0.clone();
+        loop {
+            std::thread::park();
+            send.send(CommandInput::Input(Input::get())).unwrap();
+        }
+    })
+    .thread()
+    .clone()
+}
+
+enum CommandInput {
+    Input(input::Input),
+    Command(commands::Command),
+}
+
 ///////////////////
 // Debug toggles //
 ///////////////////
@@ -332,10 +356,13 @@ fn main() {
     }
     generator::DO_DELAY.store(true, Ordering::SeqCst);
     state.next_map = generate(state.next_map_settings);
-    let mut command_handler = commands::CommandHandler::new();
+    let mut command_tx = commands::listen(INPUT_SYSTEM.0.clone());
     state.board.flood(state.player.pos);
     let _weirdifier = Weirdifier::new();
     state.render();
+    let input_thread = initialize_stdin_listener();
+    let input_lock = INPUT_SYSTEM.1.try_lock().unwrap();
+    let mut got_input = true;
     loop {
         if state.player.is_dead() {
             stats().collect_death(&state);
@@ -367,264 +394,280 @@ fn main() {
         else if LOAD_SHOP.swap(false, Ordering::Relaxed) {
             state.load_shop()
         }
-        command_handler.handle(&mut state);
-        match Input::get() {
-            Input::Wasd(direction, sprint) => match sprint {
-                true => {
-                    match direction {
-                        Direction::Up => {
-                            if state.player.pos.y < 3 {
-                                bell(None);
-                                continue;
-                            }
-                        }
-                        Direction::Down => {
-                            if state.player.pos.y > state.board.y - 2 {
-                                bell(None);
-                                continue;
-                            }
-                        }
-                        Direction::Left => {
-                            if state.player.pos.x < 3 {
-                                bell(None);
-                                continue;
-                            }
-                        }
-                        Direction::Right => {
-                            if state.player.pos.x > state.board.x - 2 {
-                                bell(None);
-                                continue;
-                            }
-                        }
-                    }
-                    if state.player.energy == 0 {
-                        bell(None);
-                        continue;
-                    }
-                    let mut checking = state.player.pos + direction;
-                    if !state.board.dashable(checking) {
-                        continue;
-                    }
-                    checking += direction;
-                    if !state.board.dashable(checking) {
-                        continue;
-                    }
-                    checking += direction;
-                    if state.board.has_collision(checking) {
-                        continue;
-                    }
-                    if BONUS_NO_ENERGY.load(RELAXED) {
-                        set_feedback("Was going faster worth it?".to_string());
-                        bell(Some(&mut std::io::stdout()));
-                    }
-                    BONUS_NO_ENERGY.store(false, RELAXED);
-                    state.attack_enemy(state.player.pos + direction, false, true, false);
-                    state.attack_enemy(checking - direction, false, true, false);
-                    state.player.energy -= 1;
-                    state.player.do_move(direction, &mut state.board);
-                    state.player.do_move(direction, &mut state.board);
-                    state.player.do_move(direction, &mut state.board);
-                    stats().energy_used += 1;
-                    state.increment()
-                }
-                false => {
-                    if state.player.fast {
-                        for _ in 0..5 {
-                            if state.is_valid_move(direction) {
-                                state.player.do_move(direction, &mut state.board);
-                                state.increment();
-                            }
-                        }
-                    } else {
-                        if state.is_valid_move(direction) {
-                            state.player.do_move(direction, &mut state.board);
-                            state.increment()
-                        } else if state
-                            .board
-                            .get_enemy(state.player.pos + direction, None)
-                            .is_some()
-                            && SETTINGS.kick_enemies
-                        {
-                            state.attack_enemy(state.player.pos + direction, false, false, true);
-                            state.increment();
-                        } else if !SETTINGS.kick_doors {
-                            // Doing it like this because can't do && on if let
-                        } else if let Some(board::Piece::Door(door)) =
-                            state.board[state.player.pos + direction]
-                        {
-                            if !door.open {
-                                state.open_door(state.player.pos + direction, true);
-                            }
-                        }
-                    }
-                }
-            },
-            Input::Arrow(direction) => {
-                let new_pos = {
-                    match state.player.fast {
+        if got_input {
+            input_thread.unpark();
+            got_input = false
+        }
+        match input_lock.recv().unwrap() {
+            CommandInput::Input(input) => {
+                got_input = true;
+                match input {
+                    Input::Wasd(direction, sprint) => match sprint {
                         true => {
-                            let mut pos = state.player.selector;
-                            for _ in 0..5 {
-                                if state.is_on_board(pos, direction) {
-                                    pos += direction;
-                                } else {
-                                    break;
+                            match direction {
+                                Direction::Up => {
+                                    if state.player.pos.y < 3 {
+                                        bell(None);
+                                        continue;
+                                    }
+                                }
+                                Direction::Down => {
+                                    if state.player.pos.y > state.board.y - 2 {
+                                        bell(None);
+                                        continue;
+                                    }
+                                }
+                                Direction::Left => {
+                                    if state.player.pos.x < 3 {
+                                        bell(None);
+                                        continue;
+                                    }
+                                }
+                                Direction::Right => {
+                                    if state.player.pos.x > state.board.x - 2 {
+                                        bell(None);
+                                        continue;
+                                    }
                                 }
                             }
-                            pos
+                            if state.player.energy == 0 {
+                                bell(None);
+                                continue;
+                            }
+                            let mut checking = state.player.pos + direction;
+                            if !state.board.dashable(checking) {
+                                continue;
+                            }
+                            checking += direction;
+                            if !state.board.dashable(checking) {
+                                continue;
+                            }
+                            checking += direction;
+                            if state.board.has_collision(checking) {
+                                continue;
+                            }
+                            if BONUS_NO_ENERGY.load(RELAXED) {
+                                set_feedback("Was going faster worth it?".to_string());
+                                bell(Some(&mut std::io::stdout()));
+                            }
+                            BONUS_NO_ENERGY.store(false, RELAXED);
+                            state.attack_enemy(state.player.pos + direction, false, true, false);
+                            state.attack_enemy(checking - direction, false, true, false);
+                            state.player.energy -= 1;
+                            state.player.do_move(direction, &mut state.board);
+                            state.player.do_move(direction, &mut state.board);
+                            state.player.do_move(direction, &mut state.board);
+                            stats().energy_used += 1;
+                            state.increment()
                         }
                         false => {
-                            if state.is_on_board(state.player.selector, direction) {
-                                state.player.selector + direction
+                            if state.player.fast {
+                                for _ in 0..5 {
+                                    if state.is_valid_move(direction) {
+                                        state.player.do_move(direction, &mut state.board);
+                                        state.increment();
+                                    }
+                                }
                             } else {
-                                state.player.selector
+                                if state.is_valid_move(direction) {
+                                    state.player.do_move(direction, &mut state.board);
+                                    state.increment()
+                                } else if state
+                                    .board
+                                    .get_enemy(state.player.pos + direction, None)
+                                    .is_some()
+                                    && SETTINGS.kick_enemies
+                                {
+                                    state.attack_enemy(
+                                        state.player.pos + direction,
+                                        false,
+                                        false,
+                                        true,
+                                    );
+                                    state.increment();
+                                } else if !SETTINGS.kick_doors {
+                                    // Doing it like this because can't do && on if let
+                                } else if let Some(board::Piece::Door(door)) =
+                                    state.board[state.player.pos + direction]
+                                {
+                                    if !door.open {
+                                        state.open_door(state.player.pos + direction, true);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    Input::Arrow(direction) => {
+                        let new_pos = {
+                            match state.player.fast {
+                                true => {
+                                    let mut pos = state.player.selector;
+                                    for _ in 0..5 {
+                                        if state.is_on_board(pos, direction) {
+                                            pos += direction;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    pos
+                                }
+                                false => {
+                                    if state.is_on_board(state.player.selector, direction) {
+                                        state.player.selector + direction
+                                    } else {
+                                        state.player.selector
+                                    }
+                                }
+                            }
+                        };
+                        if new_pos != state.player.selector {
+                            state.player.selector = new_pos;
+                            state.board.draw_desc(&state.player, &mut std::io::stdout());
+                            state.player.reposition_cursor(
+                                state
+                                    .board
+                                    .has_background(state.player.selector, &state.player),
+                                state.board.get_render_bounds(&state.player),
+                            );
+                            if let player::Focus::Selector = state.player.focus {
+                                state.render();
                             }
                         }
                     }
-                };
-                if new_pos != state.player.selector {
-                    state.player.selector = new_pos;
-                    state.board.draw_desc(&state.player, &mut std::io::stdout());
-                    state.player.reposition_cursor(
+                    Input::Attack => {
+                        let fail_msg = format!(
+                            "{}You can only attack in the 3 by 3 around you\x1b[0m",
+                            Style::new().red()
+                        );
+                        if state.player.pos.x.abs_diff(state.player.selector.x) > 1 {
+                            Board::set_desc(&mut std::io::stdout(), &fail_msg);
+                            bell(None);
+                            std::io::stdout().flush().unwrap();
+                            continue;
+                        }
+                        if state.player.pos.y.abs_diff(state.player.selector.y) > 1 {
+                            Board::set_desc(&mut std::io::stdout(), &fail_msg);
+                            bell(None);
+                            std::io::stdout().flush().unwrap();
+                            continue;
+                        }
+                        if state.board.contains_enemy(state.player.selector, None)
+                            && state.attack_enemy(state.player.selector, false, false, false)
+                        {
+                            state.increment();
+                        }
+                    }
+                    Input::Block => {
+                        if state.player.energy != 0 {
+                            stats().energy_used += 1;
+                            state.player.was_hit = false;
+                            state.player.blocking = true;
+                            state.increment();
+                            if state.player.was_hit {
+                                if BONUS_NO_ENERGY.load(RELAXED) {
+                                    set_feedback("Did you really need to block that?".to_string());
+                                    bell(Some(&mut std::io::stdout()));
+                                }
+                                BONUS_NO_ENERGY.store(false, RELAXED);
+                                state.player.energy -= 1;
+                            }
+                            state.player.blocking = false;
+                            state.render();
+                        }
+                    }
+                    Input::Return => {
+                        state.player.selector = state.player.pos;
                         state
-                            .board
-                            .has_background(state.player.selector, &state.player),
-                        state.board.get_render_bounds(&state.player),
-                    );
-                    if let player::Focus::Selector = state.player.focus {
+                            .player
+                            .reposition_cursor(false, state.board.get_render_bounds(&state.player));
+                        state.render();
+                    }
+                    Input::Wait => state.increment(),
+                    Input::SwapFocus => {
+                        state.player.focus.cycle();
+                        state.render();
+                    }
+                    Input::Enter => {
+                        state.open_door(state.player.selector, false);
+                    }
+                    Input::Item(index) => {
+                        debug_assert!(index < 7);
+                        if let Some(item) = state.player.items[index - 1] {
+                            if item.enact(&mut state) {
+                                state.player.items[index - 1] = None;
+                                state.increment();
+                            }
+                        } else {
+                            bell(None);
+                        }
+                    }
+                    Input::Convert => {
+                        if state.player.upgrades.precise_convert {
+                            if state.player.energy > 0 {
+                                if SETTINGS.difficulty.is_easy() {
+                                    state.player.give_money(2);
+                                } else {
+                                    state.player.give_money(1);
+                                }
+                                state.player.energy -= 1;
+                            }
+                        } else {
+                            if SETTINGS.difficulty.is_easy() {
+                                state.player.give_money(2 * state.player.energy);
+                            } else {
+                                state.player.give_money(state.player.energy);
+                            }
+                            state.player.energy = 0;
+                        }
+                        state.increment();
+                    }
+                    Input::Aim => {
+                        state.player.aiming ^= true;
+                        if !state.player.aiming {
+                            state.render();
+                        }
+                    }
+                    Input::Fast => {
+                        if SETTINGS.fast_mode {
+                            state.player.fast ^= true;
+                            Board::set_desc(
+                                &mut std::io::stdout(),
+                                match state.player.fast {
+                                    true => "Fast movement enabled",
+                                    false => "Fast movement disabled",
+                                },
+                            );
+                            state.reposition_cursor();
+                            std::io::stdout().flush().unwrap();
+                        }
+                    }
+                    Input::ClearFeedback => {
+                        *feedback() = String::new();
+                        state.render();
+                    }
+                    Input::Memorize => {
+                        state.player.memory = Some(state.player.selector);
+                        set_feedback(format!(
+                            "You have memorized the position: {}",
+                            state.player.selector
+                        ));
+                        stats().times_memorized += 1;
+                        state.render();
+                    }
+                    Input::Remember => {
+                        set_feedback(match state.player.memory {
+                            Some(memory) => {
+                                stats().times_remembered += 1;
+                                format!("You remember the position {memory}")
+                            }
+                            None => "You have made no mental notes in this place.".to_string(),
+                        });
                         state.render();
                     }
                 }
             }
-            Input::Attack => {
-                let fail_msg = format!(
-                    "{}You can only attack in the 3 by 3 around you\x1b[0m",
-                    Style::new().red()
-                );
-                if state.player.pos.x.abs_diff(state.player.selector.x) > 1 {
-                    Board::set_desc(&mut std::io::stdout(), &fail_msg);
-                    bell(None);
-                    std::io::stdout().flush().unwrap();
-                    continue;
-                }
-                if state.player.pos.y.abs_diff(state.player.selector.y) > 1 {
-                    Board::set_desc(&mut std::io::stdout(), &fail_msg);
-                    bell(None);
-                    std::io::stdout().flush().unwrap();
-                    continue;
-                }
-                if state.board.contains_enemy(state.player.selector, None)
-                    && state.attack_enemy(state.player.selector, false, false, false)
-                {
-                    state.increment();
-                }
-            }
-            Input::Block => {
-                if state.player.energy != 0 {
-                    stats().energy_used += 1;
-                    state.player.was_hit = false;
-                    state.player.blocking = true;
-                    state.increment();
-                    if state.player.was_hit {
-                        if BONUS_NO_ENERGY.load(RELAXED) {
-                            set_feedback("Did you really need to block that?".to_string());
-                            bell(Some(&mut std::io::stdout()));
-                        }
-                        BONUS_NO_ENERGY.store(false, RELAXED);
-                        state.player.energy -= 1;
-                    }
-                    state.player.blocking = false;
-                    state.render();
-                }
-            }
-            Input::Return => {
-                state.player.selector = state.player.pos;
-                state
-                    .player
-                    .reposition_cursor(false, state.board.get_render_bounds(&state.player));
-                state.render();
-            }
-            Input::Wait => state.increment(),
-            Input::SwapFocus => {
-                state.player.focus.cycle();
-                state.render();
-            }
-            Input::Enter => {
-                state.open_door(state.player.selector, false);
-            }
-            Input::Item(index) => {
-                debug_assert!(index < 7);
-                if let Some(item) = state.player.items[index - 1] {
-                    if item.enact(&mut state) {
-                        state.player.items[index - 1] = None;
-                        state.increment();
-                    }
-                } else {
-                    bell(None);
-                }
-            }
-            Input::Convert => {
-                if state.player.upgrades.precise_convert {
-                    if state.player.energy > 0 {
-                        if SETTINGS.difficulty.is_easy() {
-                            state.player.give_money(2);
-                        } else {
-                            state.player.give_money(1);
-                        }
-                        state.player.energy -= 1;
-                    }
-                } else {
-                    if SETTINGS.difficulty.is_easy() {
-                        state.player.give_money(2 * state.player.energy);
-                    } else {
-                        state.player.give_money(state.player.energy);
-                    }
-                    state.player.energy = 0;
-                }
-                state.increment();
-            }
-            Input::Aim => {
-                state.player.aiming ^= true;
-                if !state.player.aiming {
-                    state.render();
-                }
-            }
-            Input::Fast => {
-                if SETTINGS.fast_mode {
-                    state.player.fast ^= true;
-                    Board::set_desc(
-                        &mut std::io::stdout(),
-                        match state.player.fast {
-                            true => "Fast movement enabled",
-                            false => "Fast movement disabled",
-                        },
-                    );
-                    state.reposition_cursor();
-                    std::io::stdout().flush().unwrap();
-                }
-            }
-            Input::ClearFeedback => {
-                *feedback() = String::new();
-                state.render();
-            }
-            Input::Memorize => {
-                state.player.memory = Some(state.player.selector);
-                set_feedback(format!(
-                    "You have memorized the position: {}",
-                    state.player.selector
-                ));
-                stats().times_memorized += 1;
-                state.render();
-            }
-            Input::Remember => {
-                set_feedback(match state.player.memory {
-                    Some(memory) => {
-                        stats().times_remembered += 1;
-                        format!("You remember the position {memory}")
-                    }
-                    None => "You have made no mental notes in this place.".to_string(),
-                });
-                state.render();
+            CommandInput::Command(command) => {
+                command.enact(&mut state, &mut command_tx);
             }
         }
         if RE_FLOOD.swap(false, Ordering::Relaxed) {

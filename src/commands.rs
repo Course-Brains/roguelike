@@ -5,7 +5,8 @@ use crate::{
 use albatrice::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, Sender, channel};
-enum Command {
+// Due to the input system, no commands can use stdin
+pub enum Command {
     GetPlayerData,
     SetHealth(Option<usize>),
     SetEnergy(Option<usize>),
@@ -147,7 +148,7 @@ impl Command {
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
-    fn enact(self, state: &mut State, out: &mut Sender<String>) {
+    pub fn enact(self, state: &mut State, out: &mut Sender<String>) {
         if self.is_cheat() && !crate::CHEATS.load(crate::RELAXED) {
             out.send(
                 "Attempted to use a command that requires cheats without cheats enabled,\
@@ -537,25 +538,9 @@ impl Command {
         )
     }
 }
-pub struct CommandHandler {
-    rx: Receiver<Command>,
-    tx: Sender<String>,
-}
-impl CommandHandler {
-    pub fn new() -> CommandHandler {
-        let (rx, tx) = listen();
-        CommandHandler { rx, tx }
-    }
-    pub fn handle(&mut self, state: &mut State) {
-        while let Ok(command) = self.rx.try_recv() {
-            command.enact(state, &mut self.tx)
-        }
-    }
-}
-fn listen() -> (Receiver<Command>, Sender<String>) {
-    let (tx, rx) = channel();
-    let (tx_out, rx_out) = channel::<String>();
-    let error_tx = tx_out.clone();
+pub fn listen(out: Sender<crate::CommandInput>) -> Sender<String> {
+    let (console_tx, console_rx) = std::sync::mpsc::channel();
+    let tx_clone = console_tx.clone();
     std::thread::spawn(|| {
         let (mut read, mut write) = TcpListener::bind("127.0.0.1:5287")
             .unwrap()
@@ -567,18 +552,18 @@ fn listen() -> (Receiver<Command>, Sender<String>) {
         std::thread::spawn(move || {
             loop {
                 match Command::new(String::from_binary(&mut read).unwrap()) {
-                    Ok(command) => tx.send(command).unwrap(),
-                    Err(error) => error_tx.send(error).unwrap(),
+                    Ok(command) => out.send(crate::CommandInput::Command(command)).unwrap(),
+                    Err(error) => tx_clone.send(error).unwrap(),
                 }
             }
         });
         std::thread::spawn(move || {
             loop {
-                rx_out.recv().unwrap().to_binary(&mut write).unwrap();
+                console_rx.recv().unwrap().to_binary(&mut write).unwrap();
             }
         });
     });
-    (rx, tx_out)
+    console_tx
 }
 pub fn parse<T: std::str::FromStr>(option: Option<&str>) -> Result<T, String>
 where
@@ -630,7 +615,7 @@ fn err_to_string<T, E: ToString>(item: Result<T, E>) -> Result<T, String> {
     item.map_err(|error| error.to_string())
 }
 #[derive(Clone, Copy)]
-struct SmartVector {
+pub struct SmartVector {
     x: Pos,
     y: Pos,
 }

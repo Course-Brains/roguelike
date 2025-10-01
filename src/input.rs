@@ -16,6 +16,7 @@ pub enum Input {
     ClearFeedback,         // Clear the feedback
     Memorize,              // Memorize the current position
     Remember,              // Remember the memorized position
+                           //CycleDebug,
 }
 impl Input {
     pub fn get() -> Input {

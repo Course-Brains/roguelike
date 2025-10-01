@@ -267,3 +267,7 @@ get\_feedback
 
 designate\_boss \[index\]
     Designates the enemy at the given index as a boss.
+
+show\_nav \[state\] {index}
+    Sets whether or not the path an enemy will take to reach you will
+    be shown, and can optionally be limited to one enemy's index.

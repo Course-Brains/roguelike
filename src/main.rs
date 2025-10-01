@@ -356,6 +356,7 @@ fn main() {
     }
     generator::DO_DELAY.store(true, Ordering::SeqCst);
     state.next_map = generate(state.next_map_settings);
+
     let mut command_tx = commands::listen(INPUT_SYSTEM.0.clone());
     state.board.flood(state.player.pos);
     let _weirdifier = Weirdifier::new();
@@ -690,6 +691,8 @@ struct State {
     // debugging
     nav_stepthrough: bool,
     nav_stepthrough_index: Option<usize>,
+    show_nav: bool,
+    show_nav_index: Option<usize>,
 }
 impl State {
     fn new(empty: bool) -> State {
@@ -724,6 +727,8 @@ impl State {
             level: 0,
             nav_stepthrough: false,
             nav_stepthrough_index: None,
+            show_nav: false,
+            show_nav_index: None,
         }
     }
     fn level_0_budget() -> usize {
@@ -876,6 +881,7 @@ impl State {
         // exits are placed
         // turn increments
         // turn on map increments
+        // show_nav one turn specials are placed
         // rendering
         // one turn specials reset
         // enemy damage taken flag reset
@@ -886,6 +892,16 @@ impl State {
         start = std::time::Instant::now();
         self.turn += 1;
         self.board.turns_spent += 1;
+        if self.show_nav {
+            match self.show_nav_index {
+                Some(index) => self.board.show_path(index, self.player.pos),
+                None => {
+                    for index in 0..self.board.enemies.len() {
+                        self.board.show_path(index, self.player.pos)
+                    }
+                }
+            }
+        }
         self.render();
         *ONE_TURN_SPECIALS.lock().unwrap() = Vec::new();
         self.board.reset_took_damage();
@@ -1045,6 +1061,8 @@ impl FromBinary for State {
             level: usize::from_binary(binary)?,
             nav_stepthrough: bool::from_binary(binary)?,
             nav_stepthrough_index: Option::from_binary(binary)?,
+            show_nav: bool::from_binary(binary)?,
+            show_nav_index: Option::from_binary(binary)?,
         })
     }
 }
@@ -1059,7 +1077,9 @@ impl ToBinary for State {
         self.turn.to_binary(binary)?;
         self.level.to_binary(binary)?;
         self.nav_stepthrough.to_binary(binary)?;
-        self.nav_stepthrough_index.as_ref().to_binary(binary)
+        self.nav_stepthrough_index.as_ref().to_binary(binary)?;
+        self.show_nav.to_binary(binary)?;
+        self.show_nav_index.as_ref().to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

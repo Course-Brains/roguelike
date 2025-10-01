@@ -47,6 +47,7 @@ pub enum Command {
     KillPlayer,
     GetFeedback,
     DesignateBoss(usize),
+    ShowNav(bool, Option<usize>),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -145,6 +146,13 @@ impl Command {
             "kill_player" => Ok(Command::KillPlayer),
             "get_feedback" => Ok(Command::GetFeedback),
             "designate_boss" => Ok(Command::DesignateBoss(parse(iter.next())?)),
+            "show_nav" => Ok(Command::ShowNav(
+                parse(iter.next())?,
+                match iter.next() {
+                    Some(s) => Some(parse(Some(s))?),
+                    None => None,
+                },
+            )),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
@@ -520,6 +528,10 @@ impl Command {
                     last_pos: arc.try_read().unwrap().pos,
                     sibling: std::sync::Arc::downgrade(&arc),
                 });
+            }
+            Command::ShowNav(new_state, index) => {
+                state.show_nav = new_state;
+                state.show_nav_index = index;
             }
         }
     }

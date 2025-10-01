@@ -1131,6 +1131,23 @@ impl Board {
             }
         }
     }
+    pub fn show_path(&mut self, index: usize, player: Vector) {
+        let mut pos = self.enemies[index].try_read().unwrap().pos;
+        let mut index = self.to_index(pos);
+        let mut specials = crate::ONE_TURN_SPECIALS.try_lock().unwrap();
+        loop {
+            if pos == player || self.backtraces[index].cost.is_none() {
+                break;
+            }
+            pos += self.backtraces[index].from;
+            index = self.to_index(pos);
+            specials.push(self.add_special(Special::new(
+                pos,
+                ' ',
+                Some(*Style::new().background_green()),
+            )));
+        }
+    }
 }
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;

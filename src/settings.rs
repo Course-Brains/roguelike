@@ -14,7 +14,7 @@ impl Settings {
         let difficulty_choice = std::cell::LazyCell::new(|| {
             crate::log!("Getting difficulty from player choice");
             // Need to get the player to choose a difficulty
-            println!("Select your difficulty.\n1: easy\n2: normal");
+            println!("Select your difficulty.\n1: easy\n2: normal\n3: hard");
             std::io::stdout().flush().unwrap();
             let mut stdin = std::io::stdin().lock();
             let mut buf = [0];
@@ -23,6 +23,7 @@ impl Settings {
                 match buf[0] {
                     b'1' => break Difficulty::Easy,
                     b'2' => break Difficulty::Normal,
+                    b'3' => break Difficulty::Hard,
                     _ => {}
                 }
             };
@@ -122,15 +123,11 @@ impl ToBinary for Settings {
         self.fast_mode.to_binary(binary)
     }
 }
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Ord)]
 pub enum Difficulty {
     Normal,
     Easy,
-}
-impl Difficulty {
-    pub fn is_easy(self) -> bool {
-        matches!(self, Difficulty::Easy)
-    }
+    Hard,
 }
 impl std::str::FromStr for Difficulty {
     type Err = ();
@@ -138,6 +135,7 @@ impl std::str::FromStr for Difficulty {
         Ok(match s {
             "normal" => Self::Normal,
             "easy" => Self::Easy,
+            "hard" => Self::Hard,
             _ => return Err(()),
         })
     }
@@ -155,6 +153,7 @@ impl FromBinary for Difficulty {
         Ok(match u8::from_binary(binary)? {
             0 => Self::Normal,
             1 => Self::Easy,
+            2 => Self::Hard,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -169,6 +168,7 @@ impl ToBinary for Difficulty {
         match self {
             Self::Normal => 0_u8,
             Self::Easy => 1,
+            Self::Hard => 2,
         }
         .to_binary(binary)
     }
@@ -181,7 +181,40 @@ impl std::fmt::Display for Difficulty {
             match self {
                 Self::Normal => "normal",
                 Self::Easy => "easy",
+                Self::Hard => "hard",
             }
         )
+    }
+}
+impl PartialOrd for Difficulty {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self == other {
+            return Some(std::cmp::Ordering::Equal);
+        }
+        Some(match self {
+            Difficulty::Normal => match other {
+                Difficulty::Easy => std::cmp::Ordering::Greater,
+                Difficulty::Hard => std::cmp::Ordering::Less,
+                _ => unreachable!(),
+            },
+            Difficulty::Easy => match other {
+                Difficulty::Normal | Difficulty::Hard => std::cmp::Ordering::Less,
+                _ => unreachable!(),
+            },
+            Difficulty::Hard => match other {
+                Difficulty::Normal | Difficulty::Easy => std::cmp::Ordering::Greater,
+                _ => unreachable!(),
+            },
+        })
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn difficulty_partial_ord() {
+        assert!(Difficulty::Easy < Difficulty::Normal);
+        assert!(Difficulty::Normal < Difficulty::Hard);
+        assert!(Difficulty::Easy < Difficulty::Hard);
     }
 }

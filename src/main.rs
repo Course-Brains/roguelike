@@ -39,7 +39,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 9;
+const SAVE_VERSION: Version = 10;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -351,7 +351,7 @@ fn main() {
     };
     // discourage save scumming by making it so that if it closes non-properly then the file is
     // gone
-    if !SETTINGS.difficulty.is_easy() {
+    if SETTINGS.difficulty != Difficulty::Easy {
         let _ = std::fs::remove_file(PATH);
     }
     generator::DO_DELAY.store(true, Ordering::SeqCst);
@@ -605,7 +605,7 @@ fn main() {
                     Input::Convert => {
                         if state.player.upgrades.precise_convert {
                             if state.player.energy > 0 {
-                                if SETTINGS.difficulty.is_easy() {
+                                if SETTINGS.difficulty == Difficulty::Easy {
                                     state.player.give_money(2);
                                 } else {
                                     state.player.give_money(1);
@@ -613,7 +613,7 @@ fn main() {
                                 state.player.energy -= 1;
                             }
                         } else {
-                            if SETTINGS.difficulty.is_easy() {
+                            if SETTINGS.difficulty == Difficulty::Easy {
                                 state.player.give_money(2 * state.player.energy);
                             } else {
                                 state.player.give_money(state.player.energy);
@@ -735,19 +735,21 @@ impl State {
         match SETTINGS.difficulty {
             Difficulty::Normal => 75,
             Difficulty::Easy => 50,
+            Difficulty::Hard => 500,
         }
     }
     fn level_1_budget() -> usize {
         match SETTINGS.difficulty {
             Difficulty::Normal => 1500,
             Difficulty::Easy => 1000,
+            Difficulty::Hard => 5000,
         }
     }
     fn level_0_highest_tier() -> Option<usize> {
-        Some(2)
+        (SETTINGS.difficulty <= Difficulty::Normal).then_some(2)
     }
     fn level_1_highest_tier() -> Option<usize> {
-        Some(2)
+        State::level_0_highest_tier()
     }
     // returns if an enemy was hit
     fn attack_enemy(
@@ -933,8 +935,10 @@ impl State {
     }
     fn get_budget(&self) -> usize {
         let mut budget = (self.turn / BUDGET_DIVISOR) + (self.level * BUDGET_PER_LAYER);
-        if SETTINGS.difficulty.is_easy() {
+        if SETTINGS.difficulty <= Difficulty::Easy {
             budget /= 2;
+        } else if SETTINGS.difficulty >= Difficulty::Hard {
+            budget *= 4;
         }
         budget
     }
@@ -971,6 +975,14 @@ impl State {
 
         stats().shop_money.push(self.player.get_money());
         self.player.memory = None;
+        if SETTINGS.difficulty >= Difficulty::Normal
+            && self.player.energy > 1
+            && random::random4() == 1
+        {
+            set_feedback("Thanks for the tip, idiot.".to_string());
+            self.player.energy /= 2;
+            bell(Some(&mut std::io::stdout()));
+        }
         self.render();
     }
     fn reposition_cursor(&mut self) {
@@ -1669,19 +1681,22 @@ fn save_stats() {
                 log!("!!!Save version mismatch!!!");
                 crossterm::queue!(
                     std::io::stdout(),
-                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+                    Vector::new(0, 0).to_move(),
+                    crossterm::terminal::EnableLineWrap,
                 )
                 .unwrap();
                 println!(
-                    "{}The save format in the stats file is different than the current\
-                    save format, if you leave the stats file where it is, it will be\
+                    "{}The save format in the stats file is different than the current \
+                    save format, if you leave the stats file where it is, it will be \
                     deleted, I recommend moving it.\n\x1b[0mPress enter to continue",
                     Style::new().red().bold(true).underline(true).intense(true)
                 );
                 std::io::stdout().flush().unwrap();
                 std::io::stdin().read_line(&mut String::new()).unwrap();
+            } else {
+                stats_saves = Vec::from_binary(&mut file).unwrap();
             }
-            stats_saves = Vec::from_binary(&mut file).unwrap();
         }
         false => {
             log!("Creating new stats file")

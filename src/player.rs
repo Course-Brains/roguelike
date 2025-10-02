@@ -63,36 +63,42 @@ impl Player {
         match crate::SETTINGS.difficulty {
             Difficulty::Normal => 50,
             Difficulty::Easy => 100,
+            Difficulty::Hard => 25,
         }
     }
     fn starting_health() -> usize {
         match crate::SETTINGS.difficulty {
             Difficulty::Normal => 20,
             Difficulty::Easy => 100,
+            Difficulty::Hard => 1,
         }
     }
     fn starting_max_energy() -> usize {
         match crate::SETTINGS.difficulty {
             Difficulty::Normal => 3,
             Difficulty::Easy => 6,
+            Difficulty::Hard => 1,
         }
     }
     fn starting_energy() -> usize {
         match crate::SETTINGS.difficulty {
             Difficulty::Normal => 2,
             Difficulty::Easy => 6,
+            Difficulty::Hard => 0,
         }
     }
     fn starting_money() -> usize {
-        match crate::SETTINGS.difficulty {
-            Difficulty::Normal => 0,
-            Difficulty::Easy => 50,
+        if crate::SETTINGS.difficulty < crate::Difficulty::Normal {
+            50
+        } else {
+            0
         }
     }
     fn starting_perception() -> usize {
         match crate::SETTINGS.difficulty {
             Difficulty::Normal => 10,
             Difficulty::Easy => 20,
+            Difficulty::Hard => 0,
         }
     }
     fn starting_items() -> Items {
@@ -139,7 +145,7 @@ impl Player {
             return Err(());
         }
         // Half damage taken on easy
-        if crate::SETTINGS.difficulty.is_easy() && damage > 1 {
+        if crate::SETTINGS.difficulty == crate::Difficulty::Easy && damage > 1 {
             damage /= 2;
         }
         // If no damage was taken then there is no need to punish the player for taking damage
@@ -201,7 +207,7 @@ impl Player {
         let mut pass = (health_weight + energy_weight + damage_weight) as crate::Rand;
         crate::log!("  pass value: {pass}");
 
-        if crate::SETTINGS.difficulty.is_easy() {
+        if crate::SETTINGS.difficulty == crate::Difficulty::Easy {
             pass /= 2;
             crate::log!("Halving pass due to difficulty, now at: {pass}")
         }
@@ -324,7 +330,7 @@ impl Player {
             "Better luck next time!",
         ];
         // If it is not on easy mode
-        if !crate::SETTINGS.difficulty.is_easy() {
+        if crate::SETTINGS.difficulty != crate::Difficulty::Easy {
             valid.push("You should try easy mode.");
         }
         // If the player killed themself
@@ -479,7 +485,7 @@ impl Player {
         if self.effects.drunk.is_active() {
             damage += 1
         }
-        if crate::SETTINGS.difficulty.is_easy() {
+        if crate::SETTINGS.difficulty == crate::Difficulty::Easy {
             damage += 1
         }
         damage
@@ -489,7 +495,7 @@ impl Player {
         crate::set_desc("1: more health, 2: more energy, 3: more perception");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
-        let easy = crate::SETTINGS.difficulty.is_easy();
+        let easy = crate::SETTINGS.difficulty == crate::Difficulty::Easy;
         loop {
             lock.read_exact(&mut buf).unwrap();
             match buf[0] {

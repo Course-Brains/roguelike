@@ -26,10 +26,22 @@ macro_rules! eye {
 }
 // General purpose
 impl Limbs {
-    pub const fn new() -> Limbs {
+    pub fn new() -> Limbs {
         Limbs {
-            left_eye: Eye::new(),
-            right_eye: Eye::new(),
+            left_eye: {
+                if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+                    Eye::Seer
+                } else {
+                    Eye::new()
+                }
+            },
+            right_eye: {
+                if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+                    Eye::None
+                } else {
+                    Eye::new()
+                }
+            },
         }
     }
     pub fn set(&mut self, slot: String, choice: String) -> Result<(), String> {

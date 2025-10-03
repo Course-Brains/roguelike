@@ -1122,8 +1122,8 @@ impl Variant {
             Variant::MageBoss(_) => "Lazy Mage",
             Variant::Fighter(_) => "Squire",
             Variant::FighterBoss { .. } => "Knight",
-            Variant::Archer(_) => "archer",
-            Variant::ArcherBoss(_) => "archer_boss",
+            Variant::Archer(_) => crate::debug_only!("archer"),
+            Variant::ArcherBoss(_) => "Seth",
         }
     }
     pub fn precise_teleport(&self) -> bool {
@@ -1173,13 +1173,13 @@ impl Variant {
         // Fighter
         if limit.is_none_or(|limit| limit >= 3)
             && available > fighter
-            && (optimal || random8() != 0)
+            && (optimal || random8() != 1)
         {
             (Variant::fighter(), available / fighter)
         // Mage
         } else if limit.is_none_or(|limit| limit >= 2)
             && available > mage
-            && (optimal || random8() != 0)
+            && (optimal || random8() != 1)
         {
             if bool::random() {
                 (Variant::mage(), available / mage)

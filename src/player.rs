@@ -102,7 +102,11 @@ impl Player {
         }
     }
     fn starting_items() -> Items {
-        [None; 6]
+        if crate::SETTINGS.difficulty == Difficulty::Hard {
+            [Some(ItemType::FarSightPotion), None, None, None, None, None]
+        } else {
+            [None; 6]
+        }
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         crate::log!("Moving from {} in {direction}", self.pos);
@@ -210,6 +214,10 @@ impl Player {
         if crate::SETTINGS.difficulty == crate::Difficulty::Easy {
             pass /= 2;
             crate::log!("Halving pass due to difficulty, now at: {pass}")
+        }
+        if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+            pass *= 2;
+            crate::log!("Doubling pass due to difficulty, now at {pass}");
         }
 
         pass > crate::random()
@@ -341,8 +349,8 @@ impl Player {
         else if state.player.killer.unwrap().1.unwrap() == crate::enemy::Variant::basic().to_key()
         {
             valid.push(
-                "You do realize how many things were waiting to try and kill you right? \
-                Think of how disapointed they'll be when they find out you were done in by \
+                "You do realize how many things were waiting to try and kill you right?\n \
+                Think of how disapointed they'll be when they find out you were done in by\n \
                 the absolute weakest of the lot.",
             )
         }
@@ -542,6 +550,10 @@ impl Player {
         perception += self.limbs.count_normal_eyes() * 5;
         if self.effects.drunk.is_active() {
             perception /= 2
+        }
+        if self.effects.far_sight.is_active() {
+            perception += 10;
+            perception *= 2;
         }
         perception
     }
@@ -763,18 +775,24 @@ pub struct Effects {
     pub full_vis: Duration,
     // Lower perception, more detectable, increased damage
     pub drunk: Duration,
+    // perception +10 then *2
+    pub far_sight: Duration,
 }
 impl Effects {
-    // Creates an instance with no effects
+    // Creates an instance with starting effects
     fn new() -> Effects {
         Effects {
             invincible: Duration::None,
             regen: Duration::None,
-            unlucky: Duration::None,
+            unlucky: match crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+                true => Duration::Infinite,
+                false => Duration::None,
+            },
             doomed: Duration::None,
             damage_boost: Duration::None,
             full_vis: Duration::None,
             drunk: Duration::None,
+            far_sight: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
@@ -786,6 +804,7 @@ impl Effects {
         self.damage_boost.decriment();
         self.full_vis.decriment();
         self.drunk.decriment();
+        self.far_sight.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -801,6 +820,7 @@ impl Effects {
                     "damage_boost" => self.damage_boost = args.parse()?,
                     "full_vis" => self.full_vis = args.parse()?,
                     "drunk" => self.drunk = args.parse()?,
+                    "far_sight" => self.far_sight = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
@@ -837,6 +857,10 @@ impl Effects {
             println!("    and is drunk for");
             self.drunk.list();
         }
+        if self.far_sight.is_active() {
+            println!("    and has far sight for");
+            self.far_sight.list()
+        }
     }
     pub fn has_none(&self) -> bool {
         !(self.invincible.is_active()
@@ -845,7 +869,8 @@ impl Effects {
             || self.doomed.is_active()
             || self.damage_boost.is_active()
             || self.full_vis.is_active()
-            || self.drunk.is_active())
+            || self.drunk.is_active()
+            || self.far_sight.is_active())
     }
 }
 impl FromBinary for Effects {
@@ -861,6 +886,7 @@ impl FromBinary for Effects {
             damage_boost: Duration::from_binary(binary)?,
             full_vis: Duration::from_binary(binary)?,
             drunk: Duration::from_binary(binary)?,
+            far_sight: Duration::from_binary(binary)?,
         })
     }
 }
@@ -872,7 +898,8 @@ impl ToBinary for Effects {
         self.doomed.to_binary(binary)?;
         self.damage_boost.to_binary(binary)?;
         self.full_vis.to_binary(binary)?;
-        self.drunk.to_binary(binary)
+        self.drunk.to_binary(binary)?;
+        self.far_sight.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

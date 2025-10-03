@@ -39,7 +39,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 10;
+const SAVE_VERSION: Version = 11;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -59,6 +59,7 @@ mod bench {
     use std::sync::{LazyLock, RwLock, RwLockWriteGuard, atomic::AtomicBool};
     // Whether or not to esspecially log timings
     pub static BENCHMARK: AtomicBool = AtomicBool::new(false);
+    pub static USED: AtomicBool = AtomicBool::new(false);
     macro_rules! bench_maker {
         ($path: literal) => {
             LazyLock::new(|| RwLock::new(File::create($path).unwrap()))
@@ -85,9 +86,20 @@ mod bench {
     bench_maker!(think, 4);
     bench_maker!(open_flood, 5);
     bench_maker!(total, 6);
+    pub fn initialize_files() {
+        for bench in BENCHES.iter() {
+            LazyLock::force(bench);
+        }
+    }
 }
 fn enable_benchmark() {
     bench::BENCHMARK.store(true, Ordering::SeqCst);
+    if bench::USED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        bench::initialize_files()
+    }
     if !std::fs::exists("bench").unwrap() {
         std::fs::create_dir("bench").unwrap();
     }
@@ -300,7 +312,7 @@ fn main() {
                 151,
                 45,
                 15,
-                75,
+                State::level_0_budget(),
                 1,
                 State::level_0_highest_tier(),
             ))

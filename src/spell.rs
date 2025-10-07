@@ -12,23 +12,70 @@ pub struct SpellCircle {
     pub caster: Option<Arc<RwLock<Enemy>>>,
     // Needed for normal spells, not contact
     pub aim: Option<Vector>,
+    // energy is only needed for the player
+    pub energy: usize,
+
+    // only used if it is a normal spell
+    pub has_fired: bool,
+    pub cooldown: usize,
 }
 impl SpellCircle {
+    pub fn new_player(
+        spell: Spell,
+        pos: Vector,
+        aim: Option<Vector>,
+        energy: usize,
+    ) -> SpellCircle {
+        SpellCircle {
+            spell,
+            pos,
+            caster: None,
+            aim,
+            energy,
+            has_fired: false,
+            cooldown: spell.cast_time(),
+        }
+    }
+    pub fn new_enemy(
+        spell: Spell,
+        pos: Vector,
+        caster: Arc<RwLock<Enemy>>,
+        aim: Option<Vector>,
+    ) -> SpellCircle {
+        SpellCircle {
+            spell,
+            pos,
+            caster: Some(caster),
+            aim,
+            energy: 0,
+            has_fired: false,
+            cooldown: spell.cast_time(),
+        }
+    }
     // returns true if the circle should be kept (false = removal)
-    pub fn update(&self, board: &mut Board, player: &mut Player) -> bool {
-        match &self.spell {
+    pub fn update(&mut self, board: &mut Board, player: &mut Player) -> bool {
+        match self.spell {
             Spell::Normal(spell) => {
-                spell.cast(
+                if self.caster.is_none() && !self.has_fired && self.energy < spell.energy_needed() {
+                    return false;
+                }
+                if spell.cast(
                     self.caster.clone(),
                     player,
                     board,
                     Some(self.pos),
                     self.aim,
                     None,
-                );
+                ) {
+                    self.energy -= spell.energy_needed();
+                    self.cooldown = spell.cast_time()
+                }
                 true
             }
             Spell::Contact(spell) => {
+                if self.caster.is_none() && self.energy < spell.energy_needed() {
+                    return true;
+                }
                 if let Some(enemy) = board.get_enemy(self.pos, None) {
                     spell.cast(enemy.into(), Entity::new(self.caster.clone(), player));
                     return false;
@@ -59,7 +106,7 @@ pub enum Spell {
     Normal(NormalSpell),
 }
 impl Spell {
-    pub fn unwrap_contact(&self) -> &ContactSpell {
+    pub fn unwrap_contact(self) -> ContactSpell {
         match self {
             Spell::Contact(contact) => contact,
             Spell::Normal(_) => panic!("Called unwrap_contact on a normal spell"),
@@ -77,6 +124,35 @@ impl Spell {
             Spell::Normal(spell) => spell.cast_time(),
         }
     }*/
+    // The energy needed to cast the spell
+    pub fn energy_needed(self) -> usize {
+        match self {
+            Spell::Normal(spell) => spell.energy_needed(),
+            Spell::Contact(spell) => spell.energy_needed(),
+        }
+    }
+    // Whether it needs to be aimed while casting manually
+    pub fn cast_aim(self) -> bool {
+        match self {
+            Self::Normal(normal) => normal.cast_aim(),
+            Self::Contact(contact) => contact.cast_aim(),
+        }
+    }
+    // Whether it needs to be aimed when cast through a circle
+    pub fn circle_aim(self) -> bool {
+        match self {
+            Self::Normal(normal) => normal.circle_aim(),
+            Self::Contact(contact) => contact.circle_aim(),
+        }
+    }
+    // The cast time for spells, the interval between casts for normal
+    // circles,
+    pub fn cast_time(self) -> usize {
+        match self {
+            Self::Normal(normal) => normal.cast_time(),
+            Self::Contact(contact) => contact.cast_time(),
+        }
+    }
 }
 impl std::str::FromStr for Spell {
     type Err = String;
@@ -173,10 +249,21 @@ impl ContactSpell {
             }
         }
     }
-    pub fn cast_time(&self) -> usize {
+    pub fn cast_time(self) -> usize {
         match self {
             Self::DrainHealth => 3,
         }
+    }
+    pub fn energy_needed(self) -> usize {
+        match self {
+            Self::DrainHealth => 5,
+        }
+    }
+    pub fn cast_aim(self) -> bool {
+        matches!(self, Self::DrainHealth)
+    }
+    pub fn circle_aim(self) -> bool {
+        false
     }
 }
 impl std::str::FromStr for ContactSpell {
@@ -240,6 +327,8 @@ pub enum NormalSpell {
 impl NormalSpell {
     // aim is position not direction
     // origin of None means to get it from the caster(including the player)
+
+    // returns true if the cast succeeded and mana should be taken
     pub fn cast(
         &self,
         caster: Option<Arc<RwLock<Enemy>>>,
@@ -491,6 +580,23 @@ impl NormalSpell {
             Self::Charge => 2,
             Self::BigExplode => 10,
             Self::Teleport => 3,
+            Self::SummonSpirit => 10,
+        }
+    }
+    pub fn cast_aim(&self) -> bool {
+        !matches!(self, Self::Swap | Self::SummonSpirit)
+    }
+    pub fn circle_aim(&self) -> bool {
+        !matches!(self, Self::Swap | Self::SummonSpirit)
+    }
+    pub fn energy_needed(&self) -> usize {
+        match self {
+            Self::Swap => 3,
+            Self::BidenBlast => 5,
+            Self::Identify => 1,
+            Self::Charge => 5,
+            Self::BigExplode => 20,
+            Self::Teleport => 10,
             Self::SummonSpirit => 10,
         }
     }

@@ -31,7 +31,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
-use albatrice::{FromBinary, ToBinary};
+use abes_nice_things::{FromBinary, ToBinary};
 
 // Convenience constant
 const RELAXED: Ordering = Ordering::Relaxed;
@@ -282,6 +282,12 @@ fn main() {
                 CHEATS.store(true, Ordering::Relaxed);
                 empty = true;
             }
+            "settings" => {
+                let _weirdifier = Weirdifier::new();
+                log!("Openning settings editor");
+                SETTINGS.clone().editor();
+                return;
+            }
             "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
             _ => {}
         }
@@ -363,7 +369,7 @@ fn main() {
     };
     // discourage save scumming by making it so that if it closes non-properly then the file is
     // gone
-    if SETTINGS.difficulty != Difficulty::Easy {
+    if SETTINGS.difficulty() != Difficulty::Easy {
         let _ = std::fs::remove_file(PATH);
     }
     generator::DO_DELAY.store(true, Ordering::SeqCst);
@@ -489,7 +495,7 @@ fn main() {
                                     .board
                                     .get_enemy(state.player.pos + direction, None)
                                     .is_some()
-                                    && SETTINGS.kick_enemies
+                                    && SETTINGS.kick_enemies()
                                 {
                                     state.attack_enemy(
                                         state.player.pos + direction,
@@ -498,7 +504,7 @@ fn main() {
                                         true,
                                     );
                                     state.increment();
-                                } else if !SETTINGS.kick_doors {
+                                } else if !SETTINGS.kick_doors() {
                                     // Doing it like this because can't do && on if let
                                 } else if let Some(board::Piece::Door(door)) =
                                     state.board[state.player.pos + direction]
@@ -617,7 +623,7 @@ fn main() {
                     Input::Convert => {
                         if state.player.upgrades.precise_convert {
                             if state.player.energy > 0 {
-                                if SETTINGS.difficulty == Difficulty::Easy {
+                                if SETTINGS.difficulty() == Difficulty::Easy {
                                     state.player.give_money(2);
                                 } else {
                                     state.player.give_money(1);
@@ -625,7 +631,7 @@ fn main() {
                                 state.player.energy -= 1;
                             }
                         } else {
-                            if SETTINGS.difficulty == Difficulty::Easy {
+                            if SETTINGS.difficulty() == Difficulty::Easy {
                                 state.player.give_money(2 * state.player.energy);
                             } else {
                                 state.player.give_money(state.player.energy);
@@ -641,7 +647,7 @@ fn main() {
                         }
                     }
                     Input::Fast => {
-                        if SETTINGS.fast_mode {
+                        if SETTINGS.fast_mode() {
                             state.player.fast ^= true;
                             Board::set_desc(
                                 &mut std::io::stdout(),
@@ -744,21 +750,21 @@ impl State {
         }
     }
     fn level_0_budget() -> usize {
-        match SETTINGS.difficulty {
+        match SETTINGS.difficulty() {
             Difficulty::Normal => 75,
             Difficulty::Easy => 50,
             Difficulty::Hard => 500,
         }
     }
     fn level_1_budget() -> usize {
-        match SETTINGS.difficulty {
+        match SETTINGS.difficulty() {
             Difficulty::Normal => 1500,
             Difficulty::Easy => 1000,
             Difficulty::Hard => 5000,
         }
     }
     fn level_0_highest_tier() -> Option<usize> {
-        (SETTINGS.difficulty <= Difficulty::Normal).then_some(2)
+        (SETTINGS.difficulty() <= Difficulty::Normal).then_some(2)
     }
     fn level_1_highest_tier() -> Option<usize> {
         State::level_0_highest_tier()
@@ -831,6 +837,9 @@ impl State {
     fn think(&mut self, time: &mut std::time::Duration) {
         if self.player.effects.regen.is_active() {
             self.player.heal(2)
+        }
+        if self.player.effects.poison.is_active() {
+            let _ = self.player.attacked(1, "poison", None);
         }
         self.board.generate_nav_data(
             self.player.pos,
@@ -947,9 +956,9 @@ impl State {
     }
     fn get_budget(&self) -> usize {
         let mut budget = (self.turn / BUDGET_DIVISOR) + (self.level * BUDGET_PER_LAYER);
-        if SETTINGS.difficulty <= Difficulty::Easy {
+        if SETTINGS.difficulty() <= Difficulty::Easy {
             budget /= 2;
-        } else if SETTINGS.difficulty >= Difficulty::Hard {
+        } else if SETTINGS.difficulty() >= Difficulty::Hard {
             budget *= 4;
         }
         budget
@@ -987,7 +996,7 @@ impl State {
 
         stats().shop_money.push(self.player.get_money());
         self.player.memory = None;
-        if SETTINGS.difficulty >= Difficulty::Normal
+        if SETTINGS.difficulty() >= Difficulty::Normal
             && self.player.energy > 1
             && random::random4() == 1
         {
@@ -1068,7 +1077,7 @@ impl FromBinary for State {
         }
         CHEATS.store(bool::from_binary(binary)?, Ordering::Relaxed);
         let difficulty = settings::Difficulty::from_binary(binary)?;
-        if difficulty != SETTINGS.difficulty {
+        if difficulty != SETTINGS.difficulty() {
             println!("Don't change the difficulty mid run, go set it back to {difficulty}");
             bell(None);
             return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
@@ -1094,7 +1103,7 @@ impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         SAVE_VERSION.to_binary(binary)?;
         CHEATS.load(Ordering::Relaxed).to_binary(binary)?;
-        SETTINGS.difficulty.to_binary(binary)?;
+        SETTINGS.difficulty().to_binary(binary)?;
         self.next_map_settings.to_binary(binary)?;
         self.player.to_binary(binary)?;
         self.board.to_binary(binary)?;
@@ -1276,7 +1285,12 @@ impl Drop for Weirdifier {
             .arg("echo")
             .status()
             .unwrap();
-        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnableLineWrap).unwrap()
+        crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::EnableLineWrap,
+            crossterm::cursor::Show
+        )
+        .unwrap()
     }
 }
 #[derive(Clone, Copy, Debug)]

@@ -4,7 +4,7 @@ use crate::{
     pieces::{door::Door, exit::Exit, item::Item, upgrade::Upgrade, wall::Wall},
     spell::{Spell, SpellCircle},
 };
-use albatrice::{FromBinary, ToBinary};
+use abes_nice_things::{FromBinary, ToBinary};
 use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -1120,7 +1120,7 @@ impl Board {
         }
         // Actually updating the circles
         let mut circles = std::mem::take(&mut self.spells);
-        circles.retain(|circle| circle.update(self, player));
+        circles.retain_mut(|circle| circle.update(self, player));
         self.spells = circles;
         std::mem::drop(specials);
     }

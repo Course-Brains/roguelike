@@ -2,9 +2,9 @@ use crate::{
     Entity, ItemType, Player, Spell, State, Style, Vector, spell::SpellCircle,
     upgrades::UpgradeType,
 };
-use albatrice::{FromBinary, Split, ToBinary};
+use abes_nice_things::{FromBinary, Split, ToBinary};
 use std::net::TcpListener;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::Sender;
 // Due to the input system, no commands can use stdin
 pub enum Command {
     GetPlayerData,
@@ -30,7 +30,7 @@ pub enum Command {
     SetDetectMod(isize),
     SetPerception(usize),
     Cast(Spell),
-    CreateCircle(Spell, SmartVector, SmartVector),
+    CreateCircle(Spell, usize, SmartVector, SmartVector),
     GetData(SmartVector),
     GetBoss,
     CountEnemies,
@@ -104,6 +104,7 @@ impl Command {
             )),
             "create_circle" => Ok(Command::CreateCircle(
                 (arg(iter.next())?.to_string() + " " + arg(iter.next())?).parse()?,
+                parse(iter.next())?,
                 SmartVector::new(iter.next(), iter.next(), false)?,
                 SmartVector::new(iter.next(), iter.next(), true)?,
             )),
@@ -283,12 +284,14 @@ impl Command {
                     }
                 }
             },
-            Command::CreateCircle(spell, pos, aim) => state.board.spells.push(SpellCircle {
-                spell,
-                pos: pos.to_absolute(&state.player),
-                caster: None,
-                aim: Some(aim.to_absolute(&state.player)),
-            }),
+            Command::CreateCircle(spell, energy, pos, aim) => {
+                state.board.spells.push(SpellCircle::new_player(
+                    spell,
+                    pos.to_absolute(&state.player),
+                    Some(aim.to_absolute(&state.player)),
+                    energy,
+                ))
+            }
             Command::GetData(pos) => {
                 let pos = pos.to_absolute(&state.player);
                 let index = state.board.to_index(pos);

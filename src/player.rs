@@ -60,49 +60,49 @@ impl Player {
         }
     }
     fn starting_max_health() -> usize {
-        match crate::SETTINGS.difficulty {
+        match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 50,
             Difficulty::Easy => 100,
             Difficulty::Hard => 25,
         }
     }
     fn starting_health() -> usize {
-        match crate::SETTINGS.difficulty {
+        match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 20,
             Difficulty::Easy => 100,
             Difficulty::Hard => 1,
         }
     }
     fn starting_max_energy() -> usize {
-        match crate::SETTINGS.difficulty {
+        match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 3,
             Difficulty::Easy => 6,
             Difficulty::Hard => 1,
         }
     }
     fn starting_energy() -> usize {
-        match crate::SETTINGS.difficulty {
+        match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 2,
             Difficulty::Easy => 6,
             Difficulty::Hard => 0,
         }
     }
     fn starting_money() -> usize {
-        if crate::SETTINGS.difficulty < crate::Difficulty::Normal {
+        if crate::SETTINGS.difficulty() < crate::Difficulty::Normal {
             50
         } else {
             0
         }
     }
     fn starting_perception() -> usize {
-        match crate::SETTINGS.difficulty {
+        match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 10,
             Difficulty::Easy => 20,
             Difficulty::Hard => 0,
         }
     }
     fn starting_items() -> Items {
-        if crate::SETTINGS.difficulty == Difficulty::Hard {
+        if crate::SETTINGS.difficulty() == Difficulty::Hard {
             [Some(ItemType::FarSightPotion), None, None, None, None, None]
         } else {
             [None; 6]
@@ -149,7 +149,7 @@ impl Player {
             return Err(());
         }
         // Half damage taken on easy
-        if crate::SETTINGS.difficulty == crate::Difficulty::Easy && damage > 1 {
+        if crate::SETTINGS.difficulty() == crate::Difficulty::Easy && damage > 1 {
             damage /= 2;
         }
         // If no damage was taken then there is no need to punish the player for taking damage
@@ -211,11 +211,10 @@ impl Player {
         let mut pass = (health_weight + energy_weight + damage_weight) as crate::Rand;
         crate::log!("  pass value: {pass}");
 
-        if crate::SETTINGS.difficulty == crate::Difficulty::Easy {
+        if crate::SETTINGS.difficulty() == crate::Difficulty::Easy {
             pass /= 2;
             crate::log!("Halving pass due to difficulty, now at: {pass}")
-        }
-        if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+        } else if crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
             pass *= 2;
             crate::log!("Doubling pass due to difficulty, now at {pass}");
         }
@@ -338,7 +337,7 @@ impl Player {
             "Better luck next time!",
         ];
         // If it is not on easy mode
-        if crate::SETTINGS.difficulty != crate::Difficulty::Easy {
+        if crate::SETTINGS.difficulty() != crate::Difficulty::Easy {
             valid.push("You should try easy mode.");
         }
         // If the player killed themself
@@ -386,7 +385,7 @@ impl Player {
         }
         // If they haven't disabled kicking doors and the stat file is below a certain length and
         // less than 1% of the doors opened we done so by kicking them
-        if crate::SETTINGS.kick_doors
+        if crate::SETTINGS.kick_doors()
             && stat_len.is_none_or(|len| len < 500)
             && stats.doors_opened_by_walking < stats.doors_opened / 100
         {
@@ -493,7 +492,7 @@ impl Player {
         if self.effects.drunk.is_active() {
             damage += 1
         }
-        if crate::SETTINGS.difficulty == crate::Difficulty::Easy {
+        if crate::SETTINGS.difficulty() == crate::Difficulty::Easy {
             damage += 1
         }
         damage
@@ -503,7 +502,7 @@ impl Player {
         crate::set_desc("1: more health, 2: more energy, 3: more perception");
         let mut buf = [0];
         let mut lock = std::io::stdin().lock();
-        let easy = crate::SETTINGS.difficulty == crate::Difficulty::Easy;
+        let easy = crate::SETTINGS.difficulty() == crate::Difficulty::Easy;
         loop {
             lock.read_exact(&mut buf).unwrap();
             match buf[0] {
@@ -777,6 +776,8 @@ pub struct Effects {
     pub drunk: Duration,
     // perception +10 then *2
     pub far_sight: Duration,
+    // 1 damage per turn
+    pub poison: Duration,
 }
 impl Effects {
     // Creates an instance with starting effects
@@ -784,7 +785,7 @@ impl Effects {
         Effects {
             invincible: Duration::None,
             regen: Duration::None,
-            unlucky: match crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+            unlucky: match crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
                 true => Duration::Infinite,
                 false => Duration::None,
             },
@@ -793,6 +794,7 @@ impl Effects {
             full_vis: Duration::None,
             drunk: Duration::None,
             far_sight: Duration::None,
+            poison: Duration::None,
         }
     }
     // Decreases all effect durations by 1 turn
@@ -805,6 +807,7 @@ impl Effects {
         self.full_vis.decriment();
         self.drunk.decriment();
         self.far_sight.decriment();
+        self.poison.decriment();
     }
     // for setting effects by command
     pub fn set(&mut self, s: &str) -> Result<(), String> {
@@ -821,6 +824,7 @@ impl Effects {
                     "full_vis" => self.full_vis = args.parse()?,
                     "drunk" => self.drunk = args.parse()?,
                     "far_sight" => self.far_sight = args.parse()?,
+                    "poison" => self.poison = args.parse()?,
                     other => return Err(format!("{other} is not an effect")),
                 }
             }
@@ -861,6 +865,10 @@ impl Effects {
             println!("    and has far sight for");
             self.far_sight.list()
         }
+        if self.poison.is_active() {
+            println!("    and is poisoned for");
+            self.poison.list()
+        }
     }
     pub fn has_none(&self) -> bool {
         !(self.invincible.is_active()
@@ -870,7 +878,8 @@ impl Effects {
             || self.damage_boost.is_active()
             || self.full_vis.is_active()
             || self.drunk.is_active()
-            || self.far_sight.is_active())
+            || self.far_sight.is_active()
+            || self.poison.is_active())
     }
 }
 impl FromBinary for Effects {
@@ -887,6 +896,7 @@ impl FromBinary for Effects {
             full_vis: Duration::from_binary(binary)?,
             drunk: Duration::from_binary(binary)?,
             far_sight: Duration::from_binary(binary)?,
+            poison: Duration::from_binary(binary)?,
         })
     }
 }
@@ -899,7 +909,8 @@ impl ToBinary for Effects {
         self.damage_boost.to_binary(binary)?;
         self.full_vis.to_binary(binary)?;
         self.drunk.to_binary(binary)?;
-        self.far_sight.to_binary(binary)
+        self.far_sight.to_binary(binary)?;
+        self.poison.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -961,6 +972,13 @@ impl std::ops::AddAssign<usize> for Duration {
             Self::None => *self = Self::Turns(rhs),
             Self::Turns(turns) => *turns += rhs,
             Self::Infinite => {}
+        }
+    }
+}
+impl std::ops::MulAssign<usize> for Duration {
+    fn mul_assign(&mut self, rhs: usize) {
+        if let Self::Turns(turns) = self {
+            *turns *= rhs;
         }
     }
 }

@@ -1,12 +1,23 @@
+use crossterm::queue;
+
 use crate::{FromBinary, ToBinary};
+use std::fmt::Display;
 use std::io::{Read, Write};
+use std::str::FromStr;
 const PATH: &str = "settings";
 #[derive(Debug, Clone)]
 pub struct Settings {
-    pub kick_enemies: bool,
-    pub kick_doors: bool,
-    pub difficulty: Difficulty,
-    pub fast_mode: bool,
+    kick_enemies: Field,
+    kick_doors: Field,
+    difficulty: Field,
+    fast_mode: Field,
+}
+macro_rules! getter {
+    ($name:ident, $out:ty) => {
+        pub fn $name(&self) -> $out {
+            (*self.$name).try_into().unwrap()
+        }
+    };
 }
 const DEFAULT_FILE: &[u8] = include_bytes!("default_settings.txt");
 impl Settings {
@@ -57,28 +68,31 @@ impl Settings {
                     if let Some(field) = iter.next() {
                         if let Some(value) = iter.next() {
                             macro_rules! thing {
-                                ($field:ident) => {
-                                    settings.$field = match value.parse() {
-                                        Ok(field) => field,
+                                ($field:ident, $val:ty) => {
+                                    *settings.$field = match value.parse() {
+                                        Ok(field) => {
+                                            let val: $val = field;
+                                            val.into()
+                                        }
                                         Err(_) => continue,
                                     }
                                 };
                             }
                             match field {
-                                "kick_enemies" => thing!(kick_enemies),
-                                "kick_doors" => thing!(kick_doors),
+                                "kick_enemies" => thing!(kick_enemies, bool),
+                                "kick_doors" => thing!(kick_doors, bool),
                                 "difficulty" => {
                                     difficulty_was_not_set = false;
-                                    thing!(difficulty)
+                                    thing!(difficulty, Difficulty)
                                 }
-                                "fast_mode" => thing!(fast_mode),
+                                "fast_mode" => thing!(fast_mode, bool),
                                 _ => {}
                             }
                         }
                     }
                 }
                 if difficulty_was_not_set {
-                    settings.difficulty = *difficulty_choice;
+                    *settings.difficulty = Value::from(*difficulty_choice);
                 }
                 crate::log!("Settings chosen: {settings:?}");
                 settings
@@ -86,19 +100,200 @@ impl Settings {
             false => {
                 std::fs::write("settings", DEFAULT_FILE).unwrap();
                 let mut settings = Settings::default();
-                settings.difficulty = *difficulty_choice;
+                *settings.difficulty = Value::from(*difficulty_choice);
                 settings
             }
         }
     }
+    fn to_file(&self) {
+        let mut file = std::fs::File::create("settings").unwrap();
+        writeln!(
+            file,
+            "kick_enemies {}",
+            bool::try_from(*self.kick_enemies).unwrap()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "kick_doors {}",
+            bool::try_from(*self.kick_doors).unwrap()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "difficulty {}",
+            Difficulty::try_from(*self.difficulty).unwrap()
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "fast_mode {}",
+            bool::try_from(*self.fast_mode).unwrap()
+        )
+        .unwrap();
+        file.flush().unwrap();
+    }
+    // Assumes weirdifier is active
+    pub fn editor(&mut self) {
+        crossterm::execute!(std::io::stdout(), crossterm::cursor::Hide).unwrap();
+        let mut stdin = std::io::stdin().lock();
+        let mut buf = [0];
+        let num_fields = self.num_fields();
+        let mut field_index = 0;
+        let mut value_index;
+        let mut selecting_field = true;
+        loop {
+            value_index = self.get_field(field_index).get_index();
+            self.editor_render(field_index, value_index, selecting_field, 50);
+            stdin.read_exact(&mut buf).unwrap();
+            match buf[0] {
+                27 => {
+                    stdin.read_exact(&mut buf).unwrap();
+                    stdin.read_exact(&mut buf).unwrap();
+                    match buf[0] {
+                        // Up
+                        b'A' => match selecting_field {
+                            true => {
+                                if field_index == 0 {
+                                    field_index = num_fields;
+                                }
+                                field_index -= 1;
+                            }
+                            false => {
+                                if value_index == 0 {
+                                    value_index = self.get_field(field_index).get_values().len();
+                                }
+                                value_index -= 1;
+                                self.get_field_mut(field_index).current =
+                                    self.get_field(field_index).get_values()[value_index];
+                            }
+                        },
+                        // Down
+                        b'B' => match selecting_field {
+                            true => {
+                                field_index += 1;
+                                if field_index == num_fields {
+                                    field_index = 0;
+                                }
+                            }
+                            false => {
+                                value_index += 1;
+                                if value_index == self.get_field(field_index).get_values().len() {
+                                    value_index = 0;
+                                }
+                                self.get_field_mut(field_index).current =
+                                    self.get_field(field_index).get_values()[value_index];
+                            }
+                        },
+                        // Right
+                        b'C' => {
+                            selecting_field = false;
+                        }
+                        // Left
+                        b'D' => {
+                            selecting_field = true;
+                        }
+                        _ => {}
+                    }
+                }
+                b'q' => break,
+                _ => {}
+            }
+        }
+        self.to_file();
+    }
+    fn editor_render(
+        &self,
+        field_index: usize,
+        value_index: usize,
+        selecting_field: bool,
+        second_column: u16,
+    ) {
+        let selected = *crate::Style::new()
+            .background_red()
+            .intense_background(true);
+        let off_selected = *crate::Style::new().background_yellow();
+        let mut lock = std::io::stdout().lock();
+        // Clear the screen & zero cursor
+        crossterm::queue!(
+            lock,
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+            crossterm::cursor::MoveTo(0, 0),
+        )
+        .unwrap();
+
+        // Drawing fields
+        for index in 0..self.num_fields() {
+            if index == field_index {
+                if selecting_field {
+                    write!(lock, "{selected}").unwrap();
+                } else {
+                    write!(lock, "{off_selected}").unwrap();
+                }
+            }
+            writeln!(lock, "{}", self.get_field(index).name).unwrap();
+            if index == field_index {
+                write!(lock, "\x1b[0m").unwrap();
+            }
+        }
+
+        // Drawing values
+        let values = self.get_field(field_index).get_values();
+        for (index, value) in values.iter().enumerate() {
+            crossterm::queue!(lock, crossterm::cursor::MoveTo(second_column, index as u16))
+                .unwrap();
+            if index == value_index {
+                if selecting_field {
+                    write!(lock, "{off_selected}").unwrap();
+                } else {
+                    write!(lock, "{selected}").unwrap();
+                }
+            }
+            write!(lock, "{value}").unwrap();
+            if index == value_index {
+                write!(lock, "\x1b[0m").unwrap();
+            }
+        }
+
+        crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 10000)).unwrap();
+        write!(lock, "Press 'q' to quit").unwrap();
+
+        lock.flush().unwrap();
+    }
+    fn get_field_mut(&mut self, index: usize) -> &mut Field {
+        match index {
+            0 => &mut self.kick_enemies,
+            1 => &mut self.kick_doors,
+            2 => &mut self.difficulty,
+            3 => &mut self.fast_mode,
+            _ => panic!("I diddly done goofed up the math"),
+        }
+    }
+    fn get_field(&self, index: usize) -> &Field {
+        match index {
+            0 => &self.kick_enemies,
+            1 => &self.kick_doors,
+            2 => &self.difficulty,
+            3 => &self.fast_mode,
+            _ => panic!("Someone is bad at math, and it is probably me"),
+        }
+    }
+    const fn num_fields(&self) -> usize {
+        4
+    }
+
+    getter!(kick_enemies, bool);
+    getter!(kick_doors, bool);
+    getter!(difficulty, Difficulty);
+    getter!(fast_mode, bool);
 }
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            kick_enemies: true,
-            kick_doors: true,
-            difficulty: Difficulty::default(),
-            fast_mode: false,
+            kick_enemies: Field::new("kick enemies", true),
+            kick_doors: Field::new("kick doors", true),
+            difficulty: Field::new("difficulty", Difficulty::default()),
+            fast_mode: Field::new("fast mode", false),
         }
     }
 }
@@ -108,19 +303,121 @@ impl FromBinary for Settings {
         Self: Sized,
     {
         Ok(Settings {
-            kick_enemies: bool::from_binary(binary)?,
-            kick_doors: bool::from_binary(binary)?,
-            difficulty: Difficulty::from_binary(binary)?,
-            fast_mode: bool::from_binary(binary)?,
+            kick_enemies: Value::from(bool::from_binary(binary)?).into(),
+            kick_doors: Value::from(bool::from_binary(binary)?).into(),
+            difficulty: Value::from(Difficulty::from_binary(binary)?).into(),
+            fast_mode: Value::from(bool::from_binary(binary)?).into(),
         })
     }
 }
 impl ToBinary for Settings {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-        self.kick_enemies.to_binary(binary)?;
-        self.kick_doors.to_binary(binary)?;
-        self.difficulty.to_binary(binary)?;
-        self.fast_mode.to_binary(binary)
+        macro_rules! help {
+            ($field:ident, $type:ty) => {
+                <$type>::try_from(*self.$field).unwrap().to_binary(binary)?;
+            };
+        }
+        help!(kick_enemies, bool);
+        help!(kick_doors, bool);
+        help!(difficulty, Difficulty);
+        help!(fast_mode, bool);
+        Ok(())
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Field {
+    current: Value,
+    name: &'static str,
+}
+impl Field {
+    fn new<T: Into<Value>>(name: &'static str, default: T) -> Self {
+        Field {
+            current: default.into(),
+            name,
+        }
+    }
+}
+impl From<Value> for Field {
+    // If we are loading using FromBinary then the editor is not running,
+    // therefore we only need the current value.
+    fn from(value: Value) -> Self {
+        Field {
+            current: value,
+            name: "",
+        }
+    }
+}
+impl std::ops::Deref for Field {
+    type Target = Value;
+    fn deref(&self) -> &Self::Target {
+        &self.current
+    }
+}
+impl std::ops::DerefMut for Field {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.current
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Value {
+    Bool(bool),
+    Difficulty(Difficulty),
+}
+impl Value {
+    fn get_values(&self) -> Vec<Value> {
+        match self {
+            Value::Bool(_) => Vec::from([true, false].map(|x| Value::Bool(x))),
+            Value::Difficulty(_) => Vec::from(
+                [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard]
+                    .map(|x| Value::Difficulty(x)),
+            ),
+        }
+    }
+    fn get_index(&self) -> usize {
+        for (index, value) in self.get_values().iter().enumerate() {
+            if value == self {
+                return index;
+            }
+        }
+        unreachable!("ABE YA STUPID GIT IT DIDN'T WORK")
+    }
+}
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Bool(value)
+    }
+}
+impl From<Difficulty> for Value {
+    fn from(value: Difficulty) -> Self {
+        Value::Difficulty(value)
+    }
+}
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Bool(val) => val.fmt(f),
+            Value::Difficulty(val) => val.fmt(f),
+        }
+    }
+}
+impl TryFrom<Value> for bool {
+    type Error = ();
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if let Value::Bool(val) = value {
+            Ok(val)
+        } else {
+            Err(())
+        }
+    }
+}
+impl TryFrom<Value> for Difficulty {
+    type Error = ();
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if let Value::Difficulty(val) = value {
+            Ok(val)
+        } else {
+            Err(())
+        }
     }
 }
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Ord)]

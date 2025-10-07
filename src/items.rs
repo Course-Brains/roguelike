@@ -23,6 +23,8 @@ pub enum ItemType {
     Spirit,
     // gives far_sight for 50 turns
     FarSightPotion,
+    // Gives immediate health but poisons you
+    Fish,
 }
 impl ItemType {
     // What is listed in the inventory
@@ -36,6 +38,7 @@ impl ItemType {
             Self::Tea => write!(out, "Tea").unwrap(),
             Self::Spirit => write!(out, "Spirit").unwrap(),
             Self::FarSightPotion => write!(out, crate::debug_only!("far_sight_potion")).unwrap(),
+            Self::Fish => write!(out, "fish").unwrap(),
         }
     }
     // What happens when it is used
@@ -189,6 +192,12 @@ impl ItemType {
                 state.player.effects.far_sight += 20;
                 true
             }
+            Self::Fish => {
+                state.player.heal(20);
+                state.player.effects.poison *= 2;
+                state.player.effects.poison += 10;
+                true
+            }
         }
     }
     // The price to pick up
@@ -201,6 +210,7 @@ impl ItemType {
             Self::Warp => 30,
             Self::Tea => 50,
             Self::FarSightPotion => 15,
+            Self::Fish => 35,
             Self::Spirit => unimplemented!("Spirit intentionally not in shop"),
         }
     }
@@ -215,12 +225,15 @@ impl ItemType {
             Self::Tea => "Tea",
             Self::Spirit => "Spirit",
             Self::FarSightPotion => crate::debug_only!("far_sight_potion"),
+            Self::Fish => "fish",
         }
     }
     pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {
         (
             match self {
-                Self::BossFinder | Self::Gamba | Self::EnderPearl | Self::Warp => SCROLL,
+                Self::BossFinder | Self::Gamba | Self::EnderPearl | Self::Warp | Self::Fish => {
+                    SCROLL
+                }
                 Self::HealthPotion | Self::Tea | Self::Spirit | Self::FarSightPotion => POTION,
             },
             Some(match self.price() <= player.get_money() {
@@ -242,6 +255,7 @@ impl std::str::FromStr for ItemType {
             "tea" => Ok(Self::Tea),
             "spirit" => Ok(Self::Spirit),
             "far_sight_potion" => Ok(Self::FarSightPotion),
+            "fish" => Ok(Self::Fish),
             other => Err(format!("{other} is not an item type")),
         }
     }
@@ -257,12 +271,13 @@ impl std::fmt::Display for ItemType {
             Self::Tea => write!(f, "tea"),
             Self::Spirit => write!(f, "spirit"),
             Self::FarSightPotion => write!(f, "far sight potion"),
+            Self::Fish => write!(f, "fish"),
         }
     }
 }
 impl crate::Random for crate::ItemType {
     fn random() -> Self {
-        match crate::random() % 7 {
+        match crate::random() % 8 {
             0 => Self::HealthPotion,
             1 => Self::BossFinder,
             2 => Self::Gamba,
@@ -270,6 +285,7 @@ impl crate::Random for crate::ItemType {
             4 => Self::Warp,
             5 => Self::Tea,
             6 => Self::FarSightPotion,
+            7 => Self::Fish,
             // Spirit intentionally not in shop
             _ => unreachable!("idk, not my problem"),
         }
@@ -289,6 +305,7 @@ impl FromBinary for ItemType {
             5 => Self::Tea,
             6 => Self::Spirit,
             7 => Self::FarSightPotion,
+            8 => Self::Fish,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -309,6 +326,7 @@ impl ToBinary for ItemType {
             Self::Tea => 5,
             Self::Spirit => 6,
             Self::FarSightPotion => 7,
+            Self::Fish => 8,
         }
         .to_binary(binary)
     }

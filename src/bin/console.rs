@@ -1,4 +1,4 @@
-use albatrice::{FromBinary, Split, ToBinary, input};
+use abes_nice_things::{FromBinary, Split, ToBinary, input};
 use std::io::Read;
 use std::net::TcpStream;
 fn main() {

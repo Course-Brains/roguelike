@@ -29,14 +29,14 @@ impl Limbs {
     pub fn new() -> Limbs {
         Limbs {
             left_eye: {
-                if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+                if crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
                     Eye::Seer
                 } else {
                     Eye::new()
                 }
             },
             right_eye: {
-                if crate::SETTINGS.difficulty >= crate::Difficulty::Hard {
+                if crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
                     Eye::None
                 } else {
                     Eye::new()

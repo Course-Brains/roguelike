@@ -1,4 +1,4 @@
-use albatrice::{FromBinary, ToBinary};
+use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Read;
 pub enum Input {
     Arrow(Direction),      // move cursor

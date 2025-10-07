@@ -3,9 +3,9 @@
 version = 4
 
 [[package]]
-name = "albatrice"
+name = "abes_nice_things"
 version = "0.2.0"
-source = "git+https://github.com/albatrice/albatrice.git?branch=course-brains#1bdddfd5d6c78f0d9a9e5d61d1e372ba0a3edfb0"
+source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=6b27382#6b27382fdd544d11a654c83684c956d042c56b5e"
 
 [[package]]
 name = "autocfg"
@@ -201,7 +201,7 @@ dependencies = [
 name = "roguelike"
 version = "0.1.0"
 dependencies = [
- "albatrice",
+ "abes_nice_things",
  "crossterm",
 ]
 

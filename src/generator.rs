@@ -2,7 +2,7 @@ use crate::{
     Board, Enemy, MapGenSettings, Style, Vector, board::Piece, enemy::Variant, pieces::door::Door,
     random::*,
 };
-use albatrice::debug;
+use abes_nice_things::debug;
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;

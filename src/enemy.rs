@@ -238,12 +238,12 @@ impl Enemy {
                         MageSpell::Circle(cast_pos) => {
                             crate::log!("  Casting circle");
                             if !board.contains_literally_anything(cast_pos, Some(addr)) {
-                                board.spells.push(SpellCircle {
-                                    spell: Spell::Contact(ContactSpell::DrainHealth),
-                                    pos: cast_pos,
-                                    caster: Some(arc.clone()),
-                                    aim: None,
-                                });
+                                board.spells.push(SpellCircle::new_enemy(
+                                    Spell::Contact(ContactSpell::DrainHealth),
+                                    cast_pos,
+                                    arc.clone(),
+                                    None,
+                                ));
                             }
                             this.as_mut().unwrap().windup = 0;
                             *time += start.elapsed();
@@ -558,11 +558,17 @@ impl Enemy {
                         match action {
                             FighterAction::Smack => {
                                 if this.as_ref().unwrap().pos.is_near(player.pos, 2) {
-                                    let _ = player.attacked(
-                                        crate::random::random8() as usize,
-                                        Variant::fighter().kill_name(),
-                                        Some(Variant::fighter().to_key()),
-                                    );
+                                    if player
+                                        .attacked(
+                                            crate::random::random8() as usize,
+                                            Variant::fighter().kill_name(),
+                                            Some(Variant::fighter().to_key()),
+                                        )
+                                        .is_err()
+                                    {
+                                        this.as_mut().unwrap().stun =
+                                            this.as_ref().unwrap().variant.parry_stun();
+                                    }
                                 }
                             }
                             FighterAction::Teleport(aim) => {
@@ -653,11 +659,17 @@ impl Enemy {
                                     if buff > 0 {
                                         damage *= 2;
                                     }
-                                    let _ = player.attacked(
-                                        damage,
-                                        this.as_ref().unwrap().variant.kill_name(),
-                                        Some(Variant::fighter_boss().to_key()),
-                                    );
+                                    if player
+                                        .attacked(
+                                            damage,
+                                            this.as_ref().unwrap().variant.kill_name(),
+                                            Some(Variant::fighter_boss().to_key()),
+                                        )
+                                        .is_err()
+                                    {
+                                        this.as_mut().unwrap().stun =
+                                            this.as_mut().unwrap().variant.parry_stun();
+                                    }
                                     if let Variant::FighterBoss { buff, .. } =
                                         &mut this.as_mut().unwrap().variant
                                     {

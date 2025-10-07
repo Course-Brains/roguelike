@@ -149,6 +149,8 @@ give \[item\] {slot}
         ender\_pearl
         warp
         spirit
+        far\_sight\_potion
+        fish
 
 set\_money \[amount\]
     Sets the money to the given \[amount\]

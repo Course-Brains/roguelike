@@ -607,7 +607,15 @@ fn main() {
                         state.render();
                     }
                     Input::Enter => {
-                        state.open_door(state.player.selector, false);
+                        if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
+                            if door.open {
+                                door.open = false;
+                                state.board.flood(state.player.pos);
+                                state.increment();
+                            } else {
+                                state.open_door(state.player.selector, false);
+                            }
+                        }
                     }
                     Input::Item(index) => {
                         debug_assert!(index < 7);

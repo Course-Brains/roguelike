@@ -1,9 +1,6 @@
-use crossterm::queue;
-
 use crate::{FromBinary, ToBinary};
 use std::fmt::Display;
 use std::io::{Read, Write};
-use std::str::FromStr;
 const PATH: &str = "settings";
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -146,57 +143,58 @@ impl Settings {
             value_index = self.get_field(field_index).get_index();
             self.editor_render(field_index, value_index, selecting_field, 50);
             stdin.read_exact(&mut buf).unwrap();
+            // Add in wasd support
             match buf[0] {
                 27 => {
                     stdin.read_exact(&mut buf).unwrap();
                     stdin.read_exact(&mut buf).unwrap();
                     match buf[0] {
                         // Up
-                        b'A' => match selecting_field {
-                            true => {
-                                if field_index == 0 {
-                                    field_index = num_fields;
-                                }
-                                field_index -= 1;
-                            }
-                            false => {
-                                if value_index == 0 {
-                                    value_index = self.get_field(field_index).get_values().len();
-                                }
-                                value_index -= 1;
-                                self.get_field_mut(field_index).current =
-                                    self.get_field(field_index).get_values()[value_index];
-                            }
-                        },
+                        b'A' => self.editor_up(
+                            selecting_field,
+                            &mut field_index,
+                            num_fields,
+                            &mut value_index,
+                        ),
                         // Down
-                        b'B' => match selecting_field {
-                            true => {
-                                field_index += 1;
-                                if field_index == num_fields {
-                                    field_index = 0;
-                                }
-                            }
-                            false => {
-                                value_index += 1;
-                                if value_index == self.get_field(field_index).get_values().len() {
-                                    value_index = 0;
-                                }
-                                self.get_field_mut(field_index).current =
-                                    self.get_field(field_index).get_values()[value_index];
-                            }
-                        },
+                        b'B' => self.editor_down(
+                            selecting_field,
+                            &mut field_index,
+                            num_fields,
+                            &mut value_index,
+                        ),
                         // Right
-                        b'C' => {
-                            selecting_field = false;
-                        }
+                        b'C' => Settings::editor_right(&mut selecting_field),
                         // Left
-                        b'D' => {
-                            selecting_field = true;
-                        }
+                        b'D' => Settings::editor_left(&mut selecting_field),
                         _ => {}
                     }
                 }
+                b'w' => self.editor_up(
+                    selecting_field,
+                    &mut field_index,
+                    num_fields,
+                    &mut value_index,
+                ),
+                b's' => self.editor_down(
+                    selecting_field,
+                    &mut field_index,
+                    num_fields,
+                    &mut value_index,
+                ),
+                b'a' => Self::editor_left(&mut selecting_field),
+                b'd' => Self::editor_right(&mut selecting_field),
+                b' ' => selecting_field ^= true, // swap selection
                 b'q' => break,
+                b'r' => {
+                    // reset field
+                    self.get_field_mut(field_index).current =
+                        Settings::default().get_field(field_index).current;
+                }
+                b'R' => {
+                    // reset all fields
+                    *self = Settings::default();
+                }
                 _ => {}
             }
         }
@@ -256,9 +254,63 @@ impl Settings {
         }
 
         crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 10000)).unwrap();
-        write!(lock, "Press 'q' to quit").unwrap();
+        write!(lock, "q to quit, r to reset field, R to full reset").unwrap();
 
         lock.flush().unwrap();
+    }
+    fn editor_up(
+        &mut self,
+        selecting_field: bool,
+        field_index: &mut usize,
+        num_fields: usize,
+        value_index: &mut usize,
+    ) {
+        match selecting_field {
+            true => {
+                if *field_index == 0 {
+                    *field_index = num_fields;
+                }
+                *field_index -= 1;
+            }
+            false => {
+                if *value_index == 0 {
+                    *value_index = self.get_field(*field_index).get_values().len();
+                }
+                *value_index -= 1;
+                self.get_field_mut(*field_index).current =
+                    self.get_field(*field_index).get_values()[*value_index];
+            }
+        }
+    }
+    fn editor_down(
+        &mut self,
+        selecting_field: bool,
+        field_index: &mut usize,
+        num_fields: usize,
+        value_index: &mut usize,
+    ) {
+        match selecting_field {
+            true => {
+                *field_index += 1;
+                if *field_index == num_fields {
+                    *field_index = 0;
+                }
+            }
+            false => {
+                *value_index += 1;
+                if *value_index == self.get_field(*field_index).get_values().len() {
+                    *value_index = 0;
+                }
+                self.get_field_mut(*field_index).current =
+                    self.get_field(*field_index).get_values()[*value_index];
+            }
+        }
+    }
+    fn editor_left(selecting_field: &mut bool) {
+        *selecting_field = true;
+    }
+    fn editor_right(selecting_field: &mut bool) {
+        *selecting_field = false;
     }
     fn get_field_mut(&mut self, index: usize) -> &mut Field {
         match index {

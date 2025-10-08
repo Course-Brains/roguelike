@@ -39,7 +39,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 11;
+const SAVE_VERSION: Version = 12;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level

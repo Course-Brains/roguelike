@@ -150,13 +150,27 @@ impl Board {
         // Placing exit
         out[Vector::new(88, 15)] = Some(Piece::Exit(Exit::Level));
 
-        // Placing items and upgrades
+        // Placing items
         for x in 1..=88 {
             std::thread::sleep(std::time::Duration::from_millis(1000));
             out[Vector::new(x, 1)] = Some(Piece::Item(Item::new(None)));
+        }
+
+        // Placing upgrades/limbs
+        let mut available = crate::SHOP_AVAILABILITY.lock().unwrap().1.recv().unwrap();
+        for x in 1..=88 {
             if x % 10 == 0 {
-                std::thread::sleep(std::time::Duration::from_millis(1000));
-                out[Vector::new(x, 28)] = Some(Piece::Upgrade(Upgrade::new(None)));
+                let chosen = {
+                    // Assume that the list of available upgrades is creater than 0
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                    let index = crate::random::random_index(available.len()).unwrap();
+                    if available[index].is_repeatable().unwrap() {
+                        available[index]
+                    } else {
+                        available.swap_remove(index)
+                    }
+                };
+                out[Vector::new(x, 28)] = Some(Piece::Upgrade(Upgrade::new(Some(chosen))));
             }
         }
 

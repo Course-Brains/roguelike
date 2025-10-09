@@ -1,5 +1,10 @@
 // When I do add spells, add a system for random unidentifiable buffs that get determined at the
 // start, with one of them being the ability to do other actions while casting
+//
+// Make it so that upgrades don't get picked until the player leaves the previous shop and it sends
+// to the generator the list of banned upgrades, then make a of valid ones and pick from that,
+// while removing the ones that are picked and can only be gotten once so that there are no redundant
+// upgrades
 mod player;
 use player::Player;
 mod board;
@@ -221,6 +226,13 @@ fn initialize_stdin_listener() -> std::thread::Thread {
     .thread()
     .clone()
 }
+// Sends the current upgrades to the shop generator so that it can only show non-redundant upgrades
+static SHOP_AVAILABILITY: std::sync::LazyLock<
+    Mutex<(
+        std::sync::mpsc::Sender<Vec<upgrades::UpgradeType>>,
+        std::sync::mpsc::Receiver<Vec<upgrades::UpgradeType>>,
+    )>,
+> = std::sync::LazyLock::new(|| Mutex::new(std::sync::mpsc::channel()));
 
 enum CommandInput {
     Input(input::Input),
@@ -367,6 +379,10 @@ fn main() {
         // there is not a save file
         false => State::new(empty),
     };
+    state
+        .shop_sender
+        .send(state.player.upgrades.get_available())
+        .unwrap();
     // discourage save scumming by making it so that if it closes non-properly then the file is
     // gone
     if SETTINGS.difficulty() != Difficulty::Easy {
@@ -714,6 +730,7 @@ struct State {
     next_map_settings: MapGenSettings,
     next_shop: std::thread::JoinHandle<Board>,
     level: usize,
+    shop_sender: std::sync::mpsc::Sender<Vec<upgrades::UpgradeType>>,
     // debugging
     nav_stepthrough: bool,
     nav_stepthrough_index: Option<usize>,
@@ -751,6 +768,7 @@ impl State {
             ),
             next_shop: std::thread::spawn(Board::new_shop),
             level: 0,
+            shop_sender: SHOP_AVAILABILITY.try_lock().unwrap().0.clone(),
             nav_stepthrough: false,
             nav_stepthrough_index: None,
             show_nav: false,
@@ -960,6 +978,9 @@ impl State {
         self.player.selector = Vector::new(1, 1);
         self.board.flood(self.player.pos);
         self.player.memory = None;
+        self.shop_sender
+            .send(self.player.upgrades.get_available())
+            .unwrap();
         self.render();
     }
     fn get_budget(&self) -> usize {
@@ -1100,6 +1121,7 @@ impl FromBinary for State {
             next_map_settings: settings,
             next_shop: std::thread::spawn(Board::new_shop),
             level: usize::from_binary(binary)?,
+            shop_sender: SHOP_AVAILABILITY.lock().unwrap().0.clone(),
             nav_stepthrough: bool::from_binary(binary)?,
             nav_stepthrough_index: Option::from_binary(binary)?,
             show_nav: bool::from_binary(binary)?,
@@ -1117,6 +1139,7 @@ impl ToBinary for State {
         self.board.to_binary(binary)?;
         self.turn.to_binary(binary)?;
         self.level.to_binary(binary)?;
+        // Cannot save shop_sender
         self.nav_stepthrough.to_binary(binary)?;
         self.nav_stepthrough_index.as_ref().to_binary(binary)?;
         self.show_nav.to_binary(binary)?;

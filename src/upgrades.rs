@@ -22,6 +22,31 @@ impl Upgrades {
             full_energy_ding: false,
         }
     }
+    pub fn get_available(&self) -> Vec<UpgradeType> {
+        let mut out = vec![
+            UpgradeType::EnergyBoost,
+            UpgradeType::HealthBoost,
+            UpgradeType::LimbMageEye,
+            UpgradeType::LimbSeerEye,
+        ];
+        if !self.map {
+            out.push(UpgradeType::Map);
+        }
+        if !self.soft_shoes {
+            out.push(UpgradeType::SoftShoes);
+        }
+        if !self.precise_convert {
+            out.push(UpgradeType::PreciseConvert);
+        }
+        if !self.full_energy_ding {
+            out.push(UpgradeType::FullEnergyDing)
+        }
+        if !self.lifesteal {
+            out.push(UpgradeType::FullEnergyDing)
+        }
+
+        out
+    }
 }
 impl FromBinary for Upgrades {
     fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
@@ -48,20 +73,25 @@ impl ToBinary for Upgrades {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum UpgradeType {
+    // Normal upgrades
     Map,
     SoftShoes,
-    SavePint, // no corresponding upgrade field
     PreciseConvert,
-    EnergyBoost,    // max energy (exponential cost?)
-    HealthBoost,    // max health ...
-    Lifesteal,      // health on kill
-    BonusNoWaste,   // double money
-    BonusNoDamage,  // +50% max health & full heal
-    BonusKillAll,   // complicated, look at on_pickup
-    BonusNoEnergy,  // +50% max energy
-    LimbMageEye,    // The mage eye
-    LimbSeerEye,    // The seer eye
     FullEnergyDing, // send bell character when full energy
+    Lifesteal,      // health on kill
+    // Infinite upgrades
+    EnergyBoost, // max energy (exponential cost?)
+    HealthBoost, // max health ...
+    // Limbs
+    LimbMageEye, // The mage eye
+    LimbSeerEye, // The seer eye
+    // Bonuses
+    BonusNoWaste,  // double money
+    BonusNoDamage, // +50% max health & full heal
+    BonusKillAll,  // complicated, look at on_pickup
+    BonusNoEnergy, // +50% max energy
+    // Save pint
+    SavePint, // no corresponding upgrade field
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -236,6 +266,19 @@ impl UpgradeType {
             Self::LimbMageEye => "A mage's eye",
             Self::LimbSeerEye => "A seer's eye",
             Self::FullEnergyDing => crate::debug_only!("full_energy_ding"),
+        }
+    }
+    pub fn is_repeatable(self) -> Option<bool> {
+        match self {
+            Self::Map
+            | Self::SoftShoes
+            | Self::PreciseConvert
+            | Self::FullEnergyDing
+            | Self::Lifesteal => Some(false),
+            Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => {
+                Some(true)
+            }
+            _ => None,
         }
     }
 }

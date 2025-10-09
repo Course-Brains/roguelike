@@ -16,7 +16,7 @@ pub enum Input {
     ClearFeedback,         // Clear the feedback
     Memorize,              // Memorize the current position
     Remember,              // Remember the memorized position
-                           //CycleDebug,
+    AutoMove,              // automatically move to the selected position
 }
 impl Input {
     pub fn get() -> Input {
@@ -63,6 +63,7 @@ impl Input {
                 b'C' => return Input::ClearFeedback,
                 b'm' => return Input::Memorize,
                 b'R' => return Input::Remember,
+                b'M' => return Input::AutoMove,
                 _ => {}
             }
         }
@@ -104,6 +105,17 @@ impl std::ops::Sub<Direction> for crate::Vector {
             Direction::Down => crate::Vector::new(self.x, self.y - 1),
             Direction::Left => crate::Vector::new(self.x + 1, self.y),
             Direction::Right => crate::Vector::new(self.x - 1, self.y),
+        }
+    }
+}
+impl std::ops::Not for Direction {
+    type Output = Direction;
+    fn not(self) -> Self::Output {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+            Direction::Right => Direction::Left,
         }
     }
 }

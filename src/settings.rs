@@ -8,6 +8,7 @@ pub struct Settings {
     kick_doors: Field,
     difficulty: Field,
     fast_mode: Field,
+    auto_move: Field,
 }
 macro_rules! getter {
     ($name:ident, $out:ty) => {
@@ -83,6 +84,7 @@ impl Settings {
                                     thing!(difficulty, Difficulty)
                                 }
                                 "fast_mode" => thing!(fast_mode, bool),
+                                "auto_move" => thing!(auto_move, bool),
                                 _ => {}
                             }
                         }
@@ -128,8 +130,47 @@ impl Settings {
             bool::try_from(*self.fast_mode).unwrap()
         )
         .unwrap();
+        writeln!(
+            file,
+            "auto_move {}",
+            bool::try_from(*self.auto_move).unwrap()
+        )
+        .unwrap();
+
         file.flush().unwrap();
     }
+    fn get_field_mut(&mut self, index: usize) -> &mut Field {
+        match index {
+            0 => &mut self.kick_enemies,
+            1 => &mut self.kick_doors,
+            2 => &mut self.difficulty,
+            3 => &mut self.fast_mode,
+            4 => &mut self.auto_move,
+            _ => panic!("I diddly done goofed up the math"),
+        }
+    }
+    fn get_field(&self, index: usize) -> &Field {
+        match index {
+            0 => &self.kick_enemies,
+            1 => &self.kick_doors,
+            2 => &self.difficulty,
+            3 => &self.fast_mode,
+            4 => &self.auto_move,
+            _ => panic!("Someone is bad at math, and it is probably me"),
+        }
+    }
+    const fn num_fields(&self) -> usize {
+        5
+    }
+
+    getter!(kick_enemies, bool);
+    getter!(kick_doors, bool);
+    getter!(difficulty, Difficulty);
+    getter!(fast_mode, bool);
+    getter!(auto_move, bool);
+}
+// Unchanging editor methods
+impl Settings {
     // Assumes weirdifier is active
     pub fn editor(&mut self) {
         crossterm::execute!(std::io::stdout(), crossterm::cursor::Hide).unwrap();
@@ -312,32 +353,6 @@ impl Settings {
     fn editor_right(selecting_field: &mut bool) {
         *selecting_field = false;
     }
-    fn get_field_mut(&mut self, index: usize) -> &mut Field {
-        match index {
-            0 => &mut self.kick_enemies,
-            1 => &mut self.kick_doors,
-            2 => &mut self.difficulty,
-            3 => &mut self.fast_mode,
-            _ => panic!("I diddly done goofed up the math"),
-        }
-    }
-    fn get_field(&self, index: usize) -> &Field {
-        match index {
-            0 => &self.kick_enemies,
-            1 => &self.kick_doors,
-            2 => &self.difficulty,
-            3 => &self.fast_mode,
-            _ => panic!("Someone is bad at math, and it is probably me"),
-        }
-    }
-    const fn num_fields(&self) -> usize {
-        4
-    }
-
-    getter!(kick_enemies, bool);
-    getter!(kick_doors, bool);
-    getter!(difficulty, Difficulty);
-    getter!(fast_mode, bool);
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -346,6 +361,7 @@ impl Default for Settings {
             kick_doors: Field::new("kick doors", true),
             difficulty: Field::new("difficulty", Difficulty::default()),
             fast_mode: Field::new("fast mode", false),
+            auto_move: Field::new("auto move", false),
         }
     }
 }
@@ -359,6 +375,7 @@ impl FromBinary for Settings {
             kick_doors: Value::from(bool::from_binary(binary)?).into(),
             difficulty: Value::from(Difficulty::from_binary(binary)?).into(),
             fast_mode: Value::from(bool::from_binary(binary)?).into(),
+            auto_move: Value::from(bool::from_binary(binary)?).into(),
         })
     }
 }
@@ -373,6 +390,7 @@ impl ToBinary for Settings {
         help!(kick_doors, bool);
         help!(difficulty, Difficulty);
         help!(fast_mode, bool);
+        help!(auto_move, bool);
         Ok(())
     }
 }

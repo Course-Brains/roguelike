@@ -1146,21 +1146,43 @@ impl Board {
         }
     }
     pub fn show_path(&mut self, index: usize, player: Vector) {
+        let mut specials = crate::ONE_TURN_SPECIALS.try_lock().unwrap();
+        for pos in self.get_path(index, player).iter() {
+            specials.push(self.add_special(Special::new(
+                *pos,
+                ' ',
+                Some(*Style::new().background_green()),
+            )));
+        }
+    }
+    pub fn get_path(&self, index: usize, player: Vector) -> Vec<Vector> {
+        let mut out = Vec::new();
         let mut pos = self.enemies[index].try_read().unwrap().pos;
         let mut index = self.to_index(pos);
-        let mut specials = crate::ONE_TURN_SPECIALS.try_lock().unwrap();
         loop {
             if pos == player || self.backtraces[index].cost.is_none() {
                 break;
             }
             pos += self.backtraces[index].from;
             index = self.to_index(pos);
-            specials.push(self.add_special(Special::new(
-                pos,
-                ' ',
-                Some(*Style::new().background_green()),
-            )));
+            out.push(pos)
         }
+        out
+    }
+    pub fn get_directions(&self, target: Vector, player: Vector) -> Vec<Direction> {
+        let mut out = Vec::new();
+        let mut pos = target;
+        let mut index = self.to_index(pos);
+        loop {
+            if pos == player || self.backtraces[index].cost.is_none() {
+                break;
+            }
+            pos += self.backtraces[index].from;
+            out.push(!self.backtraces[index].from);
+            index = self.to_index(pos);
+        }
+        out.reverse();
+        out
     }
 }
 impl std::ops::Index<Vector> for Board {

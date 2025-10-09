@@ -1,3 +1,5 @@
+\* = requires enabling in settings
+
 ==========MOVEMENT==========
 w: walk up
 a: walk left
@@ -7,13 +9,14 @@ W: dash up
 A: dash left
 S: dash down
 D: dash right
+M: move to cursor \*
 ==========SELECTOR==========
 up: move selector up
 left: move selector left
 down: move selector down
 right: move selector right
 r: return selector to player
-f: toggle fast selector movement
+f: toggle fast selector movement \*
 ===========COMBAT===========
 q: attack selected enemy
 e: block

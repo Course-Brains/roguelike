@@ -44,7 +44,7 @@ const RELAXED: Ordering = Ordering::Relaxed;
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 12;
+const SAVE_VERSION: Version = 13;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -706,6 +706,35 @@ fn main() {
                             None => "You have made no mental notes in this place.".to_string(),
                         });
                         state.render();
+                    }
+                    Input::AutoMove => {
+                        log!("!Starting auto move!");
+                        if state.board.is_reachable(state.player.selector)
+                            && SETTINGS.auto_move()
+                            && (state.board.seen[state.board.to_index(state.player.selector)]
+                                || state.player.upgrades.map)
+                        {
+                            // Janky hack to get backtrace data to the target
+                            state.board.enemies.push(Arc::new(RwLock::new(Enemy::new(
+                                state.player.selector,
+                                enemy::Variant::basic(),
+                            ))));
+                            state.board.generate_nav_data(
+                                state.player.pos,
+                                false,
+                                None,
+                                &mut state.player,
+                            );
+                            state.board.enemies.pop();
+                            let directions = state
+                                .board
+                                .get_directions(state.player.selector, state.player.pos);
+                            let send = &INPUT_SYSTEM.0;
+                            for direction in directions.into_iter() {
+                                send.send(CommandInput::Input(Input::Wasd(direction, false)))
+                                    .unwrap();
+                            }
+                        }
                     }
                 }
             }

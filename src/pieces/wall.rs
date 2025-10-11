@@ -19,37 +19,33 @@ impl Wall {
         let mut left = false;
         let mut right = false;
         let mut count = 0;
-        if pos.y != 0 {
-            if let Some(piece) = &board[pos - Vector::new(0, 1)] {
-                if piece.wall_connectable() {
-                    up = true;
-                    count += 1
-                }
-            }
+        if pos.y != 0
+            && let Some(piece) = &board[pos - Vector::new(0, 1)]
+            && piece.wall_connectable()
+        {
+            up = true;
+            count += 1
         }
-        if pos.y != board.y - 1 {
-            if let Some(piece) = &board[pos + Vector::new(0, 1)] {
-                if piece.wall_connectable() {
-                    down = true;
-                    count += 1
-                }
-            }
+        if pos.y != board.y - 1
+            && let Some(piece) = &board[pos + Vector::new(0, 1)]
+            && piece.wall_connectable()
+        {
+            down = true;
+            count += 1
         }
-        if pos.x != 0 {
-            if let Some(piece) = &board[pos - Vector::new(1, 0)] {
-                if piece.wall_connectable() {
-                    left = true;
-                    count += 1
-                }
-            }
+        if pos.x != 0
+            && let Some(piece) = &board[pos - Vector::new(1, 0)]
+            && piece.wall_connectable()
+        {
+            left = true;
+            count += 1
         }
-        if pos.x != board.x - 1 {
-            if let Some(piece) = &board[pos + Vector::new(1, 0)] {
-                if piece.wall_connectable() {
-                    right = true;
-                    count += 1
-                }
-            }
+        if pos.x != board.x - 1
+            && let Some(piece) = &board[pos + Vector::new(1, 0)]
+            && piece.wall_connectable()
+        {
+            right = true;
+            count += 1
         }
         match count {
             4 => QUAD,

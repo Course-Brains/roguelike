@@ -233,10 +233,10 @@ impl ContactSpell {
                         caster.health += damage;
                     }
                     Entity::Enemy(target) => {
-                        if let Entity::Enemy(caster) = &caster {
-                            if Arc::ptr_eq(caster, &target) {
-                                return;
-                            }
+                        if let Entity::Enemy(caster) = &caster
+                            && Arc::ptr_eq(caster, &target)
+                        {
+                            return;
                         }
                         let damage = (crate::random() as usize & 3) + 1;
                         target.try_write().unwrap().attacked(damage);
@@ -375,20 +375,20 @@ impl NormalSpell {
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
                 }
-                NormalSpell::fireball(
-                    caster.clone(),
+                FireBall {
+                    caster: caster.clone(),
                     player,
                     board,
                     origin,
                     aim,
-                    2,
+                    explosion_size: 2,
                     damage,
-                    damage * 5,
-                    caster
+                    player_damage: damage * 5,
+                    death_name: caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
                         .unwrap_or("a lack of depth perception"),
-                    time,
-                );
+                }
+                .evaluate(time);
                 true
             }
             Self::Identify => {
@@ -441,7 +441,7 @@ impl NormalSpell {
                 let bounds = board.get_render_bounds(player);
                 path.pop();
                 let mut delay_counts = 0;
-                if path.len() != 0 {
+                if !path.is_empty() {
                     for pos in path.iter() {
                         if board.is_visible(
                             *pos,
@@ -458,34 +458,34 @@ impl NormalSpell {
                         }
                     }
                 }
-                if let Some(collision) = collision {
-                    if let Some(entity) = collision.into_entity(player) {
-                        let damage = crate::random::random8() as usize;
-                        match entity {
-                            Entity::Player(player) => {
-                                let _ = player.attacked(
-                                    damage * 5,
+                if let Some(collision) = collision
+                    && let Some(entity) = collision.into_entity(player)
+                {
+                    let damage = crate::random::random8() as usize;
+                    match entity {
+                        Entity::Player(player) => {
+                            let _ = player.attacked(
+                                damage * 5,
+                                caster
+                                    .as_ref()
+                                    .unwrap()
+                                    .try_read()
+                                    .unwrap()
+                                    .variant
+                                    .kill_name(),
+                                Some(
                                     caster
                                         .as_ref()
                                         .unwrap()
                                         .try_read()
                                         .unwrap()
                                         .variant
-                                        .kill_name(),
-                                    Some(
-                                        caster
-                                            .as_ref()
-                                            .unwrap()
-                                            .try_read()
-                                            .unwrap()
-                                            .variant
-                                            .to_key(),
-                                    ),
-                                );
-                            }
-                            Entity::Enemy(arc) => {
-                                arc.try_write().unwrap().attacked(damage);
-                            }
+                                        .to_key(),
+                                ),
+                            );
+                        }
+                        Entity::Enemy(arc) => {
+                            arc.try_write().unwrap().attacked(damage);
                         }
                     }
                 }
@@ -500,20 +500,20 @@ impl NormalSpell {
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
                 }
-                NormalSpell::fireball(
-                    caster.clone(),
+                FireBall {
+                    caster: caster.clone(),
                     player,
                     board,
                     origin,
                     aim,
-                    7,
+                    explosion_size: 7,
                     damage,
-                    damage * 5,
-                    caster
+                    player_damage: damage * 5,
+                    death_name: caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
                         .unwrap_or("a common lapse in judgement"),
-                    time,
-                );
+                }
+                .evaluate(time);
                 true
             }
             Self::Teleport => {
@@ -528,7 +528,7 @@ impl NormalSpell {
                 }
                 // If the path length is 0 then teleporting wouldn't move it so there is no need to
                 // do anything else
-                if path.len() == 0 {
+                if path.is_empty() {
                     if let Some(time) = time {
                         *time += start.elapsed()
                     }
@@ -600,71 +600,6 @@ impl NormalSpell {
             Self::SummonSpirit => 10,
         }
     }
-    fn fireball(
-        caster: Option<Arc<RwLock<Enemy>>>,
-        player: &mut Player,
-        board: &mut Board,
-        origin: Option<Vector>,
-        aim: Option<Vector>,
-        explosion_size: usize,
-        damage: usize,
-        player_damage: usize,
-        death_name: &'static str,
-        time: Option<&mut std::time::Duration>,
-    ) {
-        let start = std::time::Instant::now();
-        let mut delay_counts = 0;
-        let aim = aim.unwrap();
-        let origin = origin.unwrap_or(get_pos(&caster, player));
-        let (mut path, collision) =
-            ray_cast(origin, aim, board, None, caster.is_none(), player.pos);
-        if let Some(Collision::Piece(_)) = collision {
-            path.pop();
-        }
-        let bounds = board.get_render_bounds(player);
-        // rendering the projectile
-        for pos in path.iter() {
-            if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
-                let special = board.add_special(fireball(*pos));
-                board.smart_render(player);
-                proj_delay();
-                delay_counts += 1;
-                drop(special);
-            }
-        }
-        board.smart_render(player);
-        // explosion
-        let epicenter = path.last().unwrap_or(&origin);
-        let mut specials = Vec::new();
-        for size in 1..=explosion_size {
-            let mut seen = false;
-            for pos in board.flood_within(*epicenter, size, false).iter() {
-                if board.is_visible(*pos, bounds.clone(), player.effects.full_vis.is_active()) {
-                    specials.push(board.add_special(explosion(*pos)));
-                    board.smart_render(player);
-                    seen = true;
-                }
-            }
-            if seen {
-                std::thread::sleep(crate::PROJ_DELAY * 4);
-                delay_counts += 4;
-                specials.truncate(0);
-            }
-        }
-        board.smart_render(player);
-        for pos in board.flood_within(*epicenter, explosion_size, false).iter() {
-            if player.pos == *pos {
-                let _ = player.attacked(player_damage, death_name, get_variant_id(&caster));
-            }
-            if let Some(enemy) = board.get_enemy(*pos, None) {
-                enemy.try_write().unwrap().attacked(damage);
-            }
-        }
-        if let Some(time) = time {
-            *time += start.elapsed();
-            *time -= crate::PROJ_DELAY * delay_counts;
-        }
-    }
 }
 impl std::str::FromStr for NormalSpell {
     type Err = String;
@@ -729,6 +664,95 @@ impl ToBinary for NormalSpell {
         .to_binary(binary)
     }
 }
+struct FireBall<'a> {
+    caster: Option<Arc<RwLock<Enemy>>>,
+    player: &'a mut Player,
+    board: &'a mut Board,
+    origin: Option<Vector>,
+    aim: Option<Vector>,
+    explosion_size: usize,
+    damage: usize,
+    player_damage: usize,
+    death_name: &'static str,
+}
+impl<'a> FireBall<'a> {
+    fn evaluate(self, time: Option<&mut std::time::Duration>) {
+        let start = std::time::Instant::now();
+        let mut delay_counts = 0;
+        let aim = self.aim.unwrap();
+        let origin = self.origin.unwrap_or(get_pos(&self.caster, self.player));
+        let (mut path, collision) = ray_cast(
+            origin,
+            aim,
+            self.board,
+            None,
+            self.caster.is_none(),
+            self.player.pos,
+        );
+        if let Some(Collision::Piece(_)) = collision {
+            path.pop();
+        }
+        let bounds = self.board.get_render_bounds(self.player);
+        // rendering the projectile
+        for pos in path.iter() {
+            if self.board.is_visible(
+                *pos,
+                bounds.clone(),
+                self.player.effects.full_vis.is_active(),
+            ) {
+                let special = self.board.add_special(fireball(*pos));
+                self.board.smart_render(self.player);
+                proj_delay();
+                delay_counts += 1;
+                drop(special);
+            }
+        }
+        self.board.smart_render(self.player);
+        // explosion
+        let epicenter = path.last().unwrap_or(&origin);
+        let mut specials = Vec::new();
+        for size in 1..=self.explosion_size {
+            let mut seen = false;
+            for pos in self.board.flood_within(*epicenter, size, false).iter() {
+                if self.board.is_visible(
+                    *pos,
+                    bounds.clone(),
+                    self.player.effects.full_vis.is_active(),
+                ) {
+                    specials.push(self.board.add_special(explosion(*pos)));
+                    self.board.smart_render(self.player);
+                    seen = true;
+                }
+            }
+            if seen {
+                std::thread::sleep(crate::PROJ_DELAY * 4);
+                delay_counts += 4;
+                specials.truncate(0);
+            }
+        }
+        self.board.smart_render(self.player);
+        for pos in self
+            .board
+            .flood_within(*epicenter, self.explosion_size, false)
+            .iter()
+        {
+            if self.player.pos == *pos {
+                let _ = self.player.attacked(
+                    self.player_damage,
+                    self.death_name,
+                    get_variant_id(&self.caster),
+                );
+            }
+            if let Some(enemy) = self.board.get_enemy(*pos, None) {
+                enemy.try_write().unwrap().attacked(self.damage);
+            }
+        }
+        if let Some(time) = time {
+            *time += start.elapsed();
+            *time -= crate::PROJ_DELAY * delay_counts;
+        }
+    }
+}
 fn fireball(pos: Vector) -> Special {
     Special::new(pos, '●', Some(*Style::new().red().intense(true)))
 }
@@ -746,10 +770,9 @@ fn get_pos(caster: &Option<Arc<RwLock<Enemy>>>, player: &Player) -> Vector {
     }
 }
 fn get_variant_id(caster: &Option<Arc<RwLock<Enemy>>>) -> Option<u8> {
-    match caster {
-        Some(arc) => Some(arc.try_read().unwrap().variant.to_key()),
-        None => None,
-    }
+    caster
+        .as_ref()
+        .map(|arc| arc.try_read().unwrap().variant.to_key())
 }
 fn is_within_flood(caster: &Option<Arc<RwLock<Enemy>>>, board: &Board) -> bool {
     caster

@@ -94,7 +94,7 @@ fn attempt_pick_pos(
     None
 }
 pub fn checksum(board: &Board) -> Result<(), String> {
-    if board.bosses.len() == 0 {
+    if board.bosses.is_empty() {
         return Err("No bosses".to_string());
     }
     for enemy in board.enemies.iter() {
@@ -103,8 +103,8 @@ pub fn checksum(board: &Board) -> Result<(), String> {
         if let Some(piece) = &board[pos] {
             return Err(format!("Enemy spawned inside: {piece}"));
         }
-        if let Some(_) = board.get_enemy(pos, Some(addr)) {
-            return Err(format!("Enemy spawned inside another enemy"));
+        if board.get_enemy(pos, Some(addr)).is_some() {
+            return Err("Enemy spawned inside another enemy".to_string());
         }
     }
     Ok(())
@@ -331,9 +331,7 @@ impl Room {
             let bounds = other.borrow().x_bounds.clone();
             let low = self.x_bounds.start.max(other.borrow().x_bounds.start);
             let high = self.x_bounds.end.min(other.borrow().x_bounds.end);
-            if self.y_bounds.end != other.borrow().y_bounds.start {
-                false
-            } else if low >= high {
+            if self.y_bounds.end != other.borrow().y_bounds.start || low >= high {
                 false
             } else {
                 bounds.start < self.x_bounds.end
@@ -346,9 +344,7 @@ impl Room {
             let bounds = other.borrow().x_bounds.clone();
             let low = self.x_bounds.start.max(other.borrow().x_bounds.start);
             let high = self.x_bounds.end.min(other.borrow().x_bounds.end);
-            if self.y_bounds.start != other.borrow().y_bounds.end {
-                false
-            } else if low >= high {
+            if self.y_bounds.start != other.borrow().y_bounds.end || low >= high {
                 false
             } else {
                 bounds.start < self.x_bounds.end
@@ -361,9 +357,7 @@ impl Room {
             let bounds = other.borrow().y_bounds.clone();
             let low = self.y_bounds.start.max(other.borrow().y_bounds.start);
             let high = self.y_bounds.end.min(other.borrow().y_bounds.end);
-            if self.x_bounds.start != other.borrow().x_bounds.end {
-                false
-            } else if low >= high {
+            if self.x_bounds.start != other.borrow().x_bounds.end || low >= high {
                 false
             } else {
                 bounds.start < self.y_bounds.end
@@ -376,9 +370,7 @@ impl Room {
             let bounds = other.borrow().y_bounds.clone();
             let low = self.y_bounds.start.max(other.borrow().y_bounds.start);
             let high = self.y_bounds.end.min(other.borrow().y_bounds.end);
-            if self.x_bounds.end != other.borrow().x_bounds.start {
-                false
-            } else if low >= high {
+            if self.x_bounds.end != other.borrow().x_bounds.start || low >= high {
                 false
             } else {
                 bounds.start < self.y_bounds.end
@@ -456,7 +448,7 @@ impl Room {
                 ))));
             }
         }
-        if centers.len() == 0 {
+        if centers.is_empty() {
             crate::log!("{STYLE}Failed to place centers\x1b[0m");
             return;
         }

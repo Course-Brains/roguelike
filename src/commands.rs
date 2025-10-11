@@ -365,16 +365,16 @@ impl Command {
                 }
                 let mut has_special = false;
                 for special in state.board.specials.iter() {
-                    if let Some(special) = special.upgrade() {
-                        if special.pos == pos {
-                            out.send(format!(
-                                "It has a special with visuals: {}{}\x1b0m",
-                                special.style.unwrap_or(Style::new()),
-                                special.ch
-                            ))
-                            .unwrap();
-                            has_special = true;
-                        }
+                    if let Some(special) = special.upgrade()
+                        && special.pos == pos
+                    {
+                        out.send(format!(
+                            "It has a special with visuals: {}{}\x1b0m",
+                            special.style.unwrap_or(Style::new()),
+                            special.ch
+                        ))
+                        .unwrap();
+                        has_special = true;
                     }
                 }
                 if !has_special {
@@ -421,7 +421,7 @@ impl Command {
                             .unwrap();
                     }
                 }
-                if state.board.bosses.len() == 0 {
+                if state.board.bosses.is_empty() {
                     out.send("There are no bosses".to_string()).unwrap();
                 }
             }

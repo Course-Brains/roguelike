@@ -500,13 +500,13 @@ impl Enemy {
                                 if Arc::as_ptr(enemy).addr() == addr {
                                     continue;
                                 }
-                                if let Variant::Basic = enemy.try_read().unwrap().variant {
-                                    if enemy.try_read().unwrap().is_near(
+                                if let Variant::Basic = enemy.try_read().unwrap().variant
+                                    && enemy.try_read().unwrap().is_near(
                                         this.as_ref().unwrap().pos,
                                         MAGE_BOSS_PROMOTE_RANGE,
-                                    ) {
-                                        candidates.push(Arc::downgrade(enemy))
-                                    }
+                                    )
+                                {
+                                    candidates.push(Arc::downgrade(enemy))
                                 }
                             }
                             if let Some(chosen) = crate::random::random_index(candidates.len())
@@ -557,18 +557,17 @@ impl Enemy {
                         // doin time
                         match action {
                             FighterAction::Smack => {
-                                if this.as_ref().unwrap().pos.is_near(player.pos, 2) {
-                                    if player
+                                if this.as_ref().unwrap().pos.is_near(player.pos, 2)
+                                    && player
                                         .attacked(
                                             crate::random::random8() as usize,
                                             Variant::fighter().kill_name(),
                                             Some(Variant::fighter().to_key()),
                                         )
                                         .is_err()
-                                    {
-                                        this.as_mut().unwrap().stun =
-                                            this.as_ref().unwrap().variant.parry_stun();
-                                    }
+                                {
+                                    this.as_mut().unwrap().stun =
+                                        this.as_ref().unwrap().variant.parry_stun();
                                 }
                             }
                             FighterAction::Teleport(aim) => {
@@ -673,7 +672,7 @@ impl Enemy {
                                     if let Variant::FighterBoss { buff, .. } =
                                         &mut this.as_mut().unwrap().variant
                                     {
-                                        *buff = *buff - 1;
+                                        *buff -= 1;
                                     } else {
                                         unreachable!("Professor Bug, that is my name");
                                     }

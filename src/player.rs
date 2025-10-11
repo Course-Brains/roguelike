@@ -371,10 +371,10 @@ impl Player {
             valid.push("Fair enough, that thing is strong.")
         }
         // If the stats file is more than 500 bytes
-        if let Ok(stats) = std::fs::File::open("stats") {
-            if stats.metadata().unwrap().len() > 500 {
-                valid.push("Have you heard the definition of insanity?")
-            }
+        if let Ok(stats) = std::fs::File::open("stats")
+            && stats.metadata().unwrap().len() > 500
+        {
+            valid.push("Have you heard the definition of insanity?")
         }
         // If they have more doors opened than kills
         if stats.doors_opened / 10 > kills {
@@ -579,11 +579,10 @@ impl Player {
             return;
         }
         let is_aiming = board.is_enemy_aiming();
-        let style = if self.limbs.count_seer_eyes() == 1 && is_aiming.is_some() {
-            *STYLE
-                .clone()
-                .background_red()
-                .intense_background(is_aiming.unwrap())
+        let style = if self.limbs.count_seer_eyes() == 1
+            && let Some(is_aiming) = is_aiming
+        {
+            *STYLE.clone().background_red().intense_background(is_aiming)
         } else {
             STYLE
         };

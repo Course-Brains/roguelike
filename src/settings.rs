@@ -37,7 +37,6 @@ impl Settings {
                 }
             };
             std::fs::OpenOptions::new()
-                .write(true)
                 .append(true)
                 .open(PATH)
                 .unwrap()
@@ -59,34 +58,34 @@ impl Settings {
                     if line.starts_with("//") {
                         continue;
                     }
-                    if line.len() == 0 {
+                    if line.is_empty() {
                         continue;
                     }
                     let mut iter = line.split(' ');
-                    if let Some(field) = iter.next() {
-                        if let Some(value) = iter.next() {
-                            macro_rules! thing {
-                                ($field:ident, $val:ty) => {
-                                    *settings.$field = match value.parse() {
-                                        Ok(field) => {
-                                            let val: $val = field;
-                                            val.into()
-                                        }
-                                        Err(_) => continue,
+                    if let Some(field) = iter.next()
+                        && let Some(value) = iter.next()
+                    {
+                        macro_rules! thing {
+                            ($field:ident, $val:ty) => {
+                                *settings.$field = match value.parse() {
+                                    Ok(field) => {
+                                        let val: $val = field;
+                                        val.into()
                                     }
-                                };
-                            }
-                            match field {
-                                "kick_enemies" => thing!(kick_enemies, bool),
-                                "kick_doors" => thing!(kick_doors, bool),
-                                "difficulty" => {
-                                    difficulty_was_not_set = false;
-                                    thing!(difficulty, Difficulty)
+                                    Err(_) => continue,
                                 }
-                                "fast_mode" => thing!(fast_mode, bool),
-                                "auto_move" => thing!(auto_move, bool),
-                                _ => {}
+                            };
+                        }
+                        match field {
+                            "kick_enemies" => thing!(kick_enemies, bool),
+                            "kick_doors" => thing!(kick_doors, bool),
+                            "difficulty" => {
+                                difficulty_was_not_set = false;
+                                thing!(difficulty, Difficulty)
                             }
+                            "fast_mode" => thing!(fast_mode, bool),
+                            "auto_move" => thing!(auto_move, bool),
+                            _ => {}
                         }
                     }
                 }
@@ -227,6 +226,7 @@ impl Settings {
                 b'd' => Self::editor_right(&mut selecting_field),
                 b' ' => selecting_field ^= true, // swap selection
                 b'q' => break,
+                b'Q' => return,
                 b'r' => {
                     // reset field
                     self.get_field_mut(field_index).current =
@@ -295,7 +295,11 @@ impl Settings {
         }
 
         crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 10000)).unwrap();
-        write!(lock, "q to quit, r to reset field, R to full reset").unwrap();
+        write!(
+            lock,
+            "q to quit, Q to quit without saving, r to reset field, R to full reset"
+        )
+        .unwrap();
 
         lock.flush().unwrap();
     }
@@ -436,10 +440,9 @@ pub enum Value {
 impl Value {
     fn get_values(&self) -> Vec<Value> {
         match self {
-            Value::Bool(_) => Vec::from([true, false].map(|x| Value::Bool(x))),
+            Value::Bool(_) => Vec::from([true, false].map(Value::Bool)),
             Value::Difficulty(_) => Vec::from(
-                [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard]
-                    .map(|x| Value::Difficulty(x)),
+                [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard].map(Value::Difficulty),
             ),
         }
     }
@@ -490,7 +493,7 @@ impl TryFrom<Value> for Difficulty {
         }
     }
 }
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Ord)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Difficulty {
     Normal,
     Easy,
@@ -555,10 +558,15 @@ impl std::fmt::Display for Difficulty {
 }
 impl PartialOrd for Difficulty {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Difficulty {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self == other {
-            return Some(std::cmp::Ordering::Equal);
+            return std::cmp::Ordering::Equal;
         }
-        Some(match self {
+        match self {
             Difficulty::Normal => match other {
                 Difficulty::Easy => std::cmp::Ordering::Greater,
                 Difficulty::Hard => std::cmp::Ordering::Less,
@@ -572,7 +580,7 @@ impl PartialOrd for Difficulty {
                 Difficulty::Normal | Difficulty::Easy => std::cmp::Ordering::Greater,
                 _ => unreachable!(),
             },
-        })
+        }
     }
 }
 #[cfg(test)]

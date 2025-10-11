@@ -67,11 +67,10 @@ impl Board {
         }
     }
     pub fn has_collision(&self, pos: Vector) -> bool {
-        if let Some(piece) = &self[pos] {
-            if piece.has_collision() {
+        if let Some(piece) = &self[pos]
+            && piece.has_collision() {
                 return true;
             }
-        }
         for enemy in self.enemies.iter() {
             if enemy.try_read().unwrap().pos == pos {
                 return true;
@@ -85,11 +84,10 @@ impl Board {
             .is_some_and(|piece| piece.enemy_collision())
     }
     pub fn dashable(&self, pos: Vector) -> bool {
-        if let Some(piece) = &self[pos] {
-            if !piece.dashable() {
+        if let Some(piece) = &self[pos]
+            && !piece.dashable() {
                 return false;
             }
-        }
         true
     }
     pub fn get_near(
@@ -100,11 +98,10 @@ impl Board {
     ) -> Vec<Weak<RwLock<Enemy>>> {
         let mut out = Vec::new();
         for enemy in self.enemies.iter() {
-            if let Some(addr) = addr {
-                if Arc::as_ptr(enemy).addr() == addr {
+            if let Some(addr) = addr
+                && Arc::as_ptr(enemy).addr() == addr {
                     continue;
                 }
-            }
             if enemy.try_read().unwrap().is_near(pos, range) {
                 out.push(Arc::downgrade(enemy))
             }
@@ -125,11 +122,10 @@ impl Board {
     }
     pub fn get_enemy(&self, pos: Vector, addr: Option<usize>) -> Option<Arc<RwLock<Enemy>>> {
         for enemy in self.enemies.iter() {
-            if let Some(addr) = addr {
-                if Arc::as_ptr(enemy).addr() == addr {
+            if let Some(addr) = addr
+                && Arc::as_ptr(enemy).addr() == addr {
                     continue;
                 }
-            }
             if enemy.try_read().unwrap().pos == pos {
                 return Some(enemy.clone());
             }
@@ -201,11 +197,10 @@ impl Board {
     }
     pub fn contact_spell_at(&self, pos: Vector) -> Option<(&SpellCircle, usize)> {
         for (index, circle) in self.spells.iter().enumerate() {
-            if circle.pos == pos {
-                if let Spell::Contact(_) = circle.spell {
+            if circle.pos == pos
+                && let Spell::Contact(_) = circle.spell {
                     return Some((circle, index));
                 }
-            }
         }
         None
     }
@@ -214,11 +209,10 @@ impl Board {
             return true;
         }
         for enemy in self.enemies.iter() {
-            if let Some(addr) = addr {
-                if Arc::as_ptr(enemy).addr() == addr {
+            if let Some(addr) = addr
+                && Arc::as_ptr(enemy).addr() == addr {
                     continue;
                 }
-            }
             if enemy.try_read().unwrap().pos == pos {
                 return true;
             }
@@ -250,7 +244,7 @@ impl Board {
                 }
             }
         }
-        seen.iter().map(|pos| *pos).collect()
+        seen.iter().copied().collect()
     }
     pub fn is_reachable(&self, pos: Vector) -> bool {
         self.reachable[self.to_index(pos)]
@@ -288,21 +282,19 @@ impl Board {
     pub fn get_highest_tier(&self) -> usize {
         let mut highest = 0;
         for enemy in self.enemies.iter() {
-            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier() {
-                if tier > highest {
+            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier()
+                && tier > highest {
                     highest = tier;
                 }
-            }
         }
         highest
     }
     pub fn get_all_of_tier(&self, target: usize, out: &mut Vec<Arc<RwLock<Enemy>>>) {
         for enemy in self.enemies.iter() {
-            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier() {
-                if target == tier {
+            if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier()
+                && target == tier {
                     out.push(enemy.clone());
                 }
-            }
         }
     }
 }
@@ -467,22 +459,20 @@ impl Board {
         }
     }
     pub fn has_background(&self, pos: Vector, player: &Player) -> bool {
-        if let Some(piece) = &self[pos] {
-            if piece
+        if let Some(piece) = &self[pos]
+            && piece
                 .render(pos, self, player)
                 .1
                 .is_some_and(|x| x.has_background())
             {
                 return true;
             }
-        }
         for enemy in self.enemies.iter() {
             if enemy.try_read().unwrap().pos == pos {
-                if let Some(style) = enemy.try_read().unwrap().render().1 {
-                    if style.has_background() {
+                if let Some(style) = enemy.try_read().unwrap().render().1
+                    && style.has_background() {
                         return true;
                     }
-                }
                 break;
             }
         }
@@ -528,13 +518,11 @@ impl Board {
                     None => write!(lock, "Nothing").unwrap(),
                 }
             }
-        } else if player.limbs.count_mage_eyes() == 2 {
-            if let Some(enemy) = self.get_enemy(player.selector, None) {
-                if self.is_reachable(enemy.try_read().unwrap().pos) {
+        } else if player.limbs.count_mage_eyes() == 2
+            && let Some(enemy) = self.get_enemy(player.selector, None)
+                && self.is_reachable(enemy.try_read().unwrap().pos) {
                     write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
                 }
-            }
-        }
     }
     pub fn go_to_desc(lock: &mut impl Write) {
         crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 36),).unwrap();
@@ -809,13 +797,12 @@ impl Board {
             } else if piece.has_collision() {
                 out.up = false
             }
-        } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Up).x) < 2
-                && player.y.abs_diff((pos + Direction::Up).y) < 2
-                && self.contains_enemy(pos + Direction::Up, None)
-            {
-                out.up = false
-            }
+        } else if let Some(player) = player
+            && player.x.abs_diff((pos + Direction::Up).x) < 2
+            && player.y.abs_diff((pos + Direction::Up).y) < 2
+            && self.contains_enemy(pos + Direction::Up, None)
+        {
+            out.up = false
         }
 
         if pos.y >= self.y - 1 {
@@ -828,13 +815,12 @@ impl Board {
             } else if piece.has_collision() {
                 out.down = false
             }
-        } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Down).x) < 2
-                && player.y.abs_diff((pos + Direction::Down).y) < 2
-                && self.contains_enemy(pos + Direction::Down, None)
-            {
-                out.down = false
-            }
+        } else if let Some(player) = player
+            && player.x.abs_diff((pos + Direction::Down).x) < 2
+            && player.y.abs_diff((pos + Direction::Down).y) < 2
+            && self.contains_enemy(pos + Direction::Down, None)
+        {
+            out.down = false
         }
 
         if pos.x == 0 {
@@ -847,13 +833,12 @@ impl Board {
             } else if piece.has_collision() {
                 out.left = false
             }
-        } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Left).x) < 2
-                && player.y.abs_diff((pos + Direction::Left).y) < 2
-                && self.contains_enemy(pos + Direction::Left, None)
-            {
-                out.left = false
-            }
+        } else if let Some(player) = player
+            && player.x.abs_diff((pos + Direction::Left).x) < 2
+            && player.y.abs_diff((pos + Direction::Left).y) < 2
+            && self.contains_enemy(pos + Direction::Left, None)
+        {
+            out.left = false
         }
 
         if pos.x >= self.x - 1 {
@@ -866,13 +851,12 @@ impl Board {
             } else if piece.has_collision() {
                 out.right = false
             }
-        } else if let Some(player) = player {
-            if player.x.abs_diff((pos + Direction::Right).x) < 2
-                && player.y.abs_diff((pos + Direction::Right).y) < 2
-                && self.contains_enemy(pos + Direction::Right, None)
-            {
-                out.right = false
-            }
+        } else if let Some(player) = player
+            && player.x.abs_diff((pos + Direction::Right).x) < 2
+            && player.y.abs_diff((pos + Direction::Right).y) < 2
+            && self.contains_enemy(pos + Direction::Right, None)
+        {
+            out.right = false
         }
 
         out
@@ -1086,20 +1070,20 @@ impl Board {
         }
         enemy.pos = new_pos;
         for boss in self.bosses.iter_mut() {
-            if let Some(sibling) = boss.sibling.upgrade() {
-                if Arc::ptr_eq(&sibling, &arc) {
-                    boss.last_pos = enemy.pos;
-                }
+            if let Some(sibling) = boss.sibling.upgrade()
+                && Arc::ptr_eq(&sibling, &arc)
+            {
+                boss.last_pos = enemy.pos;
             }
         }
         true
     }
     pub fn contains_enemy(&self, pos: Vector, addr: Option<usize>) -> bool {
         for enemy in self.enemies.iter() {
-            if let Some(addr) = addr {
-                if Arc::as_ptr(enemy).addr() == addr {
-                    continue;
-                }
+            if let Some(addr) = addr
+                && Arc::as_ptr(enemy).addr() == addr
+            {
+                continue;
             }
             if enemy.try_read().unwrap().pos == pos {
                 return true;

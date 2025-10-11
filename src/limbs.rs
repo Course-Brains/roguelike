@@ -70,7 +70,7 @@ impl Limbs {
         );
         crate::bell(Some(&mut std::io::stdout()));
     }
-    pub fn pick_eye<'a>(&'a mut self) -> Option<&'a mut Eye> {
+    pub fn pick_eye(&mut self) -> Option<&mut Eye> {
         crate::set_feedback("L for left eye, R for right eye, C for cancel".to_string());
         crate::draw_feedback();
         let mut buf = [0];

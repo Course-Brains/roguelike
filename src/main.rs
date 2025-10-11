@@ -203,7 +203,7 @@ fn draw_feedback() {
         crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
     )
     .unwrap();
-    write!(std::io::stdout(), "{}", feedback()).unwrap();
+    println!("{}", feedback());
     std::io::stdout().flush().unwrap();
 }
 static SETTINGS: std::sync::LazyLock<Settings> = std::sync::LazyLock::new(Settings::get_from_file);
@@ -227,10 +227,11 @@ fn initialize_stdin_listener() -> std::thread::Thread {
     .clone()
 }
 // Sends the current upgrades to the shop generator so that it can only show non-redundant upgrades
+type ShopAvailabilityData = Vec<upgrades::UpgradeType>;
 static SHOP_AVAILABILITY: std::sync::LazyLock<
     Mutex<(
-        std::sync::mpsc::Sender<Vec<upgrades::UpgradeType>>,
-        std::sync::mpsc::Receiver<Vec<upgrades::UpgradeType>>,
+        std::sync::mpsc::Sender<ShopAvailabilityData>,
+        std::sync::mpsc::Receiver<ShopAvailabilityData>,
     )>,
 > = std::sync::LazyLock::new(|| Mutex::new(std::sync::mpsc::channel()));
 
@@ -503,32 +504,29 @@ fn main() {
                                         state.increment();
                                     }
                                 }
-                            } else {
-                                if state.is_valid_move(direction) {
-                                    state.player.do_move(direction, &mut state.board);
-                                    state.increment()
-                                } else if state
-                                    .board
-                                    .get_enemy(state.player.pos + direction, None)
-                                    .is_some()
-                                    && SETTINGS.kick_enemies()
-                                {
-                                    state.attack_enemy(
-                                        state.player.pos + direction,
-                                        false,
-                                        false,
-                                        true,
-                                    );
-                                    state.increment();
-                                } else if !SETTINGS.kick_doors() {
-                                    // Doing it like this because can't do && on if let
-                                } else if let Some(board::Piece::Door(door)) =
-                                    state.board[state.player.pos + direction]
-                                {
-                                    if !door.open {
-                                        state.open_door(state.player.pos + direction, true);
-                                    }
-                                }
+                            } else if state.is_valid_move(direction) {
+                                state.player.do_move(direction, &mut state.board);
+                                state.increment()
+                            } else if state
+                                .board
+                                .get_enemy(state.player.pos + direction, None)
+                                .is_some()
+                                && SETTINGS.kick_enemies()
+                            {
+                                state.attack_enemy(
+                                    state.player.pos + direction,
+                                    false,
+                                    false,
+                                    true,
+                                );
+                                state.increment();
+                            } else if !SETTINGS.kick_doors() {
+                                // Doing it like this because can't do && on if let
+                            } else if let Some(board::Piece::Door(door)) =
+                                state.board[state.player.pos + direction]
+                                && !door.open
+                            {
+                                state.open_door(state.player.pos + direction, true);
                             }
                         }
                     },
@@ -1023,7 +1021,7 @@ impl State {
     }
     fn load_shop(&mut self) {
         stats().level_turns.push(self.board.turns_spent);
-        let bonus_kill_all = self.board.enemies.len() == 0;
+        let bonus_kill_all = self.board.enemies.is_empty();
         self.board = std::mem::replace(&mut self.next_shop, std::thread::spawn(Board::new_shop))
             .join()
             .unwrap();
@@ -1094,9 +1092,9 @@ impl State {
                     .collect::<Vec<Vector>>()
                     .iter()
                     .filter(|pos| self.board.is_reachable(**pos))
-                    .map(|pos| *pos)
+                    .copied()
                     .collect();
-                if reachable_bosses.len() != 0 {
+                if !reachable_bosses.is_empty() {
                     self.board.flood(self.player.pos);
                     if reachable_bosses
                         .iter()
@@ -1138,7 +1136,7 @@ impl FromBinary for State {
         if difficulty != SETTINGS.difficulty() {
             println!("Don't change the difficulty mid run, go set it back to {difficulty}");
             bell(None);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
+            return Err(std::io::Error::other(""));
         }
         generator::DO_DELAY.store(true, Ordering::SeqCst);
         let settings = MapGenSettings::from_binary(binary)?;
@@ -1505,12 +1503,13 @@ fn ray_cast(
         if pos == from {
             continue;
         }
-        if let Some(piece) = &board[pos] {
-            if piece.projectile_collision() {
-                collision = Some(pos.into());
-                break;
-            }
+        if let Some(piece) = &board[pos]
+            && piece.projectile_collision()
+        {
+            collision = Some(pos.into());
+            break;
         }
+
         if let Some(enemy) = board.get_enemy(pos, addr) {
             collision = Some(enemy.into());
             break;
@@ -1670,7 +1669,7 @@ impl Stats {
         for (key, kills) in self.kills.iter() {
             println!("{}: {kills}", enemy::Variant::from_key(*key).kill_name());
         }
-        println!("");
+        println!();
     }
     fn list_killer(&self) {
         println!(
@@ -1759,35 +1758,31 @@ fn save_stats() {
         return;
     }
     let mut stats_saves: Vec<Stats> = Vec::new();
-    match std::fs::exists(STAT_PATH).unwrap() {
-        true => {
-            log!("Stats file exists, checking version");
-            let mut file = std::fs::File::open(STAT_PATH).unwrap();
-            if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
-                log!("!!!Save version mismatch!!!");
-                crossterm::queue!(
-                    std::io::stdout(),
-                    crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-                    Vector::new(0, 0).to_move(),
-                    crossterm::terminal::EnableLineWrap,
-                )
-                .unwrap();
-                println!(
-                    "{}The save format in the stats file is different than the current \
+    if std::fs::exists(STAT_PATH).unwrap() {
+        log!("Stats file exists, checking version");
+        let mut file = std::fs::File::open(STAT_PATH).unwrap();
+        if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
+            log!("!!!Save version mismatch!!!");
+            crossterm::queue!(
+                std::io::stdout(),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+                Vector::new(0, 0).to_move(),
+                crossterm::terminal::EnableLineWrap,
+            )
+            .unwrap();
+            println!(
+                "{}The save format in the stats file is different than the current \
                     save format, if you leave the stats file where it is, it will be \
                     deleted, I recommend moving it.\n\x1b[0mPress enter to continue",
-                    Style::new().red().bold(true).underline(true).intense(true)
-                );
-                std::io::stdout().flush().unwrap();
-                std::io::stdin().read_line(&mut String::new()).unwrap();
-            } else {
-                stats_saves = Vec::from_binary(&mut file).unwrap();
-            }
+                Style::new().red().bold(true).underline(true).intense(true)
+            );
+            std::io::stdout().flush().unwrap();
+            std::io::stdin().read_line(&mut String::new()).unwrap();
+        } else {
+            stats_saves = Vec::from_binary(&mut file).unwrap();
         }
-        false => {
-            log!("Creating new stats file")
-        }
-    }
+    } 
+
     stats_saves.push(stats().clone());
     let mut file = std::fs::File::create(STAT_PATH).unwrap();
     SAVE_VERSION.to_binary(&mut file).unwrap();
@@ -1957,7 +1952,5 @@ fn arrow<'a>(
     }
     // Returning the hit
     *time += start.elapsed();
-    collision
-        .map(|collision| collision.into_entity(player))
-        .flatten()
+    collision.and_then(|collision| collision.into_entity(player))
 }

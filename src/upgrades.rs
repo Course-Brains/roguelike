@@ -194,7 +194,7 @@ impl UpgradeType {
                     player.detect_mod -= 1;
                 } else if player.effects.unlucky.is_active() {
                     player.effects.unlucky.remove();
-                } else if player.effects.doomed.is_active() && random() % 7 == 0 {
+                } else if player.effects.doomed.is_active() && random().is_multiple_of(7) {
                     player.effects.doomed.remove();
                 } else {
                     player.give_money((player.get_money() / 2).max(1));

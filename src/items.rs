@@ -51,7 +51,7 @@ impl ItemType {
             }
             Self::BossFinder => {
                 let player_pos = state.player.pos;
-                let mut min_dist = usize::max_value();
+                let mut min_dist = usize::MAX;
                 let mut min_pos = crate::Vector::new(0, 0);
                 for boss_pos in state
                     .board
@@ -66,7 +66,7 @@ impl ItemType {
                         min_pos = boss_pos;
                     }
                 }
-                if min_dist != usize::max_value() {
+                if min_dist != usize::MAX {
                     crate::set_feedback(format!("The nearest boss is at {min_pos}"));
                     true
                 } else {

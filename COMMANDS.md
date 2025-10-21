@@ -273,3 +273,12 @@ designate\_boss \[index\]
 show\_nav \[state\] {index}
     Sets whether or not the path an enemy will take to reach you will
     be shown, and can optionally be limited to one enemy's index.
+
+set\_max\_health \[new max\]
+    Sets max health to \[new max\]
+
+set\_max\_energy \[new max\]
+    Sets max energy to \[new max\]
+
+set\_spell \[index\] \[spell\]
+    Sets the known spell at \[index\] to \[spell\]

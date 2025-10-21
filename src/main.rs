@@ -1,10 +1,10 @@
 // When I do add spells, add a system for random unidentifiable buffs that get determined at the
 // start, with one of them being the ability to do other actions while casting
-//
-// Make it so that upgrades don't get picked until the player leaves the previous shop and it sends
-// to the generator the list of banned upgrades, then make a of valid ones and pick from that,
-// while removing the ones that are picked and can only be gotten once so that there are no redundant
-// upgrades
+
+// The format version of the save data, different versions are incompatible and require a restart
+// of the save, but the version will only change on releases, so if the user is not going by
+// release, then they could end up with two incompatible save files.
+const SAVE_VERSION: Version = 14;
 mod player;
 use player::Player;
 mod board;
@@ -41,10 +41,6 @@ use abes_nice_things::{FromBinary, ToBinary};
 // Convenience constant
 const RELAXED: Ordering = Ordering::Relaxed;
 
-// The format version of the save data, different versions are incompatible and require a restart
-// of the save, but the version will only change on releases, so if the user is not going by
-// release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 13;
 // The number that the turn count is divided by to get the budget
 const BUDGET_DIVISOR: usize = 5;
 // The number of bosses in each level starting at the third level
@@ -302,6 +298,11 @@ fn main() {
                 return;
             }
             "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
+            "--port" | "-p" => {
+                let new_port = args.next().unwrap().parse().unwrap();
+                log!("Setting console port to {new_port}");
+                commands::PORT.store(new_port, RELAXED);
+            }
             _ => {}
         }
     }
@@ -631,15 +632,100 @@ fn main() {
                             }
                         }
                     }
-                    Input::Item(index) => {
+                    Input::Use(index) => {
                         debug_assert!(index < 7);
-                        if let Some(item) = state.player.items[index - 1] {
-                            if item.enact(&mut state) {
-                                state.player.items[index - 1] = None;
-                                state.increment();
+                        match state.player.right_column {
+                            player::RightColumn::Items => {
+                                if let Some(item) = state.player.items[index - 1] {
+                                    if item.enact(&mut state) {
+                                        state.player.items[index - 1] = None;
+                                        state.increment();
+                                    }
+                                } else {
+                                    bell(None);
+                                }
                             }
-                        } else {
-                            bell(None);
+                            player::RightColumn::Spells => {
+                                if let Some(spell) = state.player.known_spells[index - 1] {
+                                    if spell.energy_needed() <= state.player.energy {
+                                        let mut succeeded = false;
+                                        // Valid cast
+                                        match spell {
+                                            Spell::Normal(spell) => {
+                                                for _ in 0..spell.cast_time() {
+                                                    state.increment();
+                                                }
+                                                let origin = Some(state.player.pos);
+                                                let aim = Some(state.player.selector);
+                                                spell.cast(
+                                                    None,
+                                                    &mut state.player,
+                                                    &mut state.board,
+                                                    origin,
+                                                    aim,
+                                                    None,
+                                                );
+                                                succeeded = true;
+                                            }
+                                            Spell::Contact(spell) => {
+                                                if !state
+                                                    .player
+                                                    .pos
+                                                    .is_near(state.player.selector, 2)
+                                                {
+                                                    set_feedback(
+                                                        "You can only cast contact spells when \
+                                                    within melee range of the target"
+                                                            .to_string(),
+                                                    );
+                                                    draw_feedback();
+                                                    bell(None);
+                                                    continue;
+                                                }
+                                                if let Some(target) = state
+                                                    .board
+                                                    .get_enemy(state.player.selector, None)
+                                                {
+                                                    for _ in 0..spell.cast_time() {
+                                                        state.increment();
+                                                    }
+                                                    spell.cast(
+                                                        Entity::Enemy(target),
+                                                        Entity::Player(&mut state.player),
+                                                    );
+                                                    succeeded = true;
+                                                } else {
+                                                    set_feedback(
+                                                        "Contact spells require a target"
+                                                            .to_string(),
+                                                    );
+                                                    draw_feedback();
+                                                    bell(None);
+                                                }
+                                            }
+                                        }
+                                        if succeeded {
+                                            state.player.energy -= spell.energy_needed();
+                                            stats().energy_used += spell.energy_needed();
+                                            if !BONUS_NO_ENERGY.swap(true, RELAXED) {
+                                                set_feedback(
+                                                    "Did you really need to cast that?".to_string(),
+                                                );
+                                                bell(Some(&mut std::io::stdout()));
+                                            }
+                                            state.render();
+                                        }
+                                    } else {
+                                        set_feedback("Insufficient energy".to_string());
+                                        draw_feedback();
+                                        bell(None);
+                                    }
+                                } else {
+                                    set_feedback(debug_only!("invalid spell index".to_string()));
+                                    draw_feedback();
+                                    bell(None);
+                                }
+                            }
                         }
                     }
                     Input::Convert => {
@@ -733,6 +819,10 @@ fn main() {
                                     .unwrap();
                             }
                         }
+                    }
+                    Input::ChangeRightColumn => {
+                        state.player.right_column.increment();
+                        state.render();
                     }
                 }
             }
@@ -1781,7 +1871,9 @@ fn save_stats() {
         } else {
             stats_saves = Vec::from_binary(&mut file).unwrap();
         }
-    } 
+    } else {
+        log!("Creating new stats file")
+    }
 
     stats_saves.push(stats().clone());
     let mut file = std::fs::File::create(STAT_PATH).unwrap();

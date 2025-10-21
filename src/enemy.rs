@@ -1069,7 +1069,7 @@ impl Variant {
             Variant::Archer(_) | Variant::ArcherBoss(ArcherBossAction::Shoot(_)) => Color::Yellow,
         }
     }
-    fn max_health(&self) -> usize {
+    pub fn max_health(&self) -> usize {
         match self {
             Variant::Basic => 3,
             Variant::BasicBoss(_) => 7,
@@ -1119,7 +1119,7 @@ impl Variant {
             Variant::BasicBoss(_) => (10, 10),
             Variant::Mage(_) => (5, 5),
             Variant::MageBoss(_) => (20, 5),
-            Variant::Fighter(_) => (10, 2),
+            Variant::Fighter(_) => (10, 3),
             Variant::FighterBoss { .. } => (15, 10),
             Variant::Archer(_) => (3, 10),
             Variant::ArcherBoss(_) => (10, 5),

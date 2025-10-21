@@ -33,6 +33,8 @@ pub struct Player {
     pub limbs: Limbs,
     // The memorized position
     pub memory: Option<Vector>,
+    pub known_spells: [Option<crate::Spell>; 6],
+    pub right_column: RightColumn,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -57,6 +59,8 @@ impl Player {
             fast: false,
             limbs: Limbs::new(),
             memory: None,
+            known_spells: Player::starting_spells(),
+            right_column: RightColumn::Items,
         }
     }
     fn starting_max_health() -> usize {
@@ -107,6 +111,16 @@ impl Player {
         } else {
             [None; 6]
         }
+    }
+    fn starting_spells() -> [Option<crate::Spell>; 6] {
+        let mut out = [None; 6];
+        let mut index = 0;
+        out[index] = Some(crate::Spell::Normal(crate::spell::NormalSpell::Heal));
+        index += 1;
+        if crate::SETTINGS.difficulty() <= crate::Difficulty::Easy {
+            out[index] = Some(crate::Spell::Normal(crate::spell::NormalSpell::BidenBlast));
+        }
+        out
     }
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         crate::log!("Moving from {} in {direction}", self.pos);
@@ -571,7 +585,10 @@ impl Player {
         self.draw_player(&mut lock, bounds, board);
         self.draw_health(board, &mut lock);
         self.draw_energy(board, &mut lock);
-        self.draw_items(board, &mut lock);
+        match self.right_column {
+            RightColumn::Items => self.draw_items(board, &mut lock),
+            RightColumn::Spells => self.draw_spells(board, &mut lock),
+        }
         self.draw_limbs(board, &mut lock);
     }
     fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>, board: &Board) {
@@ -623,20 +640,49 @@ impl Player {
         )
         .unwrap();
     }
-    fn draw_items(&self, board: &Board, lock: &mut impl std::io::Write) {
+    fn draw_right_column(
+        board: &Board,
+        lock: &mut impl std::io::Write,
+        text: [String; 6],
+        title: String,
+    ) {
         // Maximum initial y is 6 * 3 = 18, but accounting for the last item, the last allocated y
         // is 21
-        for (index, item) in self.items.iter().enumerate() {
-            if let Some(item) = item {
-                crossterm::queue!(
-                    lock,
-                    Vector::new(board.render_x * 2 + 2, index * 3).to_move(),
-                    crossterm::cursor::SavePosition
-                )
-                .unwrap();
-                item.name(lock);
-            }
+        crossterm::queue!(lock, Vector::new(board.render_x * 2 + 2, 0).to_move()).unwrap();
+        write!(lock, "{title}").unwrap();
+        for (index, text) in text.iter().enumerate() {
+            crossterm::queue!(
+                lock,
+                Vector::new(board.render_x * 2 + 2, index * 3 + 2).to_move(),
+                crossterm::cursor::SavePosition
+            )
+            .unwrap();
+            write!(lock, "{text}").unwrap();
         }
+    }
+    fn draw_items(&self, board: &Board, lock: &mut impl std::io::Write) {
+        Player::draw_right_column(
+            board,
+            lock,
+            self.items
+                .map(|option| option.map(|item| item.get_name()).unwrap_or("").to_string()),
+            "ITEMS".to_string(),
+        );
+    }
+    fn draw_spells(&self, board: &Board, lock: &mut impl std::io::Write) {
+        Player::draw_right_column(
+            board,
+            lock,
+            self.known_spells.map(|option| {
+                option
+                    .map(|spell| {
+                        format!("{}/{}: ", spell.energy_needed(), spell.cast_time())
+                            + spell.get_name()
+                    })
+                    .unwrap_or("".to_string())
+            }),
+            "SPELLS".to_string(),
+        );
     }
     fn draw_limbs(&self, board: &Board, lock: &mut impl std::io::Write) {
         // 1 per line, starting at line 23
@@ -694,6 +740,8 @@ impl FromBinary for Player {
             fast: bool::from_binary(binary)?,
             limbs: Limbs::from_binary(binary)?,
             memory: Option::from_binary(binary)?,
+            known_spells: <[Option<crate::Spell>; 6]>::from_binary(binary)?,
+            right_column: RightColumn::from_binary(binary)?,
         })
     }
 }
@@ -721,7 +769,12 @@ impl ToBinary for Player {
         self.aiming.to_binary(binary)?;
         self.fast.to_binary(binary)?;
         self.limbs.to_binary(binary)?;
-        self.memory.as_ref().to_binary(binary)
+        self.memory.as_ref().to_binary(binary)?;
+        self.known_spells
+            .each_ref()
+            .map(Option::as_ref)
+            .to_binary(binary)?;
+        self.right_column.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -1023,5 +1076,44 @@ impl ToBinary for Duration {
             }
             Duration::Infinite => 2_u8.to_binary(binary),
         }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub enum RightColumn {
+    Items,
+    Spells,
+}
+impl RightColumn {
+    pub fn increment(&mut self) {
+        match self {
+            Self::Items => *self = Self::Spells,
+            Self::Spells => *self = Self::Items,
+        }
+    }
+}
+impl FromBinary for RightColumn {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::Items,
+            1 => Self::Spells,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Failed to get RightColumn from binary",
+                ));
+            }
+        })
+    }
+}
+impl ToBinary for RightColumn {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Self::Items => 0_u8,
+            Self::Spells => 1,
+        }
+        .to_binary(binary)
     }
 }

@@ -28,17 +28,17 @@ pub enum ItemType {
 }
 impl ItemType {
     // What is listed in the inventory
-    pub fn name(self, out: &mut impl std::io::Write) {
+    pub fn get_name(self) -> &'static str {
         match self {
-            Self::HealthPotion => write!(out, "Potion of healing").unwrap(),
-            Self::BossFinder => write!(out, "Scroll of seeking").unwrap(),
-            Self::Gamba => write!(out, "Scroll of chance").unwrap(),
-            Self::EnderPearl => write!(out, "Scroll of teleportation").unwrap(),
-            Self::Warp => write!(out, "Scroll of warping").unwrap(),
-            Self::Tea => write!(out, "Tea").unwrap(),
-            Self::Spirit => write!(out, "Spirit").unwrap(),
-            Self::FarSightPotion => write!(out, crate::debug_only!("far_sight_potion")).unwrap(),
-            Self::Fish => write!(out, "fish").unwrap(),
+            Self::HealthPotion => "Potion of healing",
+            Self::BossFinder => "Scroll of seeking",
+            Self::Gamba => "Scroll of chance",
+            Self::EnderPearl => "Scroll of teleportation",
+            Self::Warp => "Scroll of warping",
+            Self::Tea => "Tea",
+            Self::Spirit => "Spirit",
+            Self::FarSightPotion => crate::debug_only!("far_sight_potion"),
+            Self::Fish => "fish",
         }
     }
     // What happens when it is used

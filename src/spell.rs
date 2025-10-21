@@ -153,6 +153,12 @@ impl Spell {
             Self::Contact(contact) => contact.cast_time(),
         }
     }
+    pub fn get_name(self) -> &'static str {
+        match self {
+            Self::Normal(normal) => normal.get_name(),
+            Self::Contact(contact) => contact.get_name(),
+        }
+    }
 }
 impl std::str::FromStr for Spell {
     type Err = String;
@@ -265,6 +271,11 @@ impl ContactSpell {
     pub fn circle_aim(self) -> bool {
         false
     }
+    fn get_name(self) -> &'static str {
+        match self {
+            Self::DrainHealth => "Drain Health",
+        }
+    }
 }
 impl std::str::FromStr for ContactSpell {
     type Err = String;
@@ -323,6 +334,8 @@ pub enum NormalSpell {
     Teleport,
     // Give the player a "spirit" mua ha ha
     SummonSpirit,
+    // Heal a small amount quickly
+    Heal,
 }
 impl NormalSpell {
     // aim is position not direction
@@ -570,6 +583,21 @@ impl NormalSpell {
                 // quite frankly doesn't matter enough how long this takes for me to do it properly
                 player.add_item(crate::ItemType::Spirit)
             }
+            Self::Heal => match caster {
+                Some(arc) => {
+                    let mut enemy = arc.try_write().unwrap();
+                    if enemy.health >= enemy.variant.max_health() {
+                        return false;
+                    }
+                    enemy.health += 2;
+                    enemy.health = enemy.health.min(enemy.variant.max_health());
+                    true
+                }
+                None => {
+                    player.heal(crate::random::random8() as usize);
+                    true
+                }
+            },
         }
     }
     pub fn cast_time(&self) -> usize {
@@ -581,6 +609,7 @@ impl NormalSpell {
             Self::BigExplode => 10,
             Self::Teleport => 3,
             Self::SummonSpirit => 10,
+            Self::Heal => 2,
         }
     }
     pub fn cast_aim(&self) -> bool {
@@ -598,6 +627,19 @@ impl NormalSpell {
             Self::BigExplode => 20,
             Self::Teleport => 10,
             Self::SummonSpirit => 10,
+            Self::Heal => 1,
+        }
+    }
+    fn get_name(self) -> &'static str {
+        match self {
+            Self::Swap => "Swap",
+            Self::BidenBlast => "Fireball",
+            Self::Identify => "Identify",
+            Self::Charge => "Charge",
+            Self::BigExplode => crate::debug_only!("big_explode"),
+            Self::Teleport => "Teleport",
+            Self::SummonSpirit => "Summon Spirit",
+            Self::Heal => "Heal",
         }
     }
 }
@@ -612,6 +654,7 @@ impl std::str::FromStr for NormalSpell {
             "big_explode" => Ok(Self::BigExplode),
             "teleport" => Ok(Self::Teleport),
             "summon_spirit" => Ok(Self::SummonSpirit),
+            "heal" => Ok(Self::Heal),
             other => Err(format!("\"{other}\" is not a valid normal spell")),
         }
     }
@@ -629,6 +672,7 @@ impl std::fmt::Display for NormalSpell {
                 Self::BigExplode => "big_explode",
                 Self::Teleport => "teleport",
                 Self::SummonSpirit => "summon_spirit",
+                Self::Heal => "heal",
             }
         )
     }
@@ -646,6 +690,7 @@ impl FromBinary for NormalSpell {
             4 => Self::BigExplode,
             5 => Self::Teleport,
             6 => Self::SummonSpirit,
+            7 => Self::Heal,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -660,6 +705,7 @@ impl ToBinary for NormalSpell {
             Self::BigExplode => 4,
             Self::Teleport => 5,
             Self::SummonSpirit => 6,
+            Self::Heal => 7,
         }
         .to_binary(binary)
     }

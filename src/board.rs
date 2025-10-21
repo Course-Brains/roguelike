@@ -68,9 +68,10 @@ impl Board {
     }
     pub fn has_collision(&self, pos: Vector) -> bool {
         if let Some(piece) = &self[pos]
-            && piece.has_collision() {
-                return true;
-            }
+            && piece.has_collision()
+        {
+            return true;
+        }
         for enemy in self.enemies.iter() {
             if enemy.try_read().unwrap().pos == pos {
                 return true;
@@ -85,9 +86,10 @@ impl Board {
     }
     pub fn dashable(&self, pos: Vector) -> bool {
         if let Some(piece) = &self[pos]
-            && !piece.dashable() {
-                return false;
-            }
+            && !piece.dashable()
+        {
+            return false;
+        }
         true
     }
     pub fn get_near(
@@ -99,9 +101,10 @@ impl Board {
         let mut out = Vec::new();
         for enemy in self.enemies.iter() {
             if let Some(addr) = addr
-                && Arc::as_ptr(enemy).addr() == addr {
-                    continue;
-                }
+                && Arc::as_ptr(enemy).addr() == addr
+            {
+                continue;
+            }
             if enemy.try_read().unwrap().is_near(pos, range) {
                 out.push(Arc::downgrade(enemy))
             }
@@ -123,9 +126,10 @@ impl Board {
     pub fn get_enemy(&self, pos: Vector, addr: Option<usize>) -> Option<Arc<RwLock<Enemy>>> {
         for enemy in self.enemies.iter() {
             if let Some(addr) = addr
-                && Arc::as_ptr(enemy).addr() == addr {
-                    continue;
-                }
+                && Arc::as_ptr(enemy).addr() == addr
+            {
+                continue;
+            }
             if enemy.try_read().unwrap().pos == pos {
                 return Some(enemy.clone());
             }
@@ -198,9 +202,10 @@ impl Board {
     pub fn contact_spell_at(&self, pos: Vector) -> Option<(&SpellCircle, usize)> {
         for (index, circle) in self.spells.iter().enumerate() {
             if circle.pos == pos
-                && let Spell::Contact(_) = circle.spell {
-                    return Some((circle, index));
-                }
+                && let Spell::Contact(_) = circle.spell
+            {
+                return Some((circle, index));
+            }
         }
         None
     }
@@ -210,9 +215,10 @@ impl Board {
         }
         for enemy in self.enemies.iter() {
             if let Some(addr) = addr
-                && Arc::as_ptr(enemy).addr() == addr {
-                    continue;
-                }
+                && Arc::as_ptr(enemy).addr() == addr
+            {
+                continue;
+            }
             if enemy.try_read().unwrap().pos == pos {
                 return true;
             }
@@ -283,18 +289,20 @@ impl Board {
         let mut highest = 0;
         for enemy in self.enemies.iter() {
             if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier()
-                && tier > highest {
-                    highest = tier;
-                }
+                && tier > highest
+            {
+                highest = tier;
+            }
         }
         highest
     }
     pub fn get_all_of_tier(&self, target: usize, out: &mut Vec<Arc<RwLock<Enemy>>>) {
         for enemy in self.enemies.iter() {
             if let Ok(tier) = enemy.try_read().unwrap().variant.get_tier()
-                && target == tier {
-                    out.push(enemy.clone());
-                }
+                && target == tier
+            {
+                out.push(enemy.clone());
+            }
         }
     }
 }
@@ -464,15 +472,16 @@ impl Board {
                 .render(pos, self, player)
                 .1
                 .is_some_and(|x| x.has_background())
-            {
-                return true;
-            }
+        {
+            return true;
+        }
         for enemy in self.enemies.iter() {
             if enemy.try_read().unwrap().pos == pos {
                 if let Some(style) = enemy.try_read().unwrap().render().1
-                    && style.has_background() {
-                        return true;
-                    }
+                    && style.has_background()
+                {
+                    return true;
+                }
                 break;
             }
         }
@@ -520,9 +529,10 @@ impl Board {
             }
         } else if player.limbs.count_mage_eyes() == 2
             && let Some(enemy) = self.get_enemy(player.selector, None)
-                && self.is_reachable(enemy.try_read().unwrap().pos) {
-                    write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
-                }
+            && self.is_reachable(enemy.try_read().unwrap().pos)
+        {
+            write!(lock, ": {}", enemy.try_read().unwrap().variant.kill_name()).unwrap();
+        }
     }
     pub fn go_to_desc(lock: &mut impl Write) {
         crossterm::queue!(lock, crossterm::cursor::MoveTo(0, 36),).unwrap();
@@ -1007,7 +1017,7 @@ impl Board {
         {
             self.smart_render(player);
             if do_delay {
-                std::thread::sleep(crate::DELAY);
+                //std::thread::sleep(crate::DELAY);
             }
         }
         if self.is_reachable(enemy.try_read().unwrap().pos) && enemy.try_read().unwrap().active {

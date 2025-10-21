@@ -48,6 +48,9 @@ pub enum Command {
     GetFeedback,
     DesignateBoss(usize),
     ShowNav(bool, Option<usize>),
+    SetMaxEnergy(usize),
+    SetMaxHealth(usize),
+    SetSpell(usize, Spell),
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -153,6 +156,14 @@ impl Command {
                     Some(s) => Some(parse(Some(s))?),
                     None => None,
                 },
+            )),
+            "set_max_energy" => Ok(Command::SetMaxEnergy(parse(iter.next())?)),
+            "set_max_health" => Ok(Command::SetMaxHealth(parse(iter.next())?)),
+            "set_spell" => Ok(Command::SetSpell(
+                parse(iter.next())?,
+                iter.map(|s| s.to_string() + " ")
+                    .collect::<String>()
+                    .parse()?,
             )),
             _ => Err(format!("Unknown command: ({string})")),
         }
@@ -536,6 +547,15 @@ impl Command {
                 state.show_nav = new_state;
                 state.show_nav_index = index;
             }
+            Command::SetMaxEnergy(new_max) => {
+                state.player.max_energy = new_max;
+            }
+            Command::SetMaxHealth(new_max) => {
+                state.player.max_health = new_max;
+            }
+            Command::SetSpell(index, spell) => {
+                state.player.known_spells[index] = Some(spell);
+            }
         }
     }
     fn is_cheat(&self) -> bool {
@@ -553,30 +573,50 @@ impl Command {
         )
     }
 }
+pub static PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(5287);
 pub fn listen(out: Sender<crate::CommandInput>) -> Sender<String> {
     let (console_tx, console_rx) = std::sync::mpsc::channel();
     let tx_clone = console_tx.clone();
-    std::thread::spawn(|| {
-        let (mut read, mut write) = TcpListener::bind("127.0.0.1:5287")
+    std::thread::spawn(move || {
+        let mut console_rx = Some(console_rx);
+        let out = out.clone();
+        for stream in TcpListener::bind(("127.0.0.1", PORT.load(crate::RELAXED)))
             .unwrap()
-            .accept()
-            .unwrap()
-            .0
-            .split()
-            .unwrap();
-        std::thread::spawn(move || {
-            loop {
-                match Command::new(String::from_binary(&mut read).unwrap()) {
-                    Ok(command) => out.send(crate::CommandInput::Command(command)).unwrap(),
-                    Err(error) => tx_clone.send(error).unwrap(),
-                }
+            .incoming()
+        {
+            if let Ok(stream) = stream {
+                let (mut read, mut write) = stream.split().unwrap();
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        loop {
+                            match Command::new(String::from_binary(&mut read).unwrap()) {
+                                Ok(command) => {
+                                    out.send(crate::CommandInput::Command(command)).unwrap()
+                                }
+                                Err(error) => tx_clone.send(error).unwrap(),
+                            }
+                        }
+                    });
+                    let console = console_rx.take().unwrap();
+                    console_rx = Some(
+                        s.spawn(|| {
+                            loop {
+                                if let Ok(recv) = console.recv()
+                                    && let Ok(_) = recv.to_binary(&mut write)
+                                {
+                                } else {
+                                    break;
+                                }
+                                //console_rx.recv().unwrap().to_binary(&mut write).unwrap();
+                            }
+                            console
+                        })
+                        .join()
+                        .unwrap(),
+                    );
+                });
             }
-        });
-        std::thread::spawn(move || {
-            loop {
-                console_rx.recv().unwrap().to_binary(&mut write).unwrap();
-            }
-        });
+        }
     });
     console_tx
 }

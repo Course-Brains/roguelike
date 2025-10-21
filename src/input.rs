@@ -9,7 +9,7 @@ pub enum Input {
     Return,                // return cursor
     Wait,                  // do nothing
     SwapFocus,             // swap camera focus(player/selector)
-    Item(usize),           // Use an item(1-6)
+    Use(usize),            // Use an item(1-6) or cast a spell (1-6)
     Convert,               // Convert energy to money
     Aim,                   // Show a raytrace from the player
     Fast,                  // Toggle fast selector movement
@@ -17,6 +17,7 @@ pub enum Input {
     Memorize,              // Memorize the current position
     Remember,              // Remember the memorized position
     AutoMove,              // automatically move to the selected position
+    ChangeRightColumn,     // rotate what is shown/used by the right column
 }
 impl Input {
     pub fn get() -> Input {
@@ -51,12 +52,12 @@ impl Input {
                 b't' => return Input::SwapFocus,
                 b'\t' => return Input::Wait,
                 b'\n' => return Input::Enter,
-                b'1' => return Input::Item(1),
-                b'2' => return Input::Item(2),
-                b'3' => return Input::Item(3),
-                b'4' => return Input::Item(4),
-                b'5' => return Input::Item(5),
-                b'6' => return Input::Item(6),
+                b'1' => return Input::Use(1),
+                b'2' => return Input::Use(2),
+                b'3' => return Input::Use(3),
+                b'4' => return Input::Use(4),
+                b'5' => return Input::Use(5),
+                b'6' => return Input::Use(6),
                 b'c' => return Input::Convert,
                 b'z' => return Input::Aim,
                 b'f' => return Input::Fast,
@@ -64,6 +65,7 @@ impl Input {
                 b'm' => return Input::Memorize,
                 b'R' => return Input::Remember,
                 b'M' => return Input::AutoMove,
+                b'x' => return Input::ChangeRightColumn,
                 _ => {}
             }
         }

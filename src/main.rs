@@ -9,8 +9,6 @@ mod player;
 use player::Player;
 mod board;
 use board::{Board, Piece};
-mod style;
-use style::Style;
 mod input;
 use input::{Direction, Input};
 mod enemy;
@@ -36,6 +34,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
+use abes_nice_things::style::{Color, Style};
 use abes_nice_things::{FromBinary, ToBinary};
 
 // Convenience constant
@@ -1871,7 +1870,7 @@ fn save_stats() {
         } else {
             stats_saves = Vec::from_binary(&mut file).unwrap();
         }
-    } 
+    }
 
     stats_saves.push(stats().clone());
     let mut file = std::fs::File::create(STAT_PATH).unwrap();

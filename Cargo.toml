@@ -13,7 +13,7 @@ name = "console"
 path = "src/bin/console.rs"
 
 [dependencies]
-abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "6b27382", features = ["dyn_binary"] }
+abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "1ffbd57", features = ["dyn_binary"] }
 crossterm = "0.29.0"
 
 [features]

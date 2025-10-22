@@ -1,8 +1,7 @@
 use crate::{
-    Board, Direction, Player, Vector, advantage_pass,
+    Board, Color, Direction, Player, Vector, advantage_pass,
     random::*,
     spell::{ContactSpell, NormalSpell, Spell, SpellCircle},
-    style::Color,
 };
 use std::io::Write;
 use std::sync::{Arc, RwLock, RwLockWriteGuard, Weak};

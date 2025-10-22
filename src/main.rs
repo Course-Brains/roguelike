@@ -1871,9 +1871,7 @@ fn save_stats() {
         } else {
             stats_saves = Vec::from_binary(&mut file).unwrap();
         }
-    } else {
-        log!("Creating new stats file")
-    }
+    } 
 
     stats_saves.push(stats().clone());
     let mut file = std::fs::File::create(STAT_PATH).unwrap();

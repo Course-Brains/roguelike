@@ -125,6 +125,11 @@ impl Player {
     pub fn do_move(&mut self, direction: Direction, board: &mut Board) {
         crate::log!("Moving from {} in {direction}", self.pos);
         self.pos += direction;
+        if crate::SETTINGS.selector_follows_player() {
+            if board.will_be_on_screen(self, self.selector, direction) {
+                self.selector += direction;
+            }
+        }
         if let Some(piece) = &board[self.pos] {
             crate::log!("  Triggering on_step at {}", self.pos);
             if piece.on_step(Entity::Player(self)) {

@@ -25,7 +25,7 @@ enter: interact
 tab: do nothing
 t: swap camera focus
 c: convert energy to money
-1-6: use item in relevant slot
+1-6: use items or casting spells in relevant slot
 i: toggle inspect mode
 z: toggle aiming
 C: clear feedback

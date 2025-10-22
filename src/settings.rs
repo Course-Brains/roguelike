@@ -9,6 +9,7 @@ pub struct Settings {
     difficulty: Field,
     fast_mode: Field,
     auto_move: Field,
+    selector_follows_player: Field,
 }
 macro_rules! getter {
     ($name:ident, $out:ty) => {
@@ -85,6 +86,7 @@ impl Settings {
                             }
                             "fast_mode" => thing!(fast_mode, bool),
                             "auto_move" => thing!(auto_move, bool),
+                            "selector_follows_player" => thing!(selector_follows_player, bool),
                             _ => {}
                         }
                     }
@@ -135,6 +137,12 @@ impl Settings {
             bool::try_from(*self.auto_move).unwrap()
         )
         .unwrap();
+        writeln!(
+            file,
+            "selector_follows_player {}",
+            bool::try_from(*self.selector_follows_player).unwrap()
+        )
+        .unwrap();
 
         file.flush().unwrap();
     }
@@ -145,6 +153,7 @@ impl Settings {
             2 => &mut self.difficulty,
             3 => &mut self.fast_mode,
             4 => &mut self.auto_move,
+            5 => &mut self.selector_follows_player,
             _ => panic!("I diddly done goofed up the math"),
         }
     }
@@ -155,11 +164,12 @@ impl Settings {
             2 => &self.difficulty,
             3 => &self.fast_mode,
             4 => &self.auto_move,
+            5 => &self.selector_follows_player,
             _ => panic!("Someone is bad at math, and it is probably me"),
         }
     }
     const fn num_fields(&self) -> usize {
-        5
+        6
     }
 
     getter!(kick_enemies, bool);
@@ -167,6 +177,7 @@ impl Settings {
     getter!(difficulty, Difficulty);
     getter!(fast_mode, bool);
     getter!(auto_move, bool);
+    getter!(selector_follows_player, bool);
 }
 // Unchanging editor methods
 impl Settings {
@@ -224,7 +235,7 @@ impl Settings {
                 ),
                 b'a' => Self::editor_left(&mut selecting_field),
                 b'd' => Self::editor_right(&mut selecting_field),
-                b' ' => selecting_field ^= true, // swap selection
+                b' ' | b'\n' => selecting_field ^= true, // swap selection
                 b'q' => break,
                 b'Q' => return,
                 b'r' => {
@@ -366,6 +377,7 @@ impl Default for Settings {
             difficulty: Field::new("difficulty", Difficulty::default()),
             fast_mode: Field::new("fast mode", false),
             auto_move: Field::new("auto move", false),
+            selector_follows_player: Field::new("selector follows player", false),
         }
     }
 }
@@ -380,6 +392,7 @@ impl FromBinary for Settings {
             difficulty: Value::from(Difficulty::from_binary(binary)?).into(),
             fast_mode: Value::from(bool::from_binary(binary)?).into(),
             auto_move: Value::from(bool::from_binary(binary)?).into(),
+            selector_follows_player: Value::from(bool::from_binary(binary)?).into(),
         })
     }
 }
@@ -395,6 +408,7 @@ impl ToBinary for Settings {
         help!(difficulty, Difficulty);
         help!(fast_mode, bool);
         help!(auto_move, bool);
+        help!(selector_follows_player, bool);
         Ok(())
     }
 }

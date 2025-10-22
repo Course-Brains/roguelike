@@ -1178,6 +1178,16 @@ impl Board {
         out.reverse();
         out
     }
+    // Assumes that pos is a position on the screen
+    pub fn will_be_on_screen(&self, player: &Player, pos: Vector, direction: Direction) -> bool {
+        let bounds = self.get_render_bounds(player);
+        match direction {
+            Direction::Up => pos.y > bounds.start.y,
+            Direction::Down => pos.y < bounds.end.y - 1,
+            Direction::Left => pos.x > bounds.start.x,
+            Direction::Right => pos.x < bounds.end.x - 1,
+        }
+    }
 }
 impl std::ops::Index<Vector> for Board {
     type Output = Option<Piece>;

@@ -1209,6 +1209,33 @@ impl Variant {
             _ => return None,
         })
     }
+    pub fn on_death(&self, player: &mut Player) {
+        let divisor = {
+            if crate::SETTINGS.difficulty() <= crate::Difficulty::Easy {
+                2
+            } else {
+                5
+            }
+        };
+        match self {
+            Variant::BasicBoss(_) => {
+                // Gives max health
+                player.max_health += (player.max_health / divisor).max(1);
+            }
+            Variant::MageBoss(_) => {
+                // Gives max energy
+                player.max_energy += (player.max_energy / divisor).max(1);
+            }
+            Variant::FighterBoss { .. } => {
+                todo!()
+            }
+            Variant::ArcherBoss(_) => {
+                // Gives perception
+                player.perception += (player.perception / divisor).max(1)
+            }
+            _ => {}
+        }
+    }
     fn set_fighter_boss_action(&mut self, new_action: FighterBossAction) {
         if let Variant::FighterBoss { action, .. } = self {
             *action = new_action;

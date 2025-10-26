@@ -12,11 +12,10 @@ impl Exit {
         (SYMBOL, Some(STYLE))
     }
     pub fn on_step(self, stepper: Entity<'_>) {
-        if let Entity::Player(player) = stepper {
+        if let Entity::Player(_) = stepper {
             match self {
                 Exit::Shop => {
                     crate::LOAD_SHOP.store(true, Ordering::Relaxed);
-                    player.stat_choice();
                 }
                 Exit::Level => crate::LOAD_MAP.store(true, Ordering::Relaxed),
             }

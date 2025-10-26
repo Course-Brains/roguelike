@@ -1101,8 +1101,13 @@ impl Board {
         }
         false
     }
-    pub fn purge_dead(&mut self) {
-        self.enemies.retain(|enemy| !enemy.try_read().unwrap().dead);
+    pub fn purge_dead(&mut self, player: &mut Player) {
+        for arc in self
+            .enemies
+            .extract_if(.., |arc| arc.try_read().unwrap().dead)
+        {
+            arc.try_read().unwrap().variant.on_death(player);
+        }
     }
     // places the exit if the boss is dead
     pub fn place_exit(&mut self) {

@@ -929,8 +929,10 @@ impl State {
                     .unwrap()
                     .attacked(self.player.get_damage())
                 {
-                    self.player
-                        .on_kill(&self.board.enemies.swap_remove(index).try_read().unwrap());
+                    let binding = self.board.enemies.swap_remove(index);
+                    let killed = binding.try_read().unwrap();
+                    self.player.on_kill(&killed);
+                    killed.variant.on_death(&mut self.player);
                     if redrawable {
                         self.render()
                     }
@@ -1005,7 +1007,7 @@ impl State {
             );
         }
         self.board.update_boss_pos();
-        self.board.purge_dead();
+        self.board.purge_dead(&mut self.player);
         if bench() {
             writeln!(bench::think(), "{}", time.as_millis()).unwrap();
         }

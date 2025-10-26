@@ -4,7 +4,7 @@
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 14;
+const SAVE_VERSION: Version = 15;
 mod player;
 use player::Player;
 mod board;
@@ -1892,6 +1892,7 @@ fn view_stats() {
         );
         return;
     }
+    log!("Pulling stats from file");
     let stats = Vec::<Stats>::from_binary(&mut file).unwrap();
     let mut index = 0;
     macro_rules! list {
@@ -1921,6 +1922,7 @@ fn view_stats() {
             }
         };
     }
+    log!("Viewing stats:");
     loop {
         println!("What would you like to do?");
         input.truncate(0);

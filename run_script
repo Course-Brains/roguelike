@@ -1,0 +1,11 @@
+#!/bin/bash
+
+BACKTRACE_RESET=$RUST_BACKTRACE
+export RUST_BACKTRACE=1
+cargo run --features "log" -- $@ 2> error.txt
+if [ $? -eq 0 ]; then
+    rm error.txt
+else
+    echo "Send error.txt to Course-Brains"
+fi
+export RUST_BACKTRACE=$BACKTRACE_RESET

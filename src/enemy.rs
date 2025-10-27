@@ -1227,7 +1227,10 @@ impl Variant {
                 player.max_energy += (player.max_energy / divisor).max(1);
             }
             Variant::FighterBoss { .. } => {
-                todo!()
+                // gives a small amount of max health, max energy, and perception
+                player.max_health += (player.max_health / divisor / 2).max(1);
+                player.max_energy += (player.max_energy / divisor / 2).max(1);
+                player.perception += (player.perception / divisor / 2).max(1);
             }
             Variant::ArcherBoss(_) => {
                 // Gives perception

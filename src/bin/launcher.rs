@@ -18,55 +18,49 @@ fn enact_chosen(index: usize) -> bool {
     match index {
         0 => {
             // play
-            normalify();
             Command::new("./run_script")
                 .spawn()
                 .unwrap()
                 .wait()
-                .unwrap();
-            weirdify();
+                .unwrap()
+                .success()
         }
         1 => {
             // stats
-            normalify();
             Command::new("./run_script")
                 .arg("stats")
                 .spawn()
                 .unwrap()
                 .wait()
-                .unwrap();
-            weirdify();
+                .unwrap()
+                .success()
         }
         2 => {
             // settings
-            normalify();
             Command::new("./run_script")
                 .arg("settings")
                 .spawn()
                 .unwrap()
                 .wait()
-                .unwrap();
-            weirdify();
+                .unwrap()
+                .success()
         }
         3 => {
             // update
-            normalify();
             Command::new("git")
                 .arg("pull")
                 .spawn()
                 .unwrap()
                 .wait()
-                .unwrap();
-            weirdify();
+                .unwrap()
+                .success()
         }
         4 => {
             // quit
-            normalify();
-            return false;
+            false
         }
         _ => unreachable!("Tell Course-Brains to fix his code"),
     }
-    true
 }
 // Returns whether or not to continue the program
 fn process_input(index: &mut usize) -> bool {
@@ -84,7 +78,14 @@ fn process_input(index: &mut usize) -> bool {
         }
         b'w' => selector_up(index),
         b's' => selector_down(index),
-        b' ' | b'\n' => return enact_chosen(*index),
+        b' ' | b'\n' => {
+            normalify();
+            let out = enact_chosen(*index);
+            if out {
+                weirdify()
+            }
+            return out;
+        }
         _ => {}
     }
     true

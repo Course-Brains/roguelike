@@ -516,47 +516,6 @@ impl Player {
         }
         damage
     }
-    pub fn stat_choice(&mut self) {
-        crate::log!("Granting stats");
-        crate::set_desc("1: more health, 2: more energy, 3: more perception");
-        let mut buf = [0];
-        let mut lock = std::io::stdin().lock();
-        let easy = crate::SETTINGS.difficulty() == crate::Difficulty::Easy;
-        loop {
-            lock.read_exact(&mut buf).unwrap();
-            match buf[0] {
-                b'1' => {
-                    crate::log!("  Chosen health");
-                    if easy {
-                        self.max_health += (self.max_health / 2).max(1);
-                        self.heal_to_full();
-                    } else {
-                        self.max_health += (self.max_health / 5).max(1)
-                    }
-                }
-                b'2' => {
-                    crate::log!("  Chosen energy");
-                    if easy {
-                        self.max_energy += (self.max_energy / 2).max(1);
-                    }
-                    self.max_energy += (self.max_energy / 5).max(1)
-                }
-                b'3' => {
-                    crate::log!("  Chosen perception");
-                    if easy {
-                        self.perception += (self.perception / 2).max(1);
-                    } else {
-                        self.perception += (self.perception / 5).max(1);
-                    }
-                }
-                other => {
-                    crate::log!("  Recieved \"{}\", trying again", char::from(other));
-                    continue;
-                }
-            }
-            break;
-        }
-    }
     pub fn get_perception(&self) -> usize {
         let mut perception = self.perception;
         let eyes = self.limbs.count_eyes();
@@ -842,9 +801,14 @@ impl Effects {
         Effects {
             invincible: Duration::None,
             regen: Duration::None,
-            unlucky: match crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
-                true => Duration::Infinite,
-                false => Duration::None,
+            unlucky: {
+                if crate::SETTINGS.difficulty() >= crate::Difficulty::Hard {
+                    Duration::Infinite
+                } else if crate::SETTINGS.difficulty() >= crate::Difficulty::Normal {
+                    Duration::Turns(200)
+                } else {
+                    Duration::None
+                }
             },
             doomed: Duration::None,
             damage_boost: Duration::None,

@@ -246,7 +246,18 @@ pub fn save_stats() {
 pub fn view_stats() {
     log!("Entering stats viewer");
     let mut input = String::new();
-    let mut file = std::fs::File::open(STAT_PATH).unwrap();
+    let mut file = match std::fs::File::open(STAT_PATH) {
+        Ok(file) => file,
+        Err(error) => {
+            if let std::io::ErrorKind::NotFound = error.kind() {
+                println!("There is no stats file, I recommend playing at least once");
+                println!("Press enter to go back");
+                std::io::stdin().read_line(&mut String::new()).unwrap();
+                return;
+            }
+            panic!("{error}");
+        }
+    };
     if Version::from_binary(&mut file).unwrap() != SAVE_VERSION {
         println!(
             "{}The save version of the file does not match the \

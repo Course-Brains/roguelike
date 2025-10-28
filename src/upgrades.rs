@@ -74,9 +74,9 @@ impl ToBinary for Upgrades {
 #[derive(Clone, Copy, Debug)]
 pub enum UpgradeType {
     // Normal upgrades
-    Map,
-    SoftShoes,
-    PreciseConvert,
+    Map,            // see all walls
+    SoftShoes,      // advantage on stealth
+    PreciseConvert, // convert one energy at a time
     FullEnergyDing, // send bell character when full energy
     Lifesteal,      // health on kill
     // Infinite upgrades
@@ -268,6 +268,8 @@ impl UpgradeType {
             Self::FullEnergyDing => crate::debug_only!("full_energy_ding"),
         }
     }
+    // For the normal upgrades, can they be meaningfully picked up multiple times?
+    // None is everything that is not in the normal upgrade pool
     pub fn is_repeatable(self) -> Option<bool> {
         match self {
             Self::Map

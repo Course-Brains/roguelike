@@ -46,6 +46,7 @@ impl Enemy {
     pub fn render(&self) -> (char, Option<crate::Style>) {
         (
             match self.variant {
+                Variant::Dummy => '0',
                 Variant::Basic | Variant::BasicBoss(_) => '1',
                 Variant::Mage(_) | Variant::MageBoss(_) => '2',
                 Variant::Fighter(_) | Variant::FighterBoss { .. } => '4',
@@ -893,6 +894,10 @@ impl Enemy {
                     false
                 }
             }
+            Variant::Dummy => {
+                this.as_mut().unwrap().active = false;
+                false
+            }
         }
     }
     pub fn is_near(&self, pos: Vector, range: usize) -> bool {
@@ -907,7 +912,8 @@ impl Enemy {
             Variant::BasicBoss(_)
             | Variant::MageBoss(_)
             | Variant::FighterBoss { .. }
-            | Variant::ArcherBoss(_) => {
+            | Variant::ArcherBoss(_)
+            | Variant::Dummy => {
                 return Err(());
             }
         }
@@ -1003,6 +1009,7 @@ pub enum Variant {
     },
     Archer(Vector),
     ArcherBoss(ArcherBossAction),
+    Dummy,
 }
 impl Variant {
     fn detect(&self, enemy: &RwLockWriteGuard<Enemy>, board: &Board, player: &Player) -> bool {
@@ -1041,6 +1048,7 @@ impl Variant {
             | Variant::ArcherBoss(_) => board.backtraces[board.x * enemy.pos.y + enemy.pos.x]
                 .cost
                 .is_some(),
+            Variant::Dummy => false,
         }
     }
     fn windup_color(&self) -> Color {
@@ -1066,6 +1074,9 @@ impl Variant {
 
             // Non magic ranged
             Variant::Archer(_) | Variant::ArcherBoss(ArcherBossAction::Shoot(_)) => Color::Yellow,
+
+            // No windup
+            Variant::Dummy => unreachable!("The dummy learned"),
         }
     }
     pub fn max_health(&self) -> usize {
@@ -1078,6 +1089,7 @@ impl Variant {
             Variant::FighterBoss { .. } => 15,
             Variant::Archer(_) => 3,
             Variant::ArcherBoss(_) => 3,
+            Variant::Dummy => 100000,
         }
     }
     fn parry_stun(&self) -> usize {
@@ -1089,7 +1101,8 @@ impl Variant {
             Variant::Mage(_)
             | Variant::MageBoss(_)
             | Variant::Archer(_)
-            | Variant::ArcherBoss(_) => {
+            | Variant::ArcherBoss(_)
+            | Variant::Dummy => {
                 unimplemented!("The filthy casual actually parried it!")
             }
             Variant::Fighter(_) => 5,
@@ -1107,7 +1120,8 @@ impl Variant {
             Variant::Mage(_)
             | Variant::MageBoss(_)
             | Variant::Archer(_)
-            | Variant::ArcherBoss(_) => 3,
+            | Variant::ArcherBoss(_)
+            | Variant::Dummy => 3,
         }
     }
     // returns kill reward in energy, then health
@@ -1122,6 +1136,7 @@ impl Variant {
             Variant::FighterBoss { .. } => (15, 10),
             Variant::Archer(_) => (3, 10),
             Variant::ArcherBoss(_) => (10, 5),
+            Variant::Dummy => (10000, 10000),
         }
     }
     pub fn kill_name(&self) -> &'static str {
@@ -1134,6 +1149,7 @@ impl Variant {
             Variant::FighterBoss { .. } => "Knight",
             Variant::Archer(_) => crate::debug_only!("archer"),
             Variant::ArcherBoss(_) => "Seth",
+            Variant::Dummy => "Dummy",
         }
     }
     pub fn precise_teleport(&self) -> bool {
@@ -1159,7 +1175,8 @@ impl Variant {
             Variant::MageBoss(_)
             | Variant::BasicBoss(_)
             | Variant::FighterBoss { .. }
-            | Variant::ArcherBoss(_) => Err(()),
+            | Variant::ArcherBoss(_)
+            | Variant::Dummy => Err(()),
         }
     }
     fn mage_aggro(&self) -> bool {
@@ -1236,6 +1253,9 @@ impl Variant {
                 // Gives perception
                 player.perception += (player.perception / divisor).max(1)
             }
+            Variant::Dummy => {
+                crate::set_feedback("Incredible dedication!".to_string());
+            }
             _ => {}
         }
     }
@@ -1281,6 +1301,7 @@ impl Variant {
             Variant::FighterBoss { .. } => 5,
             Variant::Archer(_) => 6,
             Variant::ArcherBoss(_) => 7,
+            Variant::Dummy => 8,
         }
     }
     pub fn from_key(key: u8) -> Variant {
@@ -1293,6 +1314,7 @@ impl Variant {
             5 => Variant::fighter_boss(),
             6 => Variant::archer(),
             7 => Variant::archer_boss(),
+            8 => Variant::Dummy,
             _ => unreachable!(
                 "Whoever updated the key producer is blind and covers half of their screen"
             ),
@@ -1310,6 +1332,7 @@ impl std::fmt::Display for Variant {
             Variant::FighterBoss { .. } => write!(f, "fighter_boss"),
             Variant::Archer(_) => write!(f, "archer"),
             Variant::ArcherBoss(_) => write!(f, "archer_boss"),
+            Variant::Dummy => write!(f, "dummy"),
         }
     }
 }
@@ -1325,6 +1348,7 @@ impl std::str::FromStr for Variant {
             "fighter_boss" => Ok(Variant::fighter_boss()),
             "archer" => Ok(Variant::archer()),
             "archer_boss" => Ok(Variant::archer_boss()),
+            "dummy" => Ok(Variant::Dummy),
             _ => Err("invalid variant".to_string()),
         }
     }

@@ -212,6 +212,10 @@ impl Player {
     }
     pub fn should_remove_limb(&self, damage: usize) -> bool {
         crate::log!("Deciding if a limb should be lost:");
+        if crate::layer() == 0 {
+            crate::log!("No limb removal on first layer");
+            return false;
+        }
         let health = self.health as f64;
         let max_health = self.max_health as f64;
         let energy = self.energy as f64;
@@ -252,7 +256,9 @@ impl Player {
         for _ in 0..energy {
             if self.energy < self.max_energy {
                 self.energy += 1;
-            } else if self.health < self.max_health {
+            } else if self.health < self.max_health
+                && crate::SETTINGS.difficulty() >= crate::Difficulty::Hard
+            {
                 crate::stats().damage_healed += 1;
                 self.health += health;
             } else {
@@ -318,7 +324,7 @@ impl Player {
     pub fn death_message(state: &crate::State) {
         crate::log!("Getting death message");
         let mut out = std::io::stdout().lock();
-        if state.level == 0
+        if crate::LAYER.load(crate::RELAXED) == 0
             && state.turn < 300
             && std::fs::File::open("stats")
                 .is_ok_and(|file| file.metadata().is_ok_and(|meta| meta.len() > 10000))
@@ -326,7 +332,7 @@ impl Player {
             write!(out, "Just roll better next time, lmao.").unwrap();
             return;
         }
-        if crate::stats().cowardice > state.level / 3 && crate::random() & 3 == 0 {
+        if crate::stats().cowardice > crate::layer() / 3 && crate::random() & 3 == 0 {
             write!(out, "Coward.").unwrap();
             return;
         }
@@ -374,12 +380,12 @@ impl Player {
         }
         // If the player is a coward but died to a boss anyway
         else if crate::enemy::Variant::from_key(state.player.killer.unwrap().1.unwrap()).is_boss()
-            && stats.cowardice > state.level
+            && stats.cowardice > crate::layer()
         {
             valid.push("Maybe you should have run from that one, like you did with the others.");
         }
         // If they died to a basic_boss on level 0
-        if state.level == 0
+        if crate::layer() == 0
             && state
                 .player
                 .killer

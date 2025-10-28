@@ -190,13 +190,22 @@ impl Board {
         // Spend no energy directly(not counting conversion)
         out[Board::BONUS_NO_ENERGY] = Some(Piece::Sign("Be more stingy".to_string()));
 
-        // Placing limbs
-
         out
     }
     pub fn new_empty() -> Board {
         let mut out = Board::new(90, 30, 45, 15);
         out.make_room(Vector::new(0, 0), Vector::new(90, 30));
+        out
+    }
+    pub fn new_tutorial() -> Board {
+        let mut out = Board::new(90, 30, 45, 15);
+        out.make_room(Vector::new(0, 0), Vector::new(90, 30));
+        out.enemies.push(Arc::new(RwLock::new(Enemy::new(
+            Vector::new(5, 5),
+            crate::enemy::Variant::Dummy,
+        ))));
+        out[Vector::new(88, 15)] = Some(Piece::Exit(Exit::Level));
+        crate::set_feedback("Learn".to_string());
         out
     }
     pub fn contact_spell_at(&self, pos: Vector) -> Option<(&SpellCircle, usize)> {
@@ -689,6 +698,9 @@ impl Board {
             {
                 continue;
             }
+            if let crate::enemy::Variant::Dummy = enemy.try_read().unwrap().variant {
+                continue;
+            }
             to_visit = to_visit
                 .iter()
                 .map(|item| {
@@ -1045,6 +1057,9 @@ impl Board {
         let mut enemy = arc.try_write().unwrap();
         let addr = Arc::as_ptr(&arc).addr();
         if !enemy.active || !self.is_reachable(enemy.pos) || enemy.attacking || enemy.is_stunned() {
+            return false;
+        }
+        if let crate::enemy::Variant::Dummy = enemy.variant {
             return false;
         }
         let mut new_dir = self.backtraces[self.to_index(enemy.pos)].from;

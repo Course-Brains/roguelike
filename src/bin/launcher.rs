@@ -110,6 +110,7 @@ fn render(selected: usize) {
         crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
     )
     .unwrap();
+    // Draw each line
     for (index, option) in OPTIONS.iter().enumerate() {
         if index == selected {
             println!(

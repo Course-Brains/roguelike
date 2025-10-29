@@ -4,7 +4,10 @@ use std::io::Write;
 use std::process::Command;
 fn main() {
     let mut choices = vec![
-        Choice::new("play", || run(&mut Command::new("./run_script"))),
+        Choice::new("play", || {
+            println!("Loading...");
+            run(&mut Command::new("./run_script"))
+        }),
         Choice::new("stats", || run(Command::new("./run_script").arg("stats"))),
         Choice::new("settings", || {
             run(Command::new("./run_script").arg("settings"))
@@ -20,6 +23,7 @@ fn main() {
             break;
         }
     }
+    normalify();
 }
 struct Choice {
     name: &'static str,

@@ -1,4 +1,4 @@
-use crate::{FromBinary, Player, Random, Style, ToBinary, random};
+use crate::{FromBinary, Player, Random, Style, ToBinary, get, random};
 use std::io::Read;
 
 const AVAILABLE: Style = *Style::new().green();
@@ -246,26 +246,26 @@ impl UpgradeType {
             _ => true,
         }
     }
-    pub fn get_desc(self) -> &'static str {
+    pub fn get_desc(self) -> String {
         match self {
             // Normal upgrades
-            Self::Map => "A map",
-            Self::SoftShoes => "A pair of particularly soft shoes",
-            Self::PreciseConvert => crate::debug_only!("precise_convert"),
-            Self::HealthBoost => crate::debug_only!("health_boost"),
-            Self::EnergyBoost => crate::debug_only!("energy_boost"),
-            Self::Lifesteal => crate::debug_only!("lifesteal"),
+            Self::Map => get(9),
+            Self::SoftShoes => get(10),
+            Self::PreciseConvert => crate::debug_only!(get(11)),
+            Self::HealthBoost => crate::debug_only!(get(12)),
+            Self::EnergyBoost => crate::debug_only!(get(13)),
+            Self::Lifesteal => crate::debug_only!(get(14)),
             // Bonuses
-            Self::BonusNoWaste => crate::debug_only!("bonus_no_waste"),
-            Self::BonusNoDamage => "A result of your fear",
-            Self::BonusKillAll => "A result of your cruelty",
-            Self::BonusNoEnergy => crate::debug_only!("bonus_no_energy"),
+            Self::BonusNoWaste => crate::debug_only!(get(15)),
+            Self::BonusNoDamage => get(16),
+            Self::BonusKillAll => get(17),
+            Self::BonusNoEnergy => crate::debug_only!(get(18)),
             // Save pint
-            Self::SavePint => "A savepint",
+            Self::SavePint => get(19),
             // Limbs
-            Self::LimbMageEye => "A mage's eye",
-            Self::LimbSeerEye => "A seer's eye",
-            Self::FullEnergyDing => crate::debug_only!("full_energy_ding"),
+            Self::LimbMageEye => get(20),
+            Self::LimbSeerEye => get(21),
+            Self::FullEnergyDing => crate::debug_only!(get(22)),
         }
     }
     // For the normal upgrades, can they be meaningfully picked up multiple times?

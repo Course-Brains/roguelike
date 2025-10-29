@@ -86,7 +86,7 @@ pub fn editor() {
             "count" => count(),
             "metadata" => metadata(index),
             "set" => set(index),
-            "add_new" => add_new(&mut index),
+            "add_new" | "new" | "add" => add_new(&mut index),
             "full_reset" => full_reset(&mut index),
             "help" => help(),
             "quit" => return,
@@ -143,6 +143,7 @@ fn add_new(index: &mut usize) {
     index_file
         .write_all(&(text.len() as u64).to_le_bytes())
         .unwrap();
+    println!("Added \"{}\" to new index {index}", text);
 }
 fn set(index: usize) {
     log!("Setting {index}");

@@ -1,2 +1,23 @@
-0: enemy name: basic
-1: enemy name: basic_boss
+0: enemy: basic
+1: enemy: basic_boss
+2: enemy: mage
+3: enemy: mage_boss
+4: enemy: fighter
+5: enemy: fighter_boss
+6(DEBUG): enemy: archer
+7: enemy: archer_boss
+8: enemy: dummy
+9: upgrade: map
+10: upgrade: soft_shoes
+11(DEBUG): upgrade: precise_convert
+12(DEBUG): upgrade: health_boost
+13(DEBUG): upgrade: energy_boost
+14(DEBUG): upgrade: lifesteal
+15(DEBUG): bonus upgrade: bonus_no_waste
+16: bonus upgrade: bonus_no_damage
+17: bonus upgrade: bonus_kill_all
+18: bonus upgrade: bonus_no_energy
+19: special upgrade: savepint
+20: limb upgrade: limb_mage_eye
+21: limb upgrade: limb_seer_eye
+22(DEBUG): upgrade: full_energy_ding

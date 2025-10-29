@@ -101,7 +101,7 @@ impl Stats {
         self.depth = layer();
         self.upgrades = state.player.upgrades;
         self.death_turn = state.turn;
-        let killing_data = state.player.killer.unwrap();
+        let killing_data = state.player.killer.clone().unwrap();
         self.killer = killing_data.1;
         self.killing_damage = killing_data.2;
         self.settings = SETTINGS.clone();
@@ -130,7 +130,7 @@ impl Stats {
             "{}",
             self.killer
                 .map(|key| enemy::Variant::from_key(key).kill_name())
-                .unwrap_or("Yourself")
+                .unwrap_or("Yourself".to_string())
         )
     }
 }

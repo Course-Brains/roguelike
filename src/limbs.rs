@@ -159,7 +159,7 @@ impl Eye {
         if (player.energy * 10) / player.max_energy < 4 {
             damage += 2;
         }
-        let _ = player.attacked(damage, "stupidity", None);
+        let _ = player.attacked(damage, "stupidity".to_string(), None);
     }
     pub fn get_name(&self, lock: &mut impl std::io::Write) {
         match self {

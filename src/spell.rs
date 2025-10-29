@@ -399,7 +399,7 @@ impl NormalSpell {
                     player_damage: damage * 5,
                     death_name: caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
-                        .unwrap_or("a lack of depth perception"),
+                        .unwrap_or("a lack of depth perception".to_string()),
                 }
                 .evaluate(time);
                 true
@@ -524,7 +524,7 @@ impl NormalSpell {
                     player_damage: damage * 5,
                     death_name: caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
-                        .unwrap_or("a common lapse in judgement"),
+                        .unwrap_or("a common lapse in judgement".to_string()),
                 }
                 .evaluate(time);
                 true
@@ -719,7 +719,7 @@ struct FireBall<'a> {
     explosion_size: usize,
     damage: usize,
     player_damage: usize,
-    death_name: &'static str,
+    death_name: String,
 }
 impl<'a> FireBall<'a> {
     fn evaluate(self, time: Option<&mut std::time::Duration>) {
@@ -785,7 +785,7 @@ impl<'a> FireBall<'a> {
             if self.player.pos == *pos {
                 let _ = self.player.attacked(
                     self.player_damage,
-                    self.death_name,
+                    self.death_name.clone(),
                     get_variant_id(&self.caster),
                 );
             }

@@ -143,7 +143,7 @@ impl State {
             self.player.heal(2)
         }
         if self.player.effects.poison.is_active() {
-            let _ = self.player.attacked(1, "poison", None);
+            let _ = self.player.attacked(1, "poison".to_string(), None);
         }
         self.board.generate_nav_data(
             self.player.pos,

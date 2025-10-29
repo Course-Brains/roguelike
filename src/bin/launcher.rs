@@ -2,68 +2,39 @@ use abes_nice_things::Style;
 use std::io::Read;
 use std::io::Write;
 use std::process::Command;
-static OPTIONS: [&'static str; 5] = ["play", "stats", "settings", "update", "quit"];
 fn main() {
+    let mut choices = vec![
+        Choice::new("play", || run(&mut Command::new("./run_script"))),
+        Choice::new("stats", || run(Command::new("./run_script").arg("stats"))),
+        Choice::new("settings", || {
+            run(Command::new("./run_script").arg("settings"))
+        }),
+        Choice::new("update", || run(Command::new("git").arg("pull"))),
+        Choice::new("quit", || false),
+    ];
     weirdify();
     let mut index = 0;
     loop {
-        render(index);
-        if !process_input(&mut index) {
+        render(index, &choices);
+        if !process_input(&mut index, &mut choices) {
             break;
         }
     }
 }
-// Returns whether or not to continue the program
-fn enact_chosen(index: usize) -> bool {
-    match index {
-        0 => {
-            // play
-            Command::new("./run_script")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
+struct Choice {
+    name: &'static str,
+    action: Box<dyn Fn() -> bool>,
+}
+impl Choice {
+    fn new(name: &'static str, action: impl Fn() -> bool + 'static) -> Choice {
+        Choice {
+            name,
+            action: Box::new(action),
         }
-        1 => {
-            // stats
-            Command::new("./run_script")
-                .arg("stats")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
-        }
-        2 => {
-            // settings
-            Command::new("./run_script")
-                .arg("settings")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
-        }
-        3 => {
-            // update
-            Command::new("git")
-                .arg("pull")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
-        }
-        4 => {
-            // quit
-            false
-        }
-        _ => unreachable!("Tell Course-Brains to fix his code"),
     }
 }
 // Returns whether or not to continue the program
-fn process_input(index: &mut usize) -> bool {
+fn process_input(index: &mut usize, choices: &mut Vec<Choice>) -> bool {
     let mut buf = [0];
     std::io::stdin().read_exact(&mut buf).unwrap();
     match buf[0] {
@@ -71,38 +42,49 @@ fn process_input(index: &mut usize) -> bool {
             std::io::stdin().read_exact(&mut buf).unwrap();
             std::io::stdin().read_exact(&mut buf).unwrap();
             match buf[0] {
-                b'A' => selector_up(index),
-                b'B' => selector_down(index),
+                b'A' => selector_up(index, choices.len()),
+                b'B' => selector_down(index, choices.len()),
                 _ => {}
             }
         }
-        b'w' => selector_up(index),
-        b's' => selector_down(index),
+        b'w' => selector_up(index, choices.len()),
+        b's' => selector_down(index, choices.len()),
         b' ' | b'\n' => {
             normalify();
-            let out = enact_chosen(*index);
+            let out = (choices[*index].action)();
             if out {
                 weirdify()
             }
             return out;
         }
+        b'q' => return false,
+        #[cfg(debug_assertions)]
+        b'D' => {
+            // Enabling debug
+            choices.push(Choice::new("dialogue", || {
+                run(Command::new("./run_script").arg("dialogue"))
+            }));
+            choices.push(Choice::new("empty", || {
+                run(Command::new("./run_script").arg("empty"))
+            }))
+        }
         _ => {}
     }
     true
 }
-fn selector_up(index: &mut usize) {
+fn selector_up(index: &mut usize, len: usize) {
     if *index == 0 {
-        *index = OPTIONS.len();
+        *index = len;
     }
     *index -= 1;
 }
-fn selector_down(index: &mut usize) {
+fn selector_down(index: &mut usize, len: usize) {
     *index += 1;
-    if *index == OPTIONS.len() {
+    if *index == len {
         *index = 0;
     }
 }
-fn render(selected: usize) {
+fn render(selected: usize, choices: &Vec<Choice>) {
     // Zero the cursor and clear the screen
     crossterm::queue!(
         std::io::stdout(),
@@ -111,15 +93,16 @@ fn render(selected: usize) {
     )
     .unwrap();
     // Draw each line
-    for (index, option) in OPTIONS.iter().enumerate() {
+    for (index, option) in choices.iter().enumerate() {
         if index == selected {
             println!(
-                "{}{option}{}",
+                "{}{}{}",
                 Style::new().red().intense(true),
+                option.name,
                 Style::new()
             );
         } else {
-            println!("{option}");
+            println!("{}", option.name);
         }
     }
     std::io::stdout().flush().unwrap()
@@ -140,4 +123,7 @@ fn normalify() {
         .status()
         .unwrap();
     crossterm::execute!(std::io::stdout(), crossterm::cursor::Show).unwrap();
+}
+fn run(command: &mut std::process::Command) -> bool {
+    command.spawn().unwrap().wait().unwrap().success()
 }

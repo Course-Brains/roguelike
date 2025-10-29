@@ -19,7 +19,7 @@ pub struct Player {
     pub focus: Focus,
     // If the player was killed, it has the killer's name to be shown and if applicable, the
     // numerical id of killing variant, and the killing blow's damage
-    pub killer: Option<(&'static str, Option<u8>, usize)>,
+    pub killer: Option<(String, Option<u8>, usize)>,
     pub items: Items,
     money: usize,
     pub perception: usize,
@@ -154,7 +154,7 @@ impl Player {
     pub fn attacked(
         &mut self,
         mut damage: usize,
-        attacker: &'static str,
+        attacker: String,
         variant_id: Option<u8>,
     ) -> Result<bool, ()> {
         // Damage nullification
@@ -297,7 +297,7 @@ impl Player {
     // By this point, death stat collection has happened
     pub fn handle_death(state: &crate::State) -> bool {
         crate::log!("Handling death of player");
-        let killer = state.player.killer.unwrap();
+        let killer = state.player.killer.clone().unwrap();
         println!(
             "\x1b[2J\x1b[15;0HYou were killed by {}{}\x1b[0m.",
             Style::new().green().intense(true),
@@ -366,11 +366,12 @@ impl Player {
             valid.push("You should try easy mode.");
         }
         // If the player killed themself
-        if state.player.killer.unwrap().1.is_none() {
+        if state.player.killer.clone().unwrap().1.is_none() {
             valid.push("If you kill yourself that well then we'll be out of a job.")
         }
         // If the player was killed by a basic
-        else if state.player.killer.unwrap().1.unwrap() == crate::enemy::Variant::basic().to_key()
+        else if state.player.killer.clone().unwrap().1.unwrap()
+            == crate::enemy::Variant::basic().to_key()
         {
             valid.push(
                 "You do realize how many things were waiting to try and kill you right?\n \
@@ -379,7 +380,8 @@ impl Player {
             )
         }
         // If the player is a coward but died to a boss anyway
-        else if crate::enemy::Variant::from_key(state.player.killer.unwrap().1.unwrap()).is_boss()
+        else if crate::enemy::Variant::from_key(state.player.killer.clone().unwrap().1.unwrap())
+            .is_boss()
             && stats.cowardice > crate::layer()
         {
             valid.push("Maybe you should have run from that one, like you did with the others.");
@@ -389,6 +391,7 @@ impl Player {
             && state
                 .player
                 .killer
+                .clone()
                 .unwrap()
                 .1
                 .is_some_and(|key| key == crate::enemy::Variant::basic_boss().to_key())

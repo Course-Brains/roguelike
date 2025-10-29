@@ -34,6 +34,8 @@ mod vector;
 use vector::*;
 mod state;
 use state::*;
+mod dialogue;
+use dialogue::*;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -316,6 +318,10 @@ fn main() {
                 let new_port = args.next().unwrap().parse().unwrap();
                 log!("Setting console port to {new_port}");
                 commands::PORT.store(new_port, RELAXED);
+            }
+            "dialogue" => {
+                dialogue::editor();
+                return;
             }
             _ => {}
         }

@@ -1,0 +1,2 @@
+0: enemy name: basic
+1: enemy name: basic_boss

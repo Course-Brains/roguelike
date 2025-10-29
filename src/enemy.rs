@@ -1,5 +1,5 @@
 use crate::{
-    Board, Color, Direction, Player, Vector, advantage_pass,
+    Board, Color, Direction, Player, Vector, advantage_pass, get,
     random::*,
     spell::{ContactSpell, NormalSpell, Spell, SpellCircle},
 };
@@ -1139,17 +1139,17 @@ impl Variant {
             Variant::Dummy => (10000, 10000),
         }
     }
-    pub fn kill_name(&self) -> &'static str {
+    pub fn kill_name(&self) -> String {
         match self {
-            Variant::Basic => "Repurposed Automata",
-            Variant::BasicBoss(_) => "Specialized Automata",
-            Variant::Mage(_) => "Mage Construct",
-            Variant::MageBoss(_) => "Lazy Mage",
-            Variant::Fighter(_) => "Squire",
-            Variant::FighterBoss { .. } => "Knight",
-            Variant::Archer(_) => crate::debug_only!("archer"),
-            Variant::ArcherBoss(_) => "Seth",
-            Variant::Dummy => "Dummy",
+            Variant::Basic => get(0),
+            Variant::BasicBoss(_) => get(1),
+            Variant::Mage(_) => get(2),
+            Variant::MageBoss(_) => get(3),
+            Variant::Fighter(_) => get(4),
+            Variant::FighterBoss { .. } => get(5),
+            Variant::Archer(_) => crate::debug_only!(get(6)),
+            Variant::ArcherBoss(_) => get(7),
+            Variant::Dummy => get(8),
         }
     }
     pub fn precise_teleport(&self) -> bool {

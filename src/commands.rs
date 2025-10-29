@@ -530,7 +530,7 @@ impl Command {
                 crate::CHEATS.store(true, crate::RELAXED);
             }
             Command::KillPlayer => {
-                state.player.killer = Some(("falling out of the world", None, 0));
+                state.player.killer = Some(("falling out of the world".to_string(), None, 0));
             }
             Command::GetFeedback => {
                 out.send(format!("Current feedback is: \"{}\"", *crate::feedback()))

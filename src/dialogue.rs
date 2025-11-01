@@ -1,10 +1,11 @@
-use crate::{FromBinary, ToBinary, log};
+use crate::log;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{LazyLock, RwLock};
 static INDEX: RwLock<LazyLock<Vec<IndexEntry>>> = RwLock::new(LazyLock::new(index_initializer));
 thread_local! {
     static DATA: std::cell::RefCell<std::fs::File> = std::cell::RefCell::new(std::fs::File::open("dialogue").unwrap());
 }
+// Gets a string from the dialogue file using the entry index defined in the index file
 pub fn get(index: usize) -> String {
     let index_entry = INDEX.try_read().unwrap()[index];
     let mut buf = vec![0_u8; index_entry.length as usize];
@@ -18,23 +19,6 @@ pub fn get(index: usize) -> String {
 struct IndexEntry {
     start: u64,
     length: u64,
-}
-impl FromBinary for IndexEntry {
-    fn from_binary(binary: &mut dyn std::io::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
-        Ok(IndexEntry {
-            start: u64::from_binary(binary)?,
-            length: u64::from_binary(binary)?,
-        })
-    }
-}
-impl ToBinary for IndexEntry {
-    fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-        self.start.to_binary(binary)?;
-        self.length.to_binary(binary)
-    }
 }
 fn index_initializer() -> Vec<IndexEntry> {
     let mut file = std::io::BufReader::new(std::fs::File::open("index").unwrap());
@@ -159,9 +143,11 @@ fn set(index: usize) {
     log!("New dialogue has length: {new_length}");
     if new_length != old.length {
         // Size has changed :(
+
         log!("Have to move later entries");
         let difference = new_length as i64 - old.length as i64;
         log!("difference is {difference}");
+
         // Shift the data
         let mut data_file = std::fs::OpenOptions::new()
             .read(true)
@@ -169,6 +155,7 @@ fn set(index: usize) {
             .truncate(false)
             .open("dialogue")
             .unwrap();
+
         // Copy data from old_end_of_data..eof to new_end_of_data..eof+difference
         let mut buf = Vec::new();
         data_file
@@ -209,6 +196,12 @@ fn set(index: usize) {
                     .unwrap();
             }
             index_file.seek(SeekFrom::Current(8)).unwrap();
+        }
+        // If it shrunk then we need to remove the extra data from the file
+        if new_length < old.length {
+            data_file
+                .set_len((data_file.metadata().unwrap().len() as i64 + difference) as u64)
+                .unwrap();
         }
     }
     let mut index_file = std::fs::OpenOptions::new()

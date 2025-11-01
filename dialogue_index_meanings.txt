@@ -21,3 +21,7 @@
 20: limb upgrade: limb_mage_eye
 21: limb upgrade: limb_seer_eye
 22(DEBUG): upgrade: full_energy_ding
+23: bonus fail: no damage
+24: bonus fail: no waste
+25: bonus fail: no energy(dash)
+26: bonus fail: no energy(block)

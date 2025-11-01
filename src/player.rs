@@ -1,6 +1,6 @@
 use crate::{
     Board, Difficulty, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
-    commands::parse, limbs::Limbs,
+    commands::parse, get, limbs::Limbs,
 };
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -191,7 +191,7 @@ impl Player {
         }
         // Damage has been determined
         if crate::BONUS_NO_DAMAGE.load(crate::RELAXED) {
-            crate::set_feedback("Couldn't you have avoided that hit?".to_string());
+            crate::set_feedback(get(23));
             crate::bell(Some(&mut std::io::stdout()));
         }
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
@@ -263,7 +263,7 @@ impl Player {
                 self.health += health;
             } else {
                 if crate::BONUS_NO_WASTE.load(crate::RELAXED) {
-                    crate::set_feedback("So wasteful...".to_string());
+                    crate::set_feedback(get(24));
                     crate::bell(Some(&mut std::io::stdout()));
                 }
                 crate::BONUS_NO_WASTE.store(false, crate::RELAXED);

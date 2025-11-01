@@ -504,7 +504,7 @@ fn main() {
                                 continue;
                             }
                             if BONUS_NO_ENERGY.load(RELAXED) {
-                                set_feedback("Was going faster worth it?".to_string());
+                                set_feedback(get(25));
                                 bell(Some(&mut std::io::stdout()));
                             }
                             BONUS_NO_ENERGY.store(false, RELAXED);
@@ -619,7 +619,7 @@ fn main() {
                             state.increment();
                             if state.player.was_hit {
                                 if BONUS_NO_ENERGY.load(RELAXED) {
-                                    set_feedback("Did you really need to block that?".to_string());
+                                    set_feedback(get(26));
                                     bell(Some(&mut std::io::stdout()));
                                 }
                                 BONUS_NO_ENERGY.store(false, RELAXED);
@@ -1136,13 +1136,6 @@ fn arrow<'a>(
     // Returning the hit
     *time += start.elapsed();
     collision.and_then(|collision| collision.into_entity(player))
-}
-fn should_do_tutorial() -> bool {
-    if SETTINGS.difficulty() >= Difficulty::Hard {
-        false
-    } else {
-        !std::fs::exists("stats").unwrap()
-    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum InitialBoard {

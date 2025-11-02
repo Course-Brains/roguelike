@@ -257,7 +257,7 @@ impl Player {
             if self.energy < self.max_energy {
                 self.energy += 1;
             } else if self.health < self.max_health
-                && crate::SETTINGS.difficulty() <= crate::Difficulty::Hard
+                && crate::SETTINGS.difficulty() < crate::Difficulty::Hard
             {
                 crate::stats().damage_healed += 1;
                 self.health += health;

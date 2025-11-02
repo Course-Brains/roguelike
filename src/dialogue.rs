@@ -6,14 +6,19 @@ thread_local! {
     static DATA: std::cell::RefCell<std::fs::File> = std::cell::RefCell::new(std::fs::File::open("dialogue").unwrap());
 }
 // Gets a string from the dialogue file using the entry index defined in the index file
+// This does NOT decode special characters and will crash when trying to load non ascii characters
 pub fn get(index: usize) -> String {
+    String::from_utf8(get_raw_bytes(index)).unwrap()
+}
+// Gets bytes from the dialogue file and does not touch them, good for data
+pub fn get_raw_bytes(index: usize) -> Vec<u8> {
     let index_entry = INDEX.try_read().unwrap()[index];
     let mut buf = vec![0_u8; index_entry.length as usize];
     DATA.with_borrow_mut(|file| {
         file.seek(SeekFrom::Start(index_entry.start)).unwrap();
         file.read_exact(&mut buf).unwrap();
     });
-    String::from_utf8(buf).unwrap()
+    buf
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct IndexEntry {
@@ -69,8 +74,8 @@ pub fn editor() {
             }
             "count" => count(),
             "metadata" => metadata(index),
-            "set" => set(index),
-            "add_new" | "new" | "add" => add_new(&mut index),
+            "set" => set(index, args.next()),
+            "add_new" | "new" | "add" => add_new(&mut index, args.next()),
             "full_reset" => full_reset(&mut index),
             "help" => help(),
             "quit" => return,
@@ -93,20 +98,23 @@ fn count() {
             / 16
     );
 }
-fn add_new(index: &mut usize) {
+fn add_new(index: &mut usize, path: Option<&str>) {
     *index = std::fs::metadata("index").unwrap().len() as usize / 16;
-    std::process::Command::new("vim")
-        .arg("new_dialogue")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-    if !std::fs::exists("new_dialogue").unwrap() {
-        return;
+    if path.is_none() {
+        std::process::Command::new("vim")
+            .arg("new_dialogue")
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+        if !std::fs::exists("new_dialogue").unwrap() {
+            return;
+        }
     }
-    let mut text = std::fs::read_to_string("new_dialogue").unwrap();
+    let path = path.unwrap_or("new_dialogue");
+    let mut text = encode(std::fs::read(path).unwrap());
     text.pop();
-    std::fs::remove_file("new_dialogue").unwrap();
+    std::fs::remove_file(path).unwrap();
 
     let start = std::fs::metadata("dialogue").unwrap().len();
     std::fs::OpenOptions::new()
@@ -115,7 +123,7 @@ fn add_new(index: &mut usize) {
         .append(true)
         .open("dialogue")
         .unwrap()
-        .write_all(text.as_bytes())
+        .write_all(&text)
         .unwrap();
     let mut index_file = std::fs::OpenOptions::new()
         .write(true)
@@ -127,19 +135,27 @@ fn add_new(index: &mut usize) {
     index_file
         .write_all(&(text.len() as u64).to_le_bytes())
         .unwrap();
-    println!("Added \"{}\" to new index {index}", text);
+    println!(
+        "Added \"{}\" to new index {index}",
+        String::from_utf8_lossy(&text)
+    );
 }
-fn set(index: usize) {
+fn set(index: usize, path: Option<&str>) {
     log!("Setting {index}");
-    std::fs::write("new_dialogue", get(index).as_bytes()).unwrap();
     let old = INDEX.try_read().unwrap()[index];
-    std::process::Command::new("vim")
-        .arg("new_dialogue")
-        .spawn()
-        .unwrap()
-        .wait()
-        .unwrap();
-    let new_length = std::fs::metadata("new_dialogue").unwrap().len() - 1;
+    if path.is_none() {
+        std::fs::write("new_dialogue", get(index).as_bytes()).unwrap();
+        std::process::Command::new("vim")
+            .arg("new_dialogue")
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+    }
+    let path = path.unwrap_or("new_dialogue");
+    let mut text = encode(std::fs::read(path).unwrap());
+    text.pop();
+    let new_length = text.len() as u64;
     log!("New dialogue has length: {new_length}");
     if new_length != old.length {
         // Size has changed :(
@@ -215,17 +231,18 @@ fn set(index: usize) {
         .unwrap();
     // +8 because we don't need to change the start
     index_file.write_all(&new_length.to_le_bytes()).unwrap();
-    let mut text = std::fs::read_to_string("new_dialogue").unwrap();
-    text.pop();
-    log!("Writing new text \"{text}\" to dialogue file");
-    std::fs::remove_file("new_dialogue").unwrap();
+    log!(
+        "Writing new text \"{}\" to dialogue file",
+        String::from_utf8_lossy(&text)
+    );
+    std::fs::remove_file(path).unwrap();
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .truncate(false)
         .open("dialogue")
         .unwrap();
     file.seek(SeekFrom::Start(old.start)).unwrap();
-    file.write_all(text.as_bytes()).unwrap();
+    file.write_all(&text).unwrap();
 }
 fn help() {
     println!(
@@ -260,4 +277,27 @@ fn metadata(index: usize) {
         "Entry number {index} starts at {} and is {} long",
         entry.start, entry.length
     );
+}
+fn encode(string: Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(string.len());
+    let mut iter = string.into_iter();
+    while let Some(ch) = iter.next() {
+        if ch != b'\\' {
+            out.push(ch);
+            continue;
+        }
+        let mut code = Vec::new();
+        if let Some(next) = iter.next() {
+            code.push(next);
+            if let Some(next) = iter.next() {
+                code.push(next);
+                if let Ok(string) = String::from_utf8(code) {
+                    if let Ok(code) = u8::from_str_radix(&string, 16) {
+                        out.push(code);
+                    }
+                }
+            }
+        }
+    }
+    out
 }

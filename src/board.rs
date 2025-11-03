@@ -484,14 +484,16 @@ impl Board {
         {
             return true;
         }
-        for enemy in self.enemies.iter() {
-            if enemy.try_read().unwrap().pos == pos {
-                if let Some(style) = enemy.try_read().unwrap().render().1
-                    && style.has_background()
-                {
-                    return true;
+        if self.visible[self.to_index(pos)] || player.effects.full_vis.is_active() {
+            for enemy in self.enemies.iter() {
+                if enemy.try_read().unwrap().pos == pos {
+                    if let Some(style) = enemy.try_read().unwrap().render().1
+                        && style.has_background()
+                    {
+                        return true;
+                    }
+                    break;
                 }
-                break;
             }
         }
         false

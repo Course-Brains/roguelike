@@ -1,6 +1,5 @@
 #!/bin/bash
 
-BACKTRACE_RESET=$RUST_BACKTRACE
 RUST_BACKTRACE=1
 cargo run --features "log" -- $@ 2> error.txt
 if [ $? -eq 0 ]; then
@@ -9,4 +8,3 @@ else
     echo "Send error.txt to Course-Brains"
     exit 1    
 fi
-RUST_BACKTRACE=$BACKTRACE_RESET

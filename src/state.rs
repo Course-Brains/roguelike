@@ -21,8 +21,6 @@ impl State {
                 InitialBoard::Normal => generate(MapGenSettings::new(
                     151,
                     151,
-                    45,
-                    15,
                     State::level_0_budget(),
                     1,
                     State::level_0_highest_tier(),
@@ -33,12 +31,10 @@ impl State {
             .join()
             .unwrap(),
             turn: 0,
-            next_map: std::thread::spawn(|| Board::new(10, 10, 10, 10)),
+            next_map: std::thread::spawn(|| Board::new(10, 10)),
             next_map_settings: MapGenSettings::new(
                 501,
                 501,
-                45,
-                15,
                 State::level_1_budget(),
                 3,
                 State::level_1_highest_tier(),
@@ -187,7 +183,7 @@ impl State {
     pub fn draw_turn_level_and_money(&self) {
         crossterm::execute!(
             std::io::stdout(),
-            crossterm::cursor::MoveTo(1, self.board.render_y as u16 * 2 + 4),
+            crossterm::cursor::MoveTo(1, RENDER_Y as u16 * 2 + 4),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
         )
         .unwrap();
@@ -240,14 +236,11 @@ impl State {
     pub fn load_next_map(&mut self) {
         generator::DO_DELAY.store(false, Ordering::SeqCst);
         stats().shop_turns.push(self.board.turns_spent);
-        self.board = std::mem::replace(
-            &mut self.next_map,
-            std::thread::spawn(|| Board::new(1, 1, 1, 1)),
-        )
-        .join()
-        .unwrap();
+        self.board = std::mem::replace(&mut self.next_map, std::thread::spawn(|| Board::new(1, 1)))
+            .join()
+            .unwrap();
         generator::DO_DELAY.store(true, Ordering::SeqCst);
-        let settings = MapGenSettings::new(501, 501, 45, 15, self.get_budget(), NUM_BOSSES, None);
+        let settings = MapGenSettings::new(501, 501, self.get_budget(), NUM_BOSSES, None);
         reset_bonuses();
         self.next_map = generate(settings);
         self.next_map_settings = settings;

@@ -159,6 +159,17 @@ impl Spell {
             Self::Contact(contact) => contact.get_name(),
         }
     }
+    pub fn get_random() -> Spell {
+        let random =
+            crate::random() % (ContactSpell::num_spells() as u8 + NormalSpell::num_spells() as u8);
+        if random < ContactSpell::num_spells() as u8 {
+            Spell::Contact(ContactSpell::get_random(random))
+        } else {
+            Spell::Normal(NormalSpell::get_random(
+                random - ContactSpell::num_spells() as u8,
+            ))
+        }
+    }
 }
 impl std::str::FromStr for Spell {
     type Err = String;
@@ -218,6 +229,9 @@ pub enum ContactSpell {
     DrainHealth,
 }
 impl ContactSpell {
+    fn num_spells() -> usize {
+        1
+    }
     pub fn cast(&self, target: Entity<'_>, caster: Entity<'_>) {
         if let Entity::Player(_) = caster {
             crate::stats().add_spell(Spell::Contact(*self));
@@ -274,6 +288,12 @@ impl ContactSpell {
     fn get_name(self) -> &'static str {
         match self {
             Self::DrainHealth => "Drain Health",
+        }
+    }
+    fn get_random(random: u8) -> ContactSpell {
+        match random {
+            0 => Self::DrainHealth,
+            _ => unreachable!("I can't think up a proper error"),
         }
     }
 }
@@ -338,6 +358,9 @@ pub enum NormalSpell {
     Heal,
 }
 impl NormalSpell {
+    fn num_spells() -> usize {
+        8
+    }
     // aim is position not direction
     // origin of None means to get it from the caster(including the player)
 
@@ -438,6 +461,8 @@ impl NormalSpell {
                 if let Some(time) = time {
                     *time += start.elapsed()
                 }
+                println!("Press enter to continue");
+                std::io::stdin().read_line(&mut String::new()).unwrap();
                 true
             }
             Self::Charge => {
@@ -640,6 +665,19 @@ impl NormalSpell {
             Self::Teleport => "Teleport",
             Self::SummonSpirit => "Summon Spirit",
             Self::Heal => "Heal",
+        }
+    }
+    fn get_random(random: u8) -> Self {
+        match random {
+            0 => Self::Swap,
+            1 => Self::BidenBlast,
+            2 => Self::Identify,
+            3 => Self::Charge,
+            4 => Self::BigExplode,
+            5 => Self::Teleport,
+            6 => Self::SummonSpirit,
+            7 => Self::Heal,
+            _ => unreachable!("Someone is bad at math and needs a slap on the wrist"),
         }
     }
 }

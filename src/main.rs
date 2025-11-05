@@ -1,10 +1,7 @@
-// When I do add spells, add a system for random unidentifiable buffs that get determined at the
-// start, with one of them being the ability to do other actions while casting
-
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 16;
+const SAVE_VERSION: Version = 0x00000012;
 mod player;
 use player::Player;
 mod board;
@@ -36,6 +33,8 @@ mod state;
 use state::*;
 mod dialogue;
 use dialogue::*;
+mod consts;
+use consts::*;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -44,16 +43,6 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use abes_nice_things::style::{Color, Style};
 use abes_nice_things::{FromBinary, ToBinary};
-
-// Convenience constant
-const RELAXED: Ordering = Ordering::Relaxed;
-
-// The number that the turn count is divided by to get the budget
-const BUDGET_DIVISOR: usize = 5;
-// The number of bosses in each level starting at the third level
-const NUM_BOSSES: usize = 5;
-// The budget given per layer (layer * this)
-const BUDGET_PER_LAYER: usize = 100;
 
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
@@ -115,19 +104,6 @@ fn enable_benchmark() {
 fn bench() -> bool {
     bench::BENCHMARK.load(Ordering::SeqCst)
 }
-
-// Delay between moves/applicable thinks
-const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
-// Delay between subtick animaion frames
-const PROJ_DELAY: std::time::Duration = std::time::Duration::from_millis(25);
-fn proj_delay() {
-    std::thread::sleep(PROJ_DELAY);
-}
-type Version = u32;
-// the path to the file used for saving and loading
-const PATH: &str = "save";
-// The path to the file of stats for previous runs
-const STAT_PATH: &str = "stats";
 
 #[macro_export]
 macro_rules! log {
@@ -330,8 +306,6 @@ fn main() {
         generate(MapGenSettings::new(
             151,
             151,
-            45,
-            15,
             75,
             1,
             State::level_0_highest_tier(),
@@ -350,8 +324,6 @@ fn main() {
             let board = generate(MapGenSettings::new(
                 151,
                 151,
-                45,
-                15,
                 State::level_0_budget(),
                 1,
                 State::level_0_highest_tier(),
@@ -673,6 +645,9 @@ fn main() {
                                         match spell {
                                             Spell::Normal(spell) => {
                                                 for _ in 0..spell.cast_time() {
+                                                    if SETTINGS.difficulty() >= Difficulty::Hard {
+                                                        state.player.just_cast = true;
+                                                    }
                                                     state.increment();
                                                 }
                                                 let origin = Some(state.player.pos);
@@ -707,6 +682,10 @@ fn main() {
                                                     .get_enemy(state.player.selector, None)
                                                 {
                                                     for _ in 0..spell.cast_time() {
+                                                        if SETTINGS.difficulty() >= Difficulty::Hard
+                                                        {
+                                                            state.player.just_cast = true;
+                                                        }
                                                         state.increment();
                                                     }
                                                     spell.cast(
@@ -733,6 +712,7 @@ fn main() {
                                                 );
                                                 bell(Some(&mut std::io::stdout()));
                                             }
+                                            state.player.just_cast = true;
                                             state.render();
                                         }
                                     } else {
@@ -834,6 +814,7 @@ fn main() {
                                 .board
                                 .get_directions(state.player.selector, state.player.pos);
                             let send = &INPUT_SYSTEM.0;
+                            state.player.fast = false;
                             for direction in directions.into_iter() {
                                 send.send(CommandInput::Input(Input::Wasd(direction, false)))
                                     .unwrap();
@@ -920,8 +901,6 @@ impl Drop for Weirdifier {
 struct MapGenSettings {
     x: usize,
     y: usize,
-    render_x: usize,
-    render_y: usize,
     budget: usize,
     num_bosses: usize,
     max_enemy_tier: Option<usize>,
@@ -930,8 +909,6 @@ impl MapGenSettings {
     fn new(
         x: usize,
         y: usize,
-        render_x: usize,
-        render_y: usize,
         budget: usize,
         num_bosses: usize,
         max_enemy_tier: Option<usize>,
@@ -939,8 +916,6 @@ impl MapGenSettings {
         Self {
             x,
             y,
-            render_x,
-            render_y,
             budget,
             num_bosses,
             max_enemy_tier,
@@ -955,8 +930,6 @@ impl FromBinary for MapGenSettings {
         Ok(Self {
             x: usize::from_binary(binary)?,
             y: usize::from_binary(binary)?,
-            render_x: usize::from_binary(binary)?,
-            render_y: usize::from_binary(binary)?,
             budget: usize::from_binary(binary)?,
             num_bosses: usize::from_binary(binary)?,
             max_enemy_tier: Option::from_binary(binary)?,
@@ -967,8 +940,6 @@ impl ToBinary for MapGenSettings {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         self.x.to_binary(binary)?;
         self.y.to_binary(binary)?;
-        self.render_x.to_binary(binary)?;
-        self.render_y.to_binary(binary)?;
         self.budget.to_binary(binary)?;
         self.num_bosses.to_binary(binary)?;
         self.max_enemy_tier.as_ref().to_binary(binary)

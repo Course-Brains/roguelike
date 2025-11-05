@@ -31,7 +31,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         room.subdivide();
         room.fill_leaf_adjacents(room.get_all_leafs().as_slice());
         room.remove_extra_adjacents(None);
-        let mut board = Board::new(settings.x, settings.y, settings.render_x, settings.render_y);
+        let mut board = Board::new(settings.x, settings.y);
         room.create_map_rooms(&mut board);
         room.place_doors(&mut board);
         crate::log!("{STYLE}Begining enemy placement\x1b[0m");

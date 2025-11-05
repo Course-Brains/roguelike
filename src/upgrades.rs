@@ -92,6 +92,8 @@ pub enum UpgradeType {
     BonusNoEnergy, // +50% max energy
     // Save pint
     SavePint, // no corresponding upgrade field
+    // Spells
+    Spell(crate::spell::Spell), // what grants new spells
 }
 impl UpgradeType {
     pub fn render(&self, player: &Player) -> (char, Option<Style>) {
@@ -104,6 +106,8 @@ impl UpgradeType {
             }
             // L for limb
             Self::LimbMageEye | Self::LimbSeerEye => 'L',
+            // S for Spell
+            Self::Spell(_) => 'S',
             // U for Upgrade
             _ => 'U',
         };
@@ -129,7 +133,8 @@ impl UpgradeType {
             | Self::BonusNoWaste
             | Self::BonusNoDamage
             | Self::BonusKillAll
-            | Self::BonusNoEnergy => 0,
+            | Self::BonusNoEnergy
+            | Self::Spell(_) => 0,
         }
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
@@ -234,6 +239,32 @@ impl UpgradeType {
                 player.upgrades.full_energy_ding = true;
                 true
             }
+            Self::Spell(spell) => {
+                let mut stdout = std::io::stdout().lock();
+                Player::clear_right_column(&mut stdout);
+                player.draw_spells(&mut stdout);
+                crate::set_feedback("Pick the slot for your new spell".to_string());
+                crate::draw_feedback();
+                let index = loop {
+                    let mut buf = [0];
+                    std::io::stdin().lock().read_exact(&mut buf).unwrap();
+                    break match buf[0] {
+                        b'1' => 0,
+                        b'2' => 1,
+                        b'3' => 2,
+                        b'4' => 3,
+                        b'5' => 4,
+                        b'6' => 5,
+                        _ => {
+                            crate::bell(None);
+                            continue;
+                        }
+                    };
+                };
+                crate::log!("Settings spell slot {index} to {spell}");
+                player.known_spells[index] = Some(spell);
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -265,7 +296,8 @@ impl UpgradeType {
             // Limbs
             Self::LimbMageEye => get(20),
             Self::LimbSeerEye => get(21),
-            Self::FullEnergyDing => crate::debug_only!(get(22)),
+            Self::FullEnergyDing => get(22),
+            Self::Spell(spell) => spell.get_name().to_string(),
         }
     }
     // For the normal upgrades, can they be meaningfully picked up multiple times?
@@ -301,28 +333,33 @@ impl std::fmt::Display for UpgradeType {
             Self::LimbMageEye => write!(f, "limb mage eye"),
             Self::LimbSeerEye => write!(f, "limb seer eye"),
             Self::FullEnergyDing => write!(f, "full energy ding"),
+            Self::Spell(spell) => write!(f, "Spell ({spell})"),
         }
     }
 }
 impl std::str::FromStr for UpgradeType {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "map" => Ok(Self::Map),
-            "soft_shoes" => Ok(Self::SoftShoes),
-            "save_pint" => Ok(Self::SavePint),
-            "precise_convert" => Ok(Self::PreciseConvert),
-            "energy_boost" => Ok(Self::EnergyBoost),
-            "health_boost" => Ok(Self::HealthBoost),
-            "lifesteal" => Ok(Self::Lifesteal),
-            "bonus_no_waste" => Ok(Self::BonusNoWaste),
-            "bonus_no_damage" => Ok(Self::BonusNoDamage),
-            "bonus_kill_all" => Ok(Self::BonusKillAll),
-            "bonus_no_energy" => Ok(Self::BonusNoEnergy),
-            "limb_mage_eye" => Ok(Self::LimbMageEye),
-            "limb_seer_eye" => Ok(Self::LimbSeerEye),
-            "full_energy_ding" => Ok(Self::FullEnergyDing),
-            other => Err(format!("{other} is not a valid upgrade")),
+        let mut args = s.trim().split(' ');
+        match args.next() {
+            Some(arg) => match arg {
+                "map" => Ok(Self::Map),
+                "soft_shoes" => Ok(Self::SoftShoes),
+                "save_pint" => Ok(Self::SavePint),
+                "precise_convert" => Ok(Self::PreciseConvert),
+                "energy_boost" => Ok(Self::EnergyBoost),
+                "health_boost" => Ok(Self::HealthBoost),
+                "lifesteal" => Ok(Self::Lifesteal),
+                "bonus_no_waste" => Ok(Self::BonusNoWaste),
+                "bonus_no_damage" => Ok(Self::BonusNoDamage),
+                "bonus_kill_all" => Ok(Self::BonusKillAll),
+                "bonus_no_energy" => Ok(Self::BonusNoEnergy),
+                "limb_mage_eye" => Ok(Self::LimbMageEye),
+                "limb_seer_eye" => Ok(Self::LimbSeerEye),
+                "full_energy_ding" => Ok(Self::FullEnergyDing),
+                other => Err(format!("{other} is not a valid upgrade")),
+            },
+            None => Err("Need to specify what upgrade".to_string()),
         }
     }
 }
@@ -363,6 +400,7 @@ impl FromBinary for UpgradeType {
             11 => Self::LimbMageEye,
             12 => Self::LimbSeerEye,
             13 => Self::FullEnergyDing,
+            14 => Self::Spell(crate::spell::Spell::from_binary(binary)?),
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -375,21 +413,24 @@ impl FromBinary for UpgradeType {
 impl ToBinary for UpgradeType {
     fn to_binary(&self, binary: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         match self {
-            Self::Map => 0_u8,
-            Self::SoftShoes => 1,
-            Self::SavePint => 2,
-            Self::PreciseConvert => 3,
-            Self::EnergyBoost => 4,
-            Self::HealthBoost => 5,
-            Self::Lifesteal => 6,
-            Self::BonusNoWaste => 7,
-            Self::BonusNoDamage => 8,
-            Self::BonusKillAll => 9,
-            Self::BonusNoEnergy => 10,
-            Self::LimbMageEye => 11,
-            Self::LimbSeerEye => 12,
-            Self::FullEnergyDing => 13,
+            Self::Map => 0_u8.to_binary(binary),
+            Self::SoftShoes => 1_u8.to_binary(binary),
+            Self::SavePint => 2_u8.to_binary(binary),
+            Self::PreciseConvert => 3_u8.to_binary(binary),
+            Self::EnergyBoost => 4_u8.to_binary(binary),
+            Self::HealthBoost => 5_u8.to_binary(binary),
+            Self::Lifesteal => 6_u8.to_binary(binary),
+            Self::BonusNoWaste => 7_u8.to_binary(binary),
+            Self::BonusNoDamage => 8_u8.to_binary(binary),
+            Self::BonusKillAll => 9_u8.to_binary(binary),
+            Self::BonusNoEnergy => 10_u8.to_binary(binary),
+            Self::LimbMageEye => 11_u8.to_binary(binary),
+            Self::LimbSeerEye => 12_u8.to_binary(binary),
+            Self::FullEnergyDing => 13_u8.to_binary(binary),
+            Self::Spell(spell) => {
+                14_u8.to_binary(binary)?;
+                spell.to_binary(binary)
+            }
         }
-        .to_binary(binary)
     }
 }

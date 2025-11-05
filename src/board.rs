@@ -1,5 +1,5 @@
 use crate::{
-    Enemy, Entity, Player, Random, Style, Vector,
+    Enemy, Entity, Player, RENDER_X, RENDER_Y, Random, Style, Vector, get,
     input::Direction,
     pieces::{door::Door, exit::Exit, item::Item, upgrade::Upgrade, wall::Wall},
     spell::{Spell, SpellCircle},
@@ -13,8 +13,6 @@ use std::sync::{Arc, Weak};
 pub struct Board {
     pub x: usize,
     pub y: usize,
-    pub render_x: usize, // the offset from the player to the edge of the screen(think radius)
-    pub render_y: usize,
     pub inner: Vec<Option<Piece>>,
     pub backtraces: Vec<BackTrace>,
     pub enemies: Vec<Arc<RwLock<Enemy>>>,
@@ -30,7 +28,7 @@ pub struct Board {
 }
 // General use
 impl Board {
-    pub fn new(x: usize, y: usize, render_x: usize, render_y: usize) -> Board {
+    pub fn new(x: usize, y: usize) -> Board {
         let mut inner = Vec::with_capacity(x * y);
         inner.resize_with(x * y, || None);
         let backtraces = vec![BackTrace::new(); x * y];
@@ -39,8 +37,6 @@ impl Board {
         Board {
             x,
             y,
-            render_x,
-            render_y,
             inner,
             enemies: Vec::new(),
             spells: Vec::new(),
@@ -141,8 +137,9 @@ impl Board {
     pub const BONUS_NO_WASTE: Vector = Vector::new(45, 13);
     pub const BONUS_KILL_ALL: Vector = Vector::new(43, 15);
     pub const BONUS_NO_ENERGY: Vector = Vector::new(45, 15);
+    pub const SPELLS: [Vector; 2] = [Vector::new(88, 10), Vector::new(88, 20)];
     pub fn new_shop() -> Board {
-        let mut out = Board::new(90, 30, 45, 15);
+        let mut out = Board::new(90, 30);
 
         // Creating room
         out.make_room(Vector::new(0, 0), Vector::new(90, 30));
@@ -181,24 +178,31 @@ impl Board {
 
         // Placing Bonus fail signs(will be replaced on load if condition is met)
         // Take no damage
-        out[Board::BONUS_NO_DAMAGE] = Some(Piece::Sign("Don't get hurt".to_string()));
+        out[Board::BONUS_NO_DAMAGE] = Some(Piece::Sign(get(27)));
         // Waste no kill rewards, might make it easier at some point because it can be impossible
         // to get both this and the no damage bonus
-        out[Board::BONUS_NO_WASTE] = Some(Piece::Sign("Be a miser".to_string()));
+        out[Board::BONUS_NO_WASTE] = Some(Piece::Sign(get(28)));
         // Kill every enemy
-        out[Board::BONUS_KILL_ALL] = Some(Piece::Sign("Be more thorough".to_string()));
+        out[Board::BONUS_KILL_ALL] = Some(Piece::Sign(get(29)));
         // Spend no energy directly(not counting conversion)
-        out[Board::BONUS_NO_ENERGY] = Some(Piece::Sign("Be more stingy".to_string()));
+        out[Board::BONUS_NO_ENERGY] = Some(Piece::Sign(get(30)));
+
+        // Placing spells
+        for pos in Board::SPELLS.iter() {
+            out[*pos] = Some(Piece::Upgrade(Upgrade::new(Some(
+                crate::upgrades::UpgradeType::Spell(Spell::get_random()),
+            ))));
+        }
 
         out
     }
     pub fn new_empty() -> Board {
-        let mut out = Board::new(90, 30, 45, 15);
+        let mut out = Board::new(90, 30);
         out.make_room(Vector::new(0, 0), Vector::new(90, 30));
         out
     }
     pub fn new_tutorial() -> Board {
-        let mut out = Board::new(90, 30, 45, 15);
+        let mut out = Board::new(90, 30);
         out.make_room(Vector::new(0, 0), Vector::new(90, 30));
         out.enemies.push(Arc::new(RwLock::new(Enemy::new(
             Vector::new(5, 5),
@@ -501,21 +505,21 @@ impl Board {
     pub fn get_render_bounds(&self, player: &Player) -> Range<Vector> {
         let mut base = Vector::new(0, 0);
         let pos = player.get_focus();
-        if pos.x < self.render_x {
+        if pos.x < RENDER_X {
             base.x = 0
-        } else if pos.x > self.x - self.render_x {
-            base.x = self.x - self.render_x * 2
+        } else if pos.x > self.x - RENDER_X {
+            base.x = self.x - RENDER_X * 2
         } else {
-            base.x = pos.x - self.render_x
+            base.x = pos.x - RENDER_X
         }
-        if pos.y < self.render_y {
+        if pos.y < RENDER_Y {
             base.y = 0
-        } else if pos.y > self.y - self.render_y {
-            base.y = self.y - self.render_y * 2
+        } else if pos.y > self.y - RENDER_Y {
+            base.y = self.y - RENDER_Y * 2
         } else {
-            base.y = pos.y - self.render_y
+            base.y = pos.y - RENDER_Y
         }
-        base..Vector::new(base.x + self.render_x * 2, base.y + self.render_y * 2)
+        base..Vector::new(base.x + RENDER_X * 2, base.y + RENDER_Y * 2)
     }
     pub fn draw_desc(&self, player: &Player, lock: &mut impl Write) {
         Board::go_to_desc(lock);
@@ -1230,8 +1234,6 @@ impl FromBinary for Board {
         Ok(Board {
             x: usize::from_binary(binary)?,
             y: usize::from_binary(binary)?,
-            render_x: usize::from_binary(binary)?,
-            render_y: usize::from_binary(binary)?,
             inner: Vec::from_binary(binary)?,
             backtraces: Vec::from_binary(binary)?,
             // cannot save outside of shop
@@ -1253,8 +1255,6 @@ impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
         self.x.to_binary(binary)?;
         self.y.to_binary(binary)?;
-        self.render_x.to_binary(binary)?;
-        self.render_y.to_binary(binary)?;
         self.inner
             .iter()
             .map(|x| x.as_ref())

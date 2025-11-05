@@ -79,13 +79,27 @@ impl Wall {
                 }
                 HORIZONTAL
             }
-            /*1 => {
-                if up||down {
-                    return VERTICAL
+            #[cfg(debug_assertions)]
+            1 => {
+                crate::log!("!!!WALL WITH ONE CONNECTION AT {pos}!!!");
+                crate::set_feedback(format!("WALL WITH ONE CONNECTION AT {pos}"));
+                crate::draw_feedback();
+                crate::bell(None);
+                if up || down {
+                    return VERTICAL;
                 }
                 HORIZONTAL
-            }*/
+            }
+            #[cfg(not(debug_assertions))]
             _ => unreachable!("RUH ROH RAGGY"),
+            #[cfg(debug_assertions)]
+            _ => {
+                crate::log!("WALL FAILED CONNECTIONS AT {pos}");
+                crate::set_feedback(format!("WALL CONNECTION FAIL AT {pos}"));
+                crate::draw_feedback();
+                crate::bell(None);
+                '#'
+            }
         }
     }
 }

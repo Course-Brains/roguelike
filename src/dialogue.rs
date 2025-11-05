@@ -55,7 +55,7 @@ pub fn editor() {
         let mut args = input.trim().split(' ');
         match args.next().unwrap() {
             "jump" => index = args.next().unwrap().parse().unwrap(),
-            "show" => show(index),
+            "show" => show(index, args.next().map(|arg| arg.parse().unwrap())),
             "next" => {
                 if index + 1 >= std::fs::metadata("index").unwrap().len() as usize / 16 {
                     println!("End of indexes");
@@ -84,8 +84,20 @@ pub fn editor() {
         *INDEX.try_write().unwrap() = LazyLock::new(index_initializer);
     }
 }
-fn show(index: usize) {
-    println!("{}: \"{}\"", index, get(index));
+fn show(index: usize, mode: Option<ShowMode>) {
+    if let Some(mode) = mode {
+        match mode {
+            ShowMode::Hex => {
+                let bytes = get_raw_bytes(index);
+                for byte in bytes.iter() {
+                    print!("{byte:2x} ");
+                }
+            }
+        }
+        println!();
+    } else {
+        println!("{}: \"{}\"", index, get(index));
+    }
 }
 fn count() {
     println!(
@@ -300,4 +312,16 @@ fn encode(string: Vec<u8>) -> Vec<u8> {
         }
     }
     out
+}
+enum ShowMode {
+    Hex,
+}
+impl std::str::FromStr for ShowMode {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "hex" => Ok(Self::Hex),
+            _ => Err(()),
+        }
+    }
 }

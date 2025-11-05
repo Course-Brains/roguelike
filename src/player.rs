@@ -1,6 +1,6 @@
 use crate::{
-    Board, Difficulty, Direction, Entity, FromBinary, ItemType, Style, ToBinary, Upgrades, Vector,
-    commands::parse, get, limbs::Limbs,
+    Board, Difficulty, Direction, Entity, FromBinary, ItemType, RENDER_X, RENDER_Y, Style,
+    ToBinary, Upgrades, Vector, commands::parse, get, limbs::Limbs,
 };
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -35,6 +35,9 @@ pub struct Player {
     pub memory: Option<Vector>,
     pub known_spells: [Option<crate::Spell>; 6],
     pub right_column: RightColumn,
+    // If the player just cast a spell
+    // (or if they spent their turn winding up for one in hard mode or harder)
+    pub just_cast: bool,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -61,6 +64,7 @@ impl Player {
             memory: None,
             known_spells: Player::starting_spells(),
             right_column: RightColumn::Items,
+            just_cast: false,
         }
     }
     fn starting_max_health() -> usize {
@@ -192,7 +196,7 @@ impl Player {
         // Damage has been determined
         if crate::BONUS_NO_DAMAGE.load(crate::RELAXED) {
             crate::set_feedback(get(23));
-            crate::bell(Some(&mut std::io::stdout()));
+            // Don't need to send bell character because it is already being sent by getting hit
         }
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
         crate::stats().hits_taken += 1;
@@ -429,13 +433,13 @@ impl Player {
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {
         crate::log!("Adding {item} to player");
+        let mut stdout = std::io::stdout().lock();
+        Self::clear_right_column(&mut stdout);
+        self.draw_items(&mut stdout);
         let mut lock = std::io::stdin().lock();
         let mut buf = [0];
-        Board::set_desc(
-            &mut std::io::stdout(),
-            "Select slot for the item(1-6) or c to cancel",
-        );
-        std::io::stdout().flush().unwrap();
+        Board::set_desc(&mut stdout, "Select slot for the item(1-6) or c to cancel");
+        stdout.flush().unwrap();
         let selected = loop {
             lock.read_exact(&mut buf).unwrap();
             crate::log!("  recieved {}", buf[0].to_string());
@@ -473,9 +477,6 @@ impl Player {
             crate::stats().damage_healed -= self.health - self.max_health;
             self.health = self.max_health;
         }
-    }
-    pub fn heal_to_full(&mut self) {
-        self.heal(self.max_health - self.health)
     }
     pub fn aim(&mut self, board: &mut Board) {
         let mut specials = Vec::new();
@@ -550,19 +551,22 @@ impl Player {
             self.detect_mod
         }
     }
+    pub fn mage_aggro(&self) -> bool {
+        self.just_cast || (self.limbs.count_mage_eyes() > 0)
+    }
 }
 // Rendering
 impl Player {
     pub fn draw(&self, board: &Board, bounds: Range<Vector>) {
         let mut lock = std::io::stdout().lock();
         self.draw_player(&mut lock, bounds, board);
-        self.draw_health(board, &mut lock);
-        self.draw_energy(board, &mut lock);
+        self.draw_health(&mut lock);
+        self.draw_energy(&mut lock);
         match self.right_column {
-            RightColumn::Items => self.draw_items(board, &mut lock),
-            RightColumn::Spells => self.draw_spells(board, &mut lock),
+            RightColumn::Items => self.draw_items(&mut lock),
+            RightColumn::Spells => self.draw_spells(&mut lock),
         }
-        self.draw_limbs(board, &mut lock);
+        self.draw_limbs(&mut lock);
     }
     fn draw_player(&self, lock: &mut impl std::io::Write, bounds: Range<Vector>, board: &Board) {
         if !bounds.contains(&self.pos) {
@@ -579,10 +583,10 @@ impl Player {
         crossterm::queue!(lock, (self.pos - bounds.start).to_move()).unwrap();
         write!(lock, "{style}{SYMBOL}\x1b[0m").unwrap();
     }
-    fn draw_health(&self, board: &Board, lock: &mut impl std::io::Write) {
+    fn draw_health(&self, lock: &mut impl std::io::Write) {
         crossterm::queue!(
             lock,
-            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 1)
+            crossterm::cursor::MoveTo(1, (RENDER_Y * 2) as u16 + 1)
         )
         .unwrap();
         let split = (self.health * 50) / self.max_health;
@@ -596,10 +600,10 @@ impl Player {
         )
         .unwrap();
     }
-    fn draw_energy(&self, board: &Board, lock: &mut impl std::io::Write) {
+    fn draw_energy(&self, lock: &mut impl std::io::Write) {
         crossterm::queue!(
             lock,
-            crossterm::cursor::MoveTo(1, (board.render_y * 2) as u16 + 2)
+            crossterm::cursor::MoveTo(1, (RENDER_Y * 2) as u16 + 2)
         )
         .unwrap();
         let split = (self.energy * 50) / self.max_energy;
@@ -613,38 +617,37 @@ impl Player {
         )
         .unwrap();
     }
-    fn draw_right_column(
-        board: &Board,
-        lock: &mut impl std::io::Write,
-        text: [String; 6],
-        title: String,
-    ) {
+    fn draw_right_column(lock: &mut impl std::io::Write, text: [String; 6], title: String) {
         // Maximum initial y is 6 * 3 = 18, but accounting for the last item, the last allocated y
         // is 21
-        crossterm::queue!(lock, Vector::new(board.render_x * 2 + 2, 0).to_move()).unwrap();
+        crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, 0).to_move()).unwrap();
         write!(lock, "{title}").unwrap();
         for (index, text) in text.iter().enumerate() {
             crossterm::queue!(
                 lock,
-                Vector::new(board.render_x * 2 + 2, index * 3 + 2).to_move(),
+                Vector::new(RENDER_X * 2 + 2, index * 3 + 2).to_move(),
                 crossterm::cursor::SavePosition
             )
             .unwrap();
             write!(lock, "{text}").unwrap();
         }
     }
-    fn draw_items(&self, board: &Board, lock: &mut impl std::io::Write) {
+    pub fn clear_right_column(lock: &mut impl Write) {
+        crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, 0).to_move()).unwrap();
+        for _ in 0..21 {
+            write!(lock, "\x1b[0K\x1b[B").unwrap();
+        }
+    }
+    pub fn draw_items(&self, lock: &mut impl Write) {
         Player::draw_right_column(
-            board,
             lock,
             self.items
                 .map(|option| option.map(|item| item.get_name()).unwrap_or("").to_string()),
             "ITEMS".to_string(),
         );
     }
-    fn draw_spells(&self, board: &Board, lock: &mut impl std::io::Write) {
+    pub fn draw_spells(&self, lock: &mut impl std::io::Write) {
         Player::draw_right_column(
-            board,
             lock,
             self.known_spells.map(|option| {
                 option
@@ -657,9 +660,9 @@ impl Player {
             "SPELLS".to_string(),
         );
     }
-    fn draw_limbs(&self, board: &Board, lock: &mut impl std::io::Write) {
+    fn draw_limbs(&self, lock: &mut impl std::io::Write) {
         // 1 per line, starting at line 23
-        let start = Vector::new(board.render_x * 2 + 2, 23);
+        let start = Vector::new(RENDER_X * 2 + 2, 23);
         self.limbs.draw(start, lock);
     }
     pub fn reposition_cursor(&mut self, underscore: bool, bounds: Range<Vector>) {
@@ -715,6 +718,7 @@ impl FromBinary for Player {
             memory: Option::from_binary(binary)?,
             known_spells: <[Option<crate::Spell>; 6]>::from_binary(binary)?,
             right_column: RightColumn::from_binary(binary)?,
+            just_cast: bool::from_binary(binary)?,
         })
     }
 }
@@ -747,7 +751,8 @@ impl ToBinary for Player {
             .each_ref()
             .map(Option::as_ref)
             .to_binary(binary)?;
-        self.right_column.to_binary(binary)
+        self.right_column.to_binary(binary)?;
+        self.just_cast.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

@@ -122,7 +122,7 @@ impl Enemy {
         let addr = Arc::as_ptr(&arc).addr();
         if !this.as_ref().unwrap().active {
             log(&mut this, "Attempting wake up".to_string());
-            if this.as_ref().unwrap().variant.mage_aggro() && player.limbs.count_mage_eyes() > 0 {
+            if this.as_ref().unwrap().variant.mage_aggro() && player.mage_aggro() {
                 this.as_mut()
                     .unwrap()
                     .log("Woke up due to mage sight".to_string());

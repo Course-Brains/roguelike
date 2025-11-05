@@ -20,8 +20,12 @@
 19: special upgrade: savepint
 20: limb upgrade: limb_mage_eye
 21: limb upgrade: limb_seer_eye
-22(DEBUG): upgrade: full_energy_ding
+22: upgrade: full_energy_ding
 23: bonus fail: no damage
 24: bonus fail: no waste
 25: bonus fail: no energy(dash)
 26: bonus fail: no energy(block)
+27: bonus sign: no damage
+28(DEBUG): bonus sign: no waste
+29: bonus sign: kill all
+30: bonus sign: no energy

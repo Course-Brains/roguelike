@@ -128,13 +128,13 @@ impl UpgradeType {
             Self::PreciseConvert | Self::Lifesteal => 150,
             Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => 100,
             Self::FullEnergyDing => 50,
+            Self::Spell(spell) => spell.get_cost(),
             // The free shit
             Self::SavePint
             | Self::BonusNoWaste
             | Self::BonusNoDamage
             | Self::BonusKillAll
-            | Self::BonusNoEnergy
-            | Self::Spell(_) => 0,
+            | Self::BonusNoEnergy => 0,
         }
     }
     pub fn on_pickup(self, player: &mut Player) -> bool {
@@ -243,7 +243,7 @@ impl UpgradeType {
                 let mut stdout = std::io::stdout().lock();
                 Player::clear_right_column(&mut stdout);
                 player.draw_spells(&mut stdout);
-                crate::set_feedback("Pick the slot for your new spell".to_string());
+                crate::set_feedback("Pick the slot for your new spell, c to cancel".to_string());
                 crate::draw_feedback();
                 let index = loop {
                     let mut buf = [0];
@@ -255,6 +255,7 @@ impl UpgradeType {
                         b'4' => 3,
                         b'5' => 4,
                         b'6' => 5,
+                        b'c' => return false,
                         _ => {
                             crate::bell(None);
                             continue;

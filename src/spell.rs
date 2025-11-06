@@ -112,37 +112,11 @@ impl Spell {
             Spell::Normal(_) => panic!("Called unwrap_contact on a normal spell"),
         }
     }
-    /*pub fn unwrap_normal<'a>(&'a self) -> &'a NormalSpell {
-        match self {
-            Self::Contact(_) => panic!("Called unwrap_normal on a contact spell"),
-            Self::Normal(normal) => normal,
-        }
-    }
-    pub fn cast_time(&self) -> usize {
-        match self {
-            Spell::Contact(spell) => spell.cast_time(),
-            Spell::Normal(spell) => spell.cast_time(),
-        }
-    }*/
     // The energy needed to cast the spell
     pub fn energy_needed(self) -> usize {
         match self {
             Spell::Normal(spell) => spell.energy_needed(),
             Spell::Contact(spell) => spell.energy_needed(),
-        }
-    }
-    // Whether it needs to be aimed while casting manually
-    pub fn cast_aim(self) -> bool {
-        match self {
-            Self::Normal(normal) => normal.cast_aim(),
-            Self::Contact(contact) => contact.cast_aim(),
-        }
-    }
-    // Whether it needs to be aimed when cast through a circle
-    pub fn circle_aim(self) -> bool {
-        match self {
-            Self::Normal(normal) => normal.circle_aim(),
-            Self::Contact(contact) => contact.circle_aim(),
         }
     }
     // The cast time for spells, the interval between casts for normal
@@ -169,6 +143,9 @@ impl Spell {
                 random - ContactSpell::num_spells() as u8,
             ))
         }
+    }
+    pub fn get_cost(self) -> usize {
+        (self.energy_needed() * self.cast_time()).isqrt().max(1) * 10
     }
 }
 impl std::str::FromStr for Spell {
@@ -278,12 +255,6 @@ impl ContactSpell {
         match self {
             Self::DrainHealth => 5,
         }
-    }
-    pub fn cast_aim(self) -> bool {
-        matches!(self, Self::DrainHealth)
-    }
-    pub fn circle_aim(self) -> bool {
-        false
     }
     fn get_name(self) -> &'static str {
         match self {
@@ -619,7 +590,11 @@ impl NormalSpell {
                     true
                 }
                 None => {
-                    player.heal(crate::random::random8() as usize);
+                    player.heal(if crate::SETTINGS.difficulty() < crate::Difficulty::Hard {
+                        crate::random::random16()
+                    } else {
+                        crate::random::random8()
+                    } as usize);
                     true
                 }
             },
@@ -636,12 +611,6 @@ impl NormalSpell {
             Self::SummonSpirit => 10,
             Self::Heal => 2,
         }
-    }
-    pub fn cast_aim(&self) -> bool {
-        !matches!(self, Self::Swap | Self::SummonSpirit)
-    }
-    pub fn circle_aim(&self) -> bool {
-        !matches!(self, Self::Swap | Self::SummonSpirit)
     }
     pub fn energy_needed(&self) -> usize {
         match self {

@@ -29,3 +29,4 @@
 28(DEBUG): bonus sign: no waste
 29: bonus sign: kill all
 30: bonus sign: no energy
+31: fare

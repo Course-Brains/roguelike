@@ -300,7 +300,7 @@ impl State {
             && self.player.energy > 1
             && random::random4() == 1
         {
-            set_feedback("Thanks for the tip, idiot.".to_string());
+            set_feedback(get(31));
             self.player.energy /= 2;
             bell(Some(&mut std::io::stdout()));
         }

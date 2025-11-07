@@ -1,5 +1,7 @@
+#[cfg(feature = "log")]
+use crate::Style;
 use crate::{
-    Board, Enemy, MapGenSettings, Style, Vector, board::Piece, enemy::Variant, pieces::door::Door,
+    Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
     random::*,
 };
 use abes_nice_things::debug;
@@ -16,6 +18,7 @@ const INTERVAL: usize = 5;
 const MINIMUM: usize = 10;
 const MAXIMUM: usize = 100;
 const DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+#[cfg(feature = "log")]
 const STYLE: Style = *Style::new().green();
 pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
@@ -26,6 +29,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
             STYLE,
             settings
         );
+        #[cfg(feature = "log")]
         let start = std::time::Instant::now();
         let mut room = Room::new(0..(settings.x - 1), 0..(settings.y - 1), settings.budget);
         room.subdivide();
@@ -37,6 +41,7 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         crate::log!("{STYLE}Begining enemy placement\x1b[0m");
         room.place_enemies(&mut board, settings.max_enemy_tier);
         promote_boss(&mut board, settings.num_bosses);
+        #[cfg(feature = "log")]
         let elapsed = start.elapsed();
         crate::log!(
             "{STYLE}Map gen time: {}s({}ms)\x1b[0m",

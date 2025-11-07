@@ -642,7 +642,7 @@ impl Player {
         Player::draw_right_column(
             lock,
             self.items
-                .map(|option| option.map(|item| item.get_name()).unwrap_or("").to_string()),
+                .map(|option| option.map(|item| item.get_name()).unwrap_or("".to_string())),
             "ITEMS".to_string(),
         );
     }
@@ -652,8 +652,12 @@ impl Player {
             self.known_spells.map(|option| {
                 option
                     .map(|spell| {
-                        format!("{}/{}: ", spell.energy_needed(), spell.cast_time())
-                            + spell.get_name()
+                        format!(
+                            "{}/{}: {}",
+                            spell.energy_needed(),
+                            spell.cast_time(),
+                            spell.get_name()
+                        )
                     })
                     .unwrap_or("".to_string())
             }),

@@ -37,6 +37,7 @@ mod consts;
 use consts::*;
 
 use std::collections::HashMap;
+#[cfg(feature = "log")]
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
@@ -44,6 +45,7 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 use abes_nice_things::style::{Color, Style};
 use abes_nice_things::{FromBinary, ToBinary};
 
+#[cfg(feature = "log")]
 static LOG: Mutex<Option<File>> = Mutex::new(None);
 static STATS: LazyLock<Mutex<Stats>> = LazyLock::new(|| Mutex::new(Stats::new()));
 fn stats<'a>() -> std::sync::MutexGuard<'a, Stats> {
@@ -110,7 +112,7 @@ macro_rules! log {
     ($($arg:tt)*) => {
         #[cfg(feature = "log")]
         $crate::log(format!($($arg)*))
-    }
+    };
 }
 #[cfg(feature = "log")]
 fn log(string: String) {

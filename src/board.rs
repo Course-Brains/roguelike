@@ -562,17 +562,24 @@ impl Board {
         write!(lock, "{text}").unwrap()
     }
     fn generate_visible(&mut self, player: &Player) {
+        #[cfg(feature = "log")]
         let mut start = std::time::Instant::now();
         for vis in self.visible.iter_mut() {
             *vis = false;
         }
+        #[cfg(feature = "log")]
         let elapsed = start.elapsed();
         crate::log!(
             "Vis clear time: {}ms, {}ns",
             elapsed.as_millis(),
             elapsed.as_nanos()
         );
-        start = std::time::Instant::now();
+        #[cfg(feature = "log")]
+        {
+            start = std::time::Instant::now();
+        }
+        #[cfg(not(feature = "log"))]
+        let start = std::time::Instant::now();
         let mut next = VecDeque::new();
         let mut seen = HashSet::new();
         seen.insert(player.pos);
@@ -669,10 +676,12 @@ impl Board {
         if self.enemies.is_empty() {
             return;
         }
+        #[cfg(feature = "log")]
         let start = std::time::Instant::now();
         for item in self.backtraces.iter_mut() {
             item.cost = None;
         }
+        #[cfg(feature = "log")]
         let elapsed = start.elapsed();
         crate::log!(
             "clear path time: {}({})",

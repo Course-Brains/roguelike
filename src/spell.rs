@@ -1,7 +1,7 @@
 use crate::proj_delay;
 use crate::{
     Board, Collision, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special,
-    ray_cast,
+    get, ray_cast,
 };
 use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
@@ -127,7 +127,7 @@ impl Spell {
             Self::Contact(contact) => contact.cast_time(),
         }
     }
-    pub fn get_name(self) -> &'static str {
+    pub fn get_name(self) -> String {
         match self {
             Self::Normal(normal) => normal.get_name(),
             Self::Contact(contact) => contact.get_name(),
@@ -238,7 +238,7 @@ impl ContactSpell {
                         let damage = (crate::random() as usize & 3) + 1;
                         target.try_write().unwrap().attacked(damage);
                         match caster {
-                            Entity::Player(player) => player.heal(damage * 5),
+                            Entity::Player(player) => player.heal(damage * 10),
                             Entity::Enemy(enemy) => enemy.try_write().unwrap().health += damage,
                         }
                     }
@@ -256,9 +256,9 @@ impl ContactSpell {
             Self::DrainHealth => 5,
         }
     }
-    fn get_name(self) -> &'static str {
+    fn get_name(self) -> String {
         match self {
-            Self::DrainHealth => "Drain Health",
+            Self::DrainHealth => get(42),
         }
     }
     fn get_random(random: u8) -> ContactSpell {
@@ -624,16 +624,16 @@ impl NormalSpell {
             Self::Heal => 1,
         }
     }
-    fn get_name(self) -> &'static str {
+    fn get_name(self) -> String {
         match self {
-            Self::Swap => "Swap",
-            Self::BidenBlast => "Fireball",
-            Self::Identify => "Identify",
-            Self::Charge => "Charge",
-            Self::BigExplode => crate::debug_only!("big_explode"),
-            Self::Teleport => "Teleport",
-            Self::SummonSpirit => "Summon Spirit",
-            Self::Heal => "Heal",
+            Self::Swap => get(43),
+            Self::BidenBlast => get(44),
+            Self::Identify => get(45),
+            Self::Charge => get(46),
+            Self::BigExplode => crate::debug_only!(get(47)),
+            Self::Teleport => get(48),
+            Self::SummonSpirit => get(49),
+            Self::Heal => get(50),
         }
     }
     fn get_random(random: u8) -> Self {

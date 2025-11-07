@@ -1,6 +1,8 @@
 use std::io::Write;
 
-use crate::{FromBinary, Style, ToBinary, player::Duration, spell::NormalSpell};
+use abes_nice_things::Number;
+
+use crate::{FromBinary, Style, ToBinary, get, player::Duration, spell::NormalSpell};
 
 const SCROLL: char = 'S';
 const POTION: char = 'P';
@@ -25,20 +27,23 @@ pub enum ItemType {
     FarSightPotion,
     // Gives immediate health but poisons you
     Fish,
+    // Immediately gives some energy
+    EnergyPotion,
 }
 impl ItemType {
     // What is listed in the inventory
-    pub fn get_name(self) -> &'static str {
+    pub fn get_name(self) -> String {
         match self {
-            Self::HealthPotion => "Potion of healing",
-            Self::BossFinder => "Scroll of seeking",
-            Self::Gamba => "Scroll of chance",
-            Self::EnderPearl => "Scroll of teleportation",
-            Self::Warp => "Scroll of warping",
-            Self::Tea => "Tea",
-            Self::Spirit => "Spirit",
-            Self::FarSightPotion => crate::debug_only!("far_sight_potion"),
-            Self::Fish => "fish",
+            Self::HealthPotion => get(32),
+            Self::BossFinder => get(33),
+            Self::Gamba => get(34),
+            Self::EnderPearl => get(35),
+            Self::Warp => get(36),
+            Self::Tea => get(37),
+            Self::Spirit => get(38),
+            Self::FarSightPotion => get(39),
+            Self::Fish => get(40),
+            Self::EnergyPotion => get(41),
         }
     }
     // What happens when it is used
@@ -198,6 +203,14 @@ impl ItemType {
                 state.player.effects.poison += 10;
                 true
             }
+            Self::EnergyPotion => {
+                if state.player.energy >= state.player.max_health {
+                    return false;
+                }
+                state.player.energy += 10;
+                state.player.energy.min_assign(state.player.max_energy);
+                true
+            }
         }
     }
     // The price to pick up
@@ -212,20 +225,22 @@ impl ItemType {
             Self::FarSightPotion => 15,
             Self::Fish => 35,
             Self::Spirit => unimplemented!("Spirit intentionally not in shop"),
+            Self::EnergyPotion => 20,
         }
     }
     // What is said when on the ground
-    pub fn get_desc(self) -> &'static str {
+    pub fn get_desc(self) -> String {
         match self {
-            Self::HealthPotion => "Potion of healing",
-            Self::BossFinder => "Scroll of seeking",
-            Self::Gamba => "Scroll of chance",
-            Self::EnderPearl => "Scroll of teleportation",
-            Self::Warp => "Scroll of warping",
-            Self::Tea => "Tea",
-            Self::Spirit => "Spirit",
-            Self::FarSightPotion => crate::debug_only!("far_sight_potion"),
-            Self::Fish => "fish",
+            Self::HealthPotion => get(32),
+            Self::BossFinder => get(33),
+            Self::Gamba => get(34),
+            Self::EnderPearl => get(35),
+            Self::Warp => get(36),
+            Self::Tea => get(37),
+            Self::Spirit => get(38),
+            Self::FarSightPotion => get(39),
+            Self::Fish => get(40),
+            Self::EnergyPotion => get(41),
         }
     }
     pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {
@@ -234,7 +249,11 @@ impl ItemType {
                 Self::BossFinder | Self::Gamba | Self::EnderPearl | Self::Warp | Self::Fish => {
                     SCROLL
                 }
-                Self::HealthPotion | Self::Tea | Self::Spirit | Self::FarSightPotion => POTION,
+                Self::HealthPotion
+                | Self::Tea
+                | Self::Spirit
+                | Self::FarSightPotion
+                | Self::EnergyPotion => POTION,
             },
             Some(match self.price() <= player.get_money() {
                 true => *Style::new().green(),
@@ -256,6 +275,7 @@ impl std::str::FromStr for ItemType {
             "spirit" => Ok(Self::Spirit),
             "far_sight_potion" => Ok(Self::FarSightPotion),
             "fish" => Ok(Self::Fish),
+            "energy_potion" => Ok(Self::EnergyPotion),
             other => Err(format!("{other} is not an item type")),
         }
     }
@@ -272,12 +292,13 @@ impl std::fmt::Display for ItemType {
             Self::Spirit => write!(f, "spirit"),
             Self::FarSightPotion => write!(f, "far sight potion"),
             Self::Fish => write!(f, "fish"),
+            Self::EnergyPotion => write!(f, "energy potion"),
         }
     }
 }
 impl crate::Random for crate::ItemType {
     fn random() -> Self {
-        match crate::random() % 8 {
+        match crate::random() % 9 {
             0 => Self::HealthPotion,
             1 => Self::BossFinder,
             2 => Self::Gamba,
@@ -286,6 +307,7 @@ impl crate::Random for crate::ItemType {
             5 => Self::Tea,
             6 => Self::FarSightPotion,
             7 => Self::Fish,
+            8 => Self::EnergyPotion,
             // Spirit intentionally not in shop
             _ => unreachable!("idk, not my problem"),
         }
@@ -306,6 +328,7 @@ impl FromBinary for ItemType {
             6 => Self::Spirit,
             7 => Self::FarSightPotion,
             8 => Self::Fish,
+            9 => Self::EnergyPotion,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -327,6 +350,7 @@ impl ToBinary for ItemType {
             Self::Spirit => 6,
             Self::FarSightPotion => 7,
             Self::Fish => 8,
+            Self::EnergyPotion => 9,
         }
         .to_binary(binary)
     }

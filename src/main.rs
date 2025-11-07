@@ -817,8 +817,12 @@ fn main() {
                                 .get_directions(state.player.selector, state.player.pos);
                             let send = &INPUT_SYSTEM.0;
                             state.player.fast = false;
+                            let duration =
+                                std::time::Duration::from_secs(1) / directions.len() as u32;
                             for direction in directions.into_iter() {
                                 send.send(CommandInput::Input(Input::Wasd(direction, false)))
+                                    .unwrap();
+                                send.send(CommandInput::Input(Input::Delay(duration)))
                                     .unwrap();
                             }
                         }
@@ -827,6 +831,7 @@ fn main() {
                         state.player.right_column.increment();
                         state.render();
                     }
+                    Input::Delay(duration) => std::thread::sleep(duration),
                 }
             }
             CommandInput::Command(command) => {

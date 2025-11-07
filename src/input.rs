@@ -1,23 +1,24 @@
 use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Read;
 pub enum Input {
-    Arrow(Direction),      // move cursor
-    Wasd(Direction, bool), // move character
-    Enter,                 // interact
-    Attack,                // attack
-    Block,                 // block
-    Return,                // return cursor
-    Wait,                  // do nothing
-    SwapFocus,             // swap camera focus(player/selector)
-    Use(usize),            // Use an item(1-6) or cast a spell (1-6)
-    Convert,               // Convert energy to money
-    Aim,                   // Show a raytrace from the player
-    Fast,                  // Toggle fast selector movement
-    ClearFeedback,         // Clear the feedback
-    Memorize,              // Memorize the current position
-    Remember,              // Remember the memorized position
-    AutoMove,              // automatically move to the selected position
-    ChangeRightColumn,     // rotate what is shown/used by the right column
+    Arrow(Direction),           // move cursor
+    Wasd(Direction, bool),      // move character
+    Enter,                      // interact
+    Attack,                     // attack
+    Block,                      // block
+    Return,                     // return cursor
+    Wait,                       // do nothing
+    SwapFocus,                  // swap camera focus(player/selector)
+    Use(usize),                 // Use an item(1-6) or cast a spell (1-6)
+    Convert,                    // Convert energy to money
+    Aim,                        // Show a raytrace from the player
+    Fast,                       // Toggle fast selector movement
+    ClearFeedback,              // Clear the feedback
+    Memorize,                   // Memorize the current position
+    Remember,                   // Remember the memorized position
+    AutoMove,                   // automatically move to the selected position
+    ChangeRightColumn,          // rotate what is shown/used by the right column
+    Delay(std::time::Duration), // Internal non player input for auto move
 }
 impl Input {
     pub fn get() -> Input {

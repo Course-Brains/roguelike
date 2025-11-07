@@ -357,6 +357,13 @@ impl Command {
                     .to_string(),
                 )
                 .unwrap();
+                out.send(
+                    match state.board.backtraces[state.board.to_index(pos)].cost {
+                        Some(cost) => format!("It is on the backtraces with cost {cost}"),
+                        None => "It is NOT on the backtraces".to_string(),
+                    },
+                )
+                .unwrap();
 
                 let mut has_enemy = false;
                 for (index, enemy) in state.board.enemies.iter().enumerate() {

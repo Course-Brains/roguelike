@@ -60,6 +60,9 @@ pub fn random8() -> Rand {
 pub fn random16() -> Rand {
     (random() & 0b0000_1111) + 1
 }
+pub fn random64() -> Rand {
+    (random() & 0b0011_1111) + 1
+}
 pub trait Random {
     fn random() -> Self;
 }

@@ -9,6 +9,11 @@ const MAGE_RANGE: usize = 30;
 const TELE_THRESH: usize = 5;
 const MAGE_BOSS_PROMOTE_RANGE: usize = 10;
 const MAGE_BOSS_SWAP_THRESH: usize = 10;
+macro_rules! log {
+    ($lock:ident, $($msg:tt)*) => {
+        log(&mut $lock, format!($($msg)*));
+    };
+}
 #[derive(Debug)]
 pub struct Enemy {
     pub health: usize,
@@ -25,6 +30,8 @@ pub struct Enemy {
     pub show_line_of_sight: bool,
     // If it took damage last turn
     pub took_damage: bool,
+    // The number of turns that an enemy should walk at the player for instead of thinking
+    force_walk: usize,
 }
 impl Enemy {
     pub fn new(pos: Vector, variant: Variant) -> Enemy {
@@ -41,6 +48,7 @@ impl Enemy {
             log: None,
             show_line_of_sight: false,
             took_damage: false,
+            force_walk: 0,
         }
     }
     pub fn render(&self) -> (char, Option<crate::Style>) {
@@ -102,6 +110,7 @@ impl Enemy {
         if !self.active {
             self.log("Waking up due to attack".to_string());
         }
+        self.force_walk = 0;
         self.active = true;
         self.took_damage = true;
         self.dead
@@ -142,8 +151,13 @@ impl Enemy {
                 return false;
             }
         }
-        if this.as_ref().unwrap().stun != 0 {
+        if this.as_ref().unwrap().stun > 0 {
             this.as_mut().unwrap().stun -= 1;
+            *time += start.elapsed();
+            return false;
+        }
+        if this.as_ref().unwrap().force_walk > 0 {
+            this.as_mut().unwrap().force_walk -= 1;
             *time += start.elapsed();
             return false;
         }
@@ -266,6 +280,14 @@ impl Enemy {
                             this = Some(arc.try_write().unwrap());
                             this.as_mut().unwrap().windup = 0;
                         }
+                    }
+                    if let Some(cost) = this.as_ref().unwrap().get_path_cost(board)
+                        && cost > random64() as usize
+                    {
+                        this.as_mut().unwrap().force_walk = random4() as usize;
+                        this.as_mut().unwrap().attacking = false;
+                        *time += start.elapsed();
+                        return false;
                     }
                 }
                 let mut this = this.unwrap();
@@ -737,6 +759,9 @@ impl Enemy {
                     if this.as_ref().unwrap().windup == 1 {
                         // Shooting time
                         let pos = this.as_ref().unwrap().pos;
+                        this.as_mut()
+                            .unwrap()
+                            .log(format!("Shooting arrow at {pos}"));
                         this.take();
                         *time += start.elapsed();
                         let hit = crate::arrow(pos, aim, board, player, time);
@@ -744,9 +769,14 @@ impl Enemy {
                         this = Some(arc.try_write().unwrap());
                         match hit {
                             Some(crate::Entity::Player(player)) => {
-                                // if we hit a player, then deal 1 - 16 damage
+                                // if we hit a player, then deal 1 - 16 damage in increments of 2
+                                let damage = (luck_roll8(player) as usize) << 1;
+                                log(
+                                    &mut this,
+                                    format!("  Arrow hit player with damage: {damage}"),
+                                );
                                 let _ = player.attacked(
-                                    (luck_roll8(player) as usize) << 1,
+                                    damage,
                                     this.as_ref().unwrap().variant.kill_name(),
                                     Some(Variant::archer().to_key()),
                                 );
@@ -757,6 +787,14 @@ impl Enemy {
                             }
                             None => {}
                         }
+                        if let Some(cost) = this.as_ref().unwrap().get_path_cost(board)
+                            && cost > random64() as usize
+                        {
+                            let walk_duration = random4() as usize;
+                            log!(this, "force walking for {walk_duration} turns");
+                            this.as_mut().unwrap().force_walk = walk_duration;
+                            this.as_mut().unwrap().attacking = false;
+                        }
                     }
                     this.as_mut().unwrap().windup -= 1;
                     *time += start.elapsed();
@@ -764,10 +802,12 @@ impl Enemy {
                 } else {
                     // Deciding
                     if *line_of_sight {
+                        log!(this, "Decided to attack player at {}", player.pos);
                         this.as_mut().unwrap().variant = Variant::Archer(player.pos);
                         this.as_mut().unwrap().windup = 3;
                         this.as_mut().unwrap().attacking = true;
                     } else {
+                        log!(this, "Not attacking player due to line of sight fail");
                         this.as_mut().unwrap().attacking = false;
                     }
                     *time += start.elapsed();
@@ -977,6 +1017,9 @@ impl Enemy {
             _ => {}
         }
     }
+    fn get_path_cost(&self, board: &Board) -> Option<usize> {
+        board.backtraces[board.to_index(self.pos)].cost
+    }
 }
 impl Clone for Enemy {
     fn clone(&self) -> Self {
@@ -993,6 +1036,7 @@ impl Clone for Enemy {
             log: self.log.as_ref().map(|file| file.try_clone().unwrap()),
             show_line_of_sight: self.show_line_of_sight,
             took_damage: self.took_damage,
+            force_walk: self.force_walk,
         }
     }
 }

@@ -1,25 +1,25 @@
 0: enemy: basic
-1: enemy: basic_boss
+1: enemy: basic boss
 2: enemy: mage
-3: enemy: mage_boss
+3: enemy: mage boss
 4: enemy: fighter
-5: enemy: fighter_boss
+5: enemy: fighter boss
 6(DEBUG): enemy: archer
-7: enemy: archer_boss
+7: enemy: archer boss
 8: enemy: dummy
 9: upgrade: map
-10: upgrade: soft_shoes
-11(DEBUG): upgrade: precise_convert
-12(DEBUG): upgrade: health_boost
-13(DEBUG): upgrade: energy_boost
+10: upgrade: soft shoes
+11(DEBUG): upgrade: precise convert
+12(DEBUG): upgrade: health boost
+13(DEBUG): upgrade: energy boost
 14(DEBUG): upgrade: lifesteal
-15(DEBUG): bonus upgrade: bonus_no_waste
-16: bonus upgrade: bonus_no_damage
-17: bonus upgrade: bonus_kill_all
-18: bonus upgrade: bonus_no_energy
+15(DEBUG): bonus upgrade: bonus no_waste
+16: bonus upgrade: bonus no_damage
+17: bonus upgrade: bonus kill all
+18: bonus upgrade: bonus no energy
 19: special upgrade: savepint
-20: limb upgrade: limb_mage_eye
-21: limb upgrade: limb_seer_eye
+20: limb upgrade: limb mage eye
+21: limb upgrade: limb seer eye
 22: upgrade: full_energy_ding
 23: bonus fail: no damage
 24: bonus fail: no waste
@@ -29,4 +29,23 @@
 28(DEBUG): bonus sign: no waste
 29: bonus sign: kill all
 30: bonus sign: no energy
-31: fare
+31: event: fare
+32: item: health potion
+33: item: boss finder
+34: item: gamba
+35: item: ender pearl
+36: item: warp
+37: item: tea
+38: item: spirit
+39: item: potion of far sight
+40: item: fish
+41: item: energy potion
+42: spell(contact): drain health
+43: spell(normal): swap
+44: spell(normal): biden blast
+45: spell(normal): identify
+46: spell(normal): charge
+47(DEBUG): spell(norml): big explode
+48: spell(normal): teleport
+49: spell(normal): summon spirit
+50: spell(normal): heal

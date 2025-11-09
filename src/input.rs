@@ -9,7 +9,7 @@ pub enum Input {
     Return,                     // return cursor
     Wait,                       // do nothing
     SwapFocus,                  // swap camera focus(player/selector)
-    Use(usize),                 // Use an item(1-6) or cast a spell (1-6)
+    Use(usize, bool),           // Use an item(1-6) or cast a spell (1-6)
     Convert,                    // Convert energy to money
     Aim,                        // Show a raytrace from the player
     Fast,                       // Toggle fast selector movement
@@ -19,6 +19,7 @@ pub enum Input {
     AutoMove,                   // automatically move to the selected position
     ChangeRightColumn,          // rotate what is shown/used by the right column
     Delay(std::time::Duration), // Internal non player input for auto move
+    Shout,                      // Alert all reachable enemies
 }
 impl Input {
     pub fn get() -> Input {
@@ -26,7 +27,7 @@ impl Input {
         let mut buf = [0_u8];
         loop {
             lock.read_exact(&mut buf).unwrap();
-            match buf[0] {
+            break match buf[0] {
                 27 => {
                     // escape byte
                     lock.read_exact(&mut buf).unwrap();
@@ -36,7 +37,7 @@ impl Input {
                         b'B' => return Input::Arrow(Direction::Down),
                         b'D' => return Input::Arrow(Direction::Left),
                         b'C' => return Input::Arrow(Direction::Right),
-                        _ => {}
+                        _ => continue,
                     }
                 }
                 b'w' => return Input::Wasd(Direction::Up, false),
@@ -53,12 +54,18 @@ impl Input {
                 b't' => return Input::SwapFocus,
                 b'\t' => return Input::Wait,
                 b'\n' => return Input::Enter,
-                b'1' => return Input::Use(1),
-                b'2' => return Input::Use(2),
-                b'3' => return Input::Use(3),
-                b'4' => return Input::Use(4),
-                b'5' => return Input::Use(5),
-                b'6' => return Input::Use(6),
+                b'1' => return Input::Use(1, false),
+                b'2' => return Input::Use(2, false),
+                b'3' => return Input::Use(3, false),
+                b'4' => return Input::Use(4, false),
+                b'5' => return Input::Use(5, false),
+                b'6' => return Input::Use(6, false),
+                b'!' => Input::Use(1, true),
+                b'@' => Input::Use(2, true),
+                b'#' => Input::Use(3, true),
+                b'$' => Input::Use(4, true),
+                b'%' => Input::Use(5, true),
+                b'^' => Input::Use(6, true),
                 b'c' => return Input::Convert,
                 b'z' => return Input::Aim,
                 b'f' => return Input::Fast,
@@ -67,8 +74,9 @@ impl Input {
                 b'R' => return Input::Remember,
                 b'M' => return Input::AutoMove,
                 b'x' => return Input::ChangeRightColumn,
-                _ => {}
-            }
+                b'`' => return Input::Shout,
+                _ => continue,
+            };
         }
     }
 }

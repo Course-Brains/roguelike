@@ -1,7 +1,7 @@
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 0x00000012;
+const SAVE_VERSION: Version = 0x00000013;
 mod player;
 use player::Player;
 mod board;
@@ -39,7 +39,7 @@ use consts::*;
 use std::collections::HashMap;
 #[cfg(feature = "log")]
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use abes_nice_things::style::{Color, Style};
@@ -184,7 +184,7 @@ fn draw_feedback() {
         crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine)
     )
     .unwrap();
-    println!("{}", feedback());
+    print!("{}", feedback());
     std::io::stdout().flush().unwrap();
 }
 static SETTINGS: std::sync::LazyLock<Settings> = std::sync::LazyLock::new(Settings::get_from_file);
@@ -626,7 +626,7 @@ fn main() {
                             }
                         }
                     }
-                    Input::Use(index) => {
+                    Input::Use(index, alt) => {
                         debug_assert!(index < 7);
                         match state.player.right_column {
                             player::RightColumn::Items => {
@@ -641,28 +641,50 @@ fn main() {
                             }
                             player::RightColumn::Spells => {
                                 if let Some(spell) = state.player.known_spells[index - 1] {
-                                    if spell.energy_needed() <= state.player.energy {
+                                    let chosen_energy = match alt {
+                                        true => {
+                                            Weirdifier::fix(false);
+                                            let mut stdin = std::io::stdin().lock();
+                                            let mut buf = String::new();
+                                            loop {
+                                                set_feedback("How much energy? ".to_string());
+                                                draw_feedback();
+                                                bell(None);
+                                                stdin.read_line(&mut buf).unwrap();
+                                                if let Ok(energy) = buf.trim().parse() {
+                                                    Weirdifier::weirdify(false);
+                                                    break energy;
+                                                }
+                                            }
+                                        }
+                                        false => spell.energy_needed(),
+                                    };
+                                    if chosen_energy <= state.player.energy {
                                         let mut succeeded = false;
+                                        let cast_time = spell.cast_time(Some(chosen_energy));
+                                        let delay =
+                                            std::time::Duration::from_secs(1) / cast_time as u32;
                                         // Valid cast
                                         match spell {
                                             Spell::Normal(spell) => {
-                                                for _ in 0..spell.cast_time() {
+                                                for _ in 0..cast_time {
                                                     if SETTINGS.difficulty() >= Difficulty::Hard {
                                                         state.player.just_cast = true;
                                                     }
                                                     state.increment();
+                                                    std::thread::sleep(delay);
                                                 }
                                                 let origin = Some(state.player.pos);
                                                 let aim = Some(state.player.selector);
-                                                spell.cast(
+                                                succeeded = spell.cast(
                                                     None,
                                                     &mut state.player,
                                                     &mut state.board,
                                                     origin,
                                                     aim,
                                                     None,
+                                                    Some(chosen_energy),
                                                 );
-                                                succeeded = true;
                                             }
                                             Spell::Contact(spell) => {
                                                 if !state
@@ -683,18 +705,19 @@ fn main() {
                                                     .board
                                                     .get_enemy(state.player.selector, None)
                                                 {
-                                                    for _ in 0..spell.cast_time() {
+                                                    for _ in 0..cast_time {
                                                         if SETTINGS.difficulty() >= Difficulty::Hard
                                                         {
                                                             state.player.just_cast = true;
                                                         }
                                                         state.increment();
+                                                        std::thread::sleep(delay);
                                                     }
-                                                    spell.cast(
+                                                    succeeded = spell.cast(
                                                         Entity::Enemy(target),
                                                         Entity::Player(&mut state.player),
+                                                        Some(chosen_energy),
                                                     );
-                                                    succeeded = true;
                                                 } else {
                                                     set_feedback(
                                                         "Contact spells require a target"
@@ -706,8 +729,8 @@ fn main() {
                                             }
                                         }
                                         if succeeded {
-                                            state.player.energy -= spell.energy_needed();
-                                            stats().energy_used += spell.energy_needed();
+                                            state.player.energy -= chosen_energy;
+                                            stats().energy_used += chosen_energy;
                                             if !BONUS_NO_ENERGY.swap(true, RELAXED) {
                                                 set_feedback(
                                                     "Did you really need to cast that?".to_string(),
@@ -716,6 +739,9 @@ fn main() {
                                             }
                                             state.player.just_cast = true;
                                             state.render();
+                                        } else {
+                                            set_feedback("The spell failed".to_string());
+                                            draw_feedback();
                                         }
                                     } else {
                                         set_feedback("Insufficient energy".to_string());
@@ -817,6 +843,7 @@ fn main() {
                                 .get_directions(state.player.selector, state.player.pos);
                             let send = &INPUT_SYSTEM.0;
                             state.player.fast = false;
+                            state.player.focus = player::Focus::Player;
                             let duration =
                                 std::time::Duration::from_secs(1) / directions.len() as u32;
                             for direction in directions.into_iter() {
@@ -832,6 +859,13 @@ fn main() {
                         state.render();
                     }
                     Input::Delay(duration) => std::thread::sleep(duration),
+                    Input::Shout => {
+                        for enemy in state.board.enemies.iter() {
+                            if state.board.is_reachable(enemy.try_read().unwrap().pos) {
+                                enemy.try_write().unwrap().active = true;
+                            }
+                        }
+                    }
                 }
             }
             CommandInput::Command(command) => {
@@ -878,19 +912,24 @@ impl From<Arc<RwLock<Enemy>>> for Entity<'_> {
 struct Weirdifier;
 impl Weirdifier {
     fn new() -> Weirdifier {
-        print!("\x1b[?1049h");
+        Weirdifier::weirdify(true);
+        Weirdifier
+    }
+    fn weirdify(enter_alt: bool) {
+        if enter_alt {
+            print!("\x1b[?1049h");
+        }
         std::process::Command::new("stty")
             .arg("-icanon")
             .arg("-echo")
             .status()
             .unwrap();
         crossterm::execute!(std::io::stdout(), crossterm::terminal::DisableLineWrap).unwrap();
-        Weirdifier
     }
-}
-impl Drop for Weirdifier {
-    fn drop(&mut self) {
-        print!("\x1b[?1049l");
+    fn fix(leave_alt: bool) {
+        if leave_alt {
+            print!("\x1b[?1049l");
+        }
         std::process::Command::new("stty")
             .arg("icanon")
             .arg("echo")
@@ -902,6 +941,11 @@ impl Drop for Weirdifier {
             crossterm::cursor::Show
         )
         .unwrap()
+    }
+}
+impl Drop for Weirdifier {
+    fn drop(&mut self) {
+        Weirdifier::fix(true);
     }
 }
 #[derive(Clone, Copy, Debug)]

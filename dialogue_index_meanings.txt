@@ -45,7 +45,7 @@
 44: spell(normal): biden blast
 45: spell(normal): identify
 46: spell(normal): charge
-47(DEBUG): spell(norml): big explode
+47(DEPRICATED): spell(normal): big explode
 48: spell(normal): teleport
 49: spell(normal): summon spirit
 50: spell(normal): heal

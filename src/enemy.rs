@@ -257,6 +257,7 @@ impl Enemy {
                                     cast_pos,
                                     arc.clone(),
                                     None,
+                                    None,
                                 ));
                             }
                             this.as_mut().unwrap().windup = 0;
@@ -275,6 +276,7 @@ impl Enemy {
                                 None,
                                 None,
                                 Some(time),
+                                None,
                             );
                             start = std::time::Instant::now();
                             this = Some(arc.try_write().unwrap());
@@ -295,7 +297,7 @@ impl Enemy {
                     0 => {
                         // teleport
                         if this.is_near(player.pos, TELE_THRESH) {
-                            this.windup = NormalSpell::Swap.cast_time();
+                            this.windup = NormalSpell::Swap.cast_time(None);
                             this.variant = Variant::Mage(MageSpell::Teleport);
                             *time += start.elapsed();
                             return true;
@@ -319,7 +321,7 @@ impl Enemy {
                     2 => {
                         // spell time
                         if board[player.pos].is_none() {
-                            this.windup = ContactSpell::DrainHealth.cast_time();
+                            this.windup = ContactSpell::DrainHealth.cast_time(None);
                             this.variant = Variant::Mage(MageSpell::Circle(player.pos));
                         }
                         *time += start.elapsed();
@@ -348,6 +350,7 @@ impl Enemy {
                             None,
                             Some(start_pos + direction),
                             Some(time),
+                            None,
                         );
                         this = Some(arc.try_write().unwrap());
                         this.as_mut().unwrap().windup = 0;
@@ -430,6 +433,7 @@ impl Enemy {
                                     None,
                                     Some(aim),
                                     Some(time),
+                                    None,
                                 );
                                 start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
@@ -476,6 +480,7 @@ impl Enemy {
                                     None,
                                     None,
                                     Some(time),
+                                    None,
                                 );
                                 this = Some(arc.try_write().unwrap());
                             }
@@ -602,6 +607,7 @@ impl Enemy {
                                     None,
                                     Some(aim),
                                     Some(time),
+                                    None,
                                 );
                                 start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
@@ -646,6 +652,7 @@ impl Enemy {
                                     None,
                                     Some(aim),
                                     Some(time),
+                                    None,
                                 );
                                 start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());
@@ -653,13 +660,14 @@ impl Enemy {
                             FighterBossAction::BigExplode(aim) => {
                                 this.take();
                                 *time += start.elapsed();
-                                NormalSpell::BigExplode.cast(
+                                NormalSpell::BidenBlast.cast(
                                     Some(arc.clone()),
                                     player,
                                     board,
                                     None,
                                     Some(aim),
                                     Some(time),
+                                    Some(20),
                                 );
                                 start = std::time::Instant::now();
                                 this = Some(arc.try_write().unwrap());

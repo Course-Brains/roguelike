@@ -92,7 +92,7 @@ impl Player {
         match crate::SETTINGS.difficulty() {
             Difficulty::Normal => 2,
             Difficulty::Easy => 6,
-            Difficulty::Hard => 0,
+            Difficulty::Hard => 1,
         }
     }
     fn starting_money() -> usize {
@@ -144,10 +144,11 @@ impl Player {
         if let Some((circle, index)) = board.contact_spell_at(self.pos) {
             crate::log!("  Triggering spell at {}", self.pos);
             if let Some(caster) = &circle.caster {
-                circle
-                    .spell
-                    .unwrap_contact()
-                    .cast(Entity::Player(self), Entity::Enemy(caster.clone()));
+                circle.spell.unwrap_contact().cast(
+                    Entity::Player(self),
+                    Entity::Enemy(caster.clone()),
+                    circle.energy_per_cast,
+                );
             }
             board.spells.swap_remove(index);
         }
@@ -655,7 +656,7 @@ impl Player {
                         format!(
                             "{}/{}: {}",
                             spell.energy_needed(),
-                            spell.cast_time(),
+                            spell.cast_time(None),
                             spell.get_name()
                         )
                     })

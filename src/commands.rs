@@ -29,8 +29,8 @@ pub enum Command {
     Upgrade(UpgradeType),
     SetDetectMod(isize),
     SetPerception(usize),
-    Cast(Spell),
-    CreateCircle(Spell, usize, SmartVector, SmartVector),
+    Cast(Spell, Option<usize>),
+    CreateCircle(Spell, usize, Option<usize>, SmartVector, SmartVector),
     GetData(SmartVector),
     GetBoss,
     CountEnemies,
@@ -101,13 +101,13 @@ impl Command {
             "set_detect_mod" => Ok(Command::SetDetectMod(parse(iter.next())?)),
             "set_perception" => Ok(Command::SetPerception(parse(iter.next())?)),
             "cast" => Ok(Command::Cast(
-                iter.map(|s| s.to_string() + " ")
-                    .collect::<String>()
-                    .parse()?,
+                (arg(iter.next())?.to_string() + " " + arg(iter.next())?).parse()?,
+                parse_none(iter.next())?,
             )),
             "create_circle" => Ok(Command::CreateCircle(
                 (arg(iter.next())?.to_string() + " " + arg(iter.next())?).parse()?,
                 parse(iter.next())?,
+                parse_none(iter.next())?,
                 SmartVector::new(iter.next(), iter.next(), false)?,
                 SmartVector::new(iter.next(), iter.next(), true)?,
             )),
@@ -277,7 +277,7 @@ impl Command {
             }
             Command::SetDetectMod(modifier) => state.player.detect_mod = modifier,
             Command::SetPerception(perception) => state.player.perception = perception,
-            Command::Cast(spell) => match spell {
+            Command::Cast(spell, energy) => match spell {
                 Spell::Normal(spell) => {
                     let target = state.player.selector;
                     spell.cast(
@@ -287,20 +287,26 @@ impl Command {
                         None,
                         Some(target),
                         None,
+                        energy,
                     );
                 }
                 Spell::Contact(spell) => {
                     if let Some(enemy) = state.board.get_enemy(state.player.selector, None) {
-                        spell.cast(Entity::Enemy(enemy), Entity::Player(&mut state.player));
+                        spell.cast(
+                            Entity::Enemy(enemy),
+                            Entity::Player(&mut state.player),
+                            energy,
+                        );
                     }
                 }
             },
-            Command::CreateCircle(spell, energy, pos, aim) => {
+            Command::CreateCircle(spell, energy, energy_used, pos, aim) => {
                 state.board.spells.push(SpellCircle::new_player(
                     spell,
                     pos.to_absolute(&state.player),
                     Some(aim.to_absolute(&state.player)),
                     energy,
+                    energy_used,
                 ))
             }
             Command::GetData(pos) => {
@@ -634,6 +640,18 @@ where
     match option.map(|x| x.parse()) {
         Some(Ok(t)) => Ok(t),
         Some(Err(error)) => Err(error.to_string()),
+        None => Err("Expected argument".to_string()),
+    }
+}
+fn parse_none<T: std::str::FromStr<Err: ToString>>(
+    option: Option<&str>,
+) -> Result<Option<T>, String> {
+    match option {
+        Some("none" | "None") => Ok(None),
+        Some(arg) => match arg.parse() {
+            Ok(data) => Ok(Some(data)),
+            Err(error) => Err(error.to_string()),
+        },
         None => Err("Expected argument".to_string()),
     }
 }

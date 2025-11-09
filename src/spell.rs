@@ -18,6 +18,7 @@ pub struct SpellCircle {
     // only used if it is a normal spell
     pub has_fired: bool,
     pub cooldown: usize,
+    pub energy_per_cast: Option<usize>,
 }
 impl SpellCircle {
     pub fn new_player(
@@ -25,6 +26,7 @@ impl SpellCircle {
         pos: Vector,
         aim: Option<Vector>,
         energy: usize,
+        energy_per_cast: Option<usize>,
     ) -> SpellCircle {
         SpellCircle {
             spell,
@@ -33,7 +35,8 @@ impl SpellCircle {
             aim,
             energy,
             has_fired: false,
-            cooldown: spell.cast_time(),
+            cooldown: spell.cast_time(energy_per_cast),
+            energy_per_cast,
         }
     }
     pub fn new_enemy(
@@ -41,6 +44,7 @@ impl SpellCircle {
         pos: Vector,
         caster: Arc<RwLock<Enemy>>,
         aim: Option<Vector>,
+        energy_per_cast: Option<usize>,
     ) -> SpellCircle {
         SpellCircle {
             spell,
@@ -49,14 +53,16 @@ impl SpellCircle {
             aim,
             energy: 0,
             has_fired: false,
-            cooldown: spell.cast_time(),
+            cooldown: spell.cast_time(energy_per_cast),
+            energy_per_cast,
         }
     }
     // returns true if the circle should be kept (false = removal)
     pub fn update(&mut self, board: &mut Board, player: &mut Player) -> bool {
+        let energy_used = self.energy_per_cast.unwrap_or(self.spell.energy_needed());
         match self.spell {
             Spell::Normal(spell) => {
-                if self.caster.is_none() && !self.has_fired && self.energy < spell.energy_needed() {
+                if self.caster.is_none() && !self.has_fired && self.energy < energy_used {
                     return false;
                 }
                 if spell.cast(
@@ -66,25 +72,34 @@ impl SpellCircle {
                     Some(self.pos),
                     self.aim,
                     None,
+                    self.energy_per_cast,
                 ) {
-                    self.energy -= spell.energy_needed();
-                    self.cooldown = spell.cast_time()
+                    self.energy -= energy_used;
+                    self.cooldown = spell.cast_time(self.energy_per_cast)
                 }
                 true
             }
             Spell::Contact(spell) => {
-                if self.caster.is_none() && self.energy < spell.energy_needed() {
+                if self.caster.is_none() && self.energy < energy_used {
                     return true;
                 }
                 if let Some(enemy) = board.get_enemy(self.pos, None) {
-                    spell.cast(enemy.into(), Entity::new(self.caster.clone(), player));
+                    spell.cast(
+                        enemy.into(),
+                        Entity::new(self.caster.clone(), player),
+                        self.energy_per_cast,
+                    );
                     return false;
                 }
                 if player.pos == self.pos {
                     if self.caster.is_none() {
                         return true;
                     }
-                    spell.cast(player.into(), Entity::Enemy(self.caster.clone().unwrap()));
+                    spell.cast(
+                        player.into(),
+                        Entity::Enemy(self.caster.clone().unwrap()),
+                        self.energy_per_cast,
+                    );
                     return false;
                 }
                 true
@@ -121,10 +136,10 @@ impl Spell {
     }
     // The cast time for spells, the interval between casts for normal
     // circles,
-    pub fn cast_time(self) -> usize {
+    pub fn cast_time(self, energy: Option<usize>) -> usize {
         match self {
-            Self::Normal(normal) => normal.cast_time(),
-            Self::Contact(contact) => contact.cast_time(),
+            Self::Normal(normal) => normal.cast_time(energy),
+            Self::Contact(contact) => contact.cast_time(energy),
         }
     }
     pub fn get_name(self) -> String {
@@ -145,7 +160,7 @@ impl Spell {
         }
     }
     pub fn get_cost(self) -> usize {
-        (self.energy_needed() * self.cast_time()).isqrt().max(1) * 10
+        (self.energy_needed() * self.cast_time(None)).isqrt().max(1) * 10
     }
 }
 impl std::str::FromStr for Spell {
@@ -209,12 +224,19 @@ impl ContactSpell {
     fn num_spells() -> usize {
         1
     }
-    pub fn cast(&self, target: Entity<'_>, caster: Entity<'_>) {
+    // returns false if it fails to cast
+    pub fn cast(&self, target: Entity<'_>, caster: Entity<'_>, energy: Option<usize>) -> bool {
         if let Entity::Player(_) = caster {
             crate::stats().add_spell(Spell::Contact(*self));
         }
+        let energy = energy.unwrap_or(self.energy_needed());
+
         match self {
             Self::DrainHealth => {
+                if energy < 5 {
+                    return false;
+                }
+                let multiple = energy / 5;
                 match target {
                     Entity::Player(player) => {
                         // can't handle if it is a player because then we would have 2 &mut to the
@@ -223,7 +245,7 @@ impl ContactSpell {
                         let mut caster = binding.try_write().unwrap();
                         let damage = (crate::enemy::luck_roll8(player) as usize / 2) + 1;
                         let _ = player.attacked(
-                            damage * 5,
+                            damage * 5 * multiple,
                             caster.variant.kill_name(),
                             Some(caster.variant.to_key()),
                         );
@@ -233,9 +255,9 @@ impl ContactSpell {
                         if let Entity::Enemy(caster) = &caster
                             && Arc::ptr_eq(caster, &target)
                         {
-                            return;
+                            return false;
                         }
-                        let damage = (crate::random() as usize & 3) + 1;
+                        let damage = (((crate::random() as usize & 7) + 1) * multiple) / 2;
                         target.try_write().unwrap().attacked(damage);
                         match caster {
                             Entity::Player(player) => player.heal(damage * 10),
@@ -245,10 +267,12 @@ impl ContactSpell {
                 }
             }
         }
+        true
     }
-    pub fn cast_time(self) -> usize {
+    pub fn cast_time(self, energy: Option<usize>) -> usize {
+        let energy = energy.unwrap_or(self.energy_needed());
         match self {
-            Self::DrainHealth => 3,
+            Self::DrainHealth => (energy * 3) / 5,
         }
     }
     pub fn energy_needed(self) -> usize {
@@ -320,8 +344,6 @@ pub enum NormalSpell {
     // Charge in a direction, hitting something
     Charge,
     // BidenBlast but bigger
-    BigExplode,
-    // Fire a projectile and teleport where it lands
     Teleport,
     // Give the player a "spirit" mua ha ha
     SummonSpirit,
@@ -330,7 +352,7 @@ pub enum NormalSpell {
 }
 impl NormalSpell {
     fn num_spells() -> usize {
-        8
+        7
     }
     // aim is position not direction
     // origin of None means to get it from the caster(including the player)
@@ -344,15 +366,17 @@ impl NormalSpell {
         origin: Option<Vector>,
         aim: Option<Vector>,
         time: Option<&mut std::time::Duration>,
+        energy: Option<usize>,
     ) -> bool {
         let start = std::time::Instant::now();
         if caster.is_none() {
             crate::stats().add_spell(Spell::Normal(*self));
         }
+        let energy = energy.unwrap_or(self.energy_needed());
         match self {
             Self::Swap => {
                 let addr = caster.as_ref().map(|arc| Arc::as_ptr(arc).addr());
-                if let Some(swap) = board.pick_near(addr, get_pos(&caster, player), 30) {
+                if let Some(swap) = board.pick_near(addr, get_pos(&caster, player), energy * 10) {
                     let swap = swap.upgrade().unwrap();
                     if is_within_flood(&caster, board)
                         != board.is_reachable(swap.try_read().unwrap().pos)
@@ -378,7 +402,10 @@ impl NormalSpell {
                 false
             }
             Self::BidenBlast => {
-                let damage = crate::random::random4() as usize;
+                if energy < 4 {
+                    return false;
+                }
+                let damage = (crate::random::random16() as usize * energy) / 4;
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
                 }
@@ -388,7 +415,7 @@ impl NormalSpell {
                     board,
                     origin,
                     aim,
-                    explosion_size: 2,
+                    explosion_size: ((energy * 3) / 10) + 1,
                     damage,
                     player_damage: damage * 5,
                     death_name: caster
@@ -399,6 +426,9 @@ impl NormalSpell {
                 true
             }
             Self::Identify => {
+                if energy != 1 {
+                    return false;
+                }
                 assert!(caster.is_none(), "Identify can only be cast by the player");
                 let aim = aim.unwrap();
                 crossterm::queue!(
@@ -470,7 +500,7 @@ impl NormalSpell {
                 if let Some(collision) = collision
                     && let Some(entity) = collision.into_entity(player)
                 {
-                    let damage = crate::random::random8() as usize;
+                    let damage = (crate::random::random16() as usize * energy) / 10;
                     match entity {
                         Entity::Player(player) => {
                             let _ = player.attacked(
@@ -504,28 +534,10 @@ impl NormalSpell {
                 }
                 true
             }
-            Self::BigExplode => {
-                let damage = crate::random::random16() as usize;
-                if let Some(&mut mut time) = time {
-                    time += start.elapsed()
-                }
-                FireBall {
-                    caster: caster.clone(),
-                    player,
-                    board,
-                    origin,
-                    aim,
-                    explosion_size: 7,
-                    damage,
-                    player_damage: damage * 5,
-                    death_name: caster
-                        .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
-                        .unwrap_or("a common lapse in judgement".to_string()),
-                }
-                .evaluate(time);
-                true
-            }
             Self::Teleport => {
+                if energy != 10 {
+                    return false;
+                }
                 let aim = aim.unwrap();
                 let stop = caster
                     .as_ref()
@@ -572,6 +584,9 @@ impl NormalSpell {
                 true
             }
             Self::SummonSpirit => {
+                if energy != 10 {
+                    return false;
+                }
                 assert!(caster.is_none(), "Only the player can summon spirits");
                 if let Some(time) = time {
                     *time += start.elapsed()
@@ -579,37 +594,43 @@ impl NormalSpell {
                 // quite frankly doesn't matter enough how long this takes for me to do it properly
                 player.add_item(crate::ItemType::Spirit)
             }
-            Self::Heal => match caster {
-                Some(arc) => {
-                    let mut enemy = arc.try_write().unwrap();
-                    if enemy.health >= enemy.variant.max_health() {
-                        return false;
+            Self::Heal => {
+                if energy < 1 {
+                    return false;
+                }
+                match caster {
+                    Some(arc) => {
+                        let mut enemy = arc.try_write().unwrap();
+                        if enemy.health >= enemy.variant.max_health() {
+                            return false;
+                        }
+                        enemy.health += energy;
+                        enemy.health = enemy.health.min(enemy.variant.max_health());
+                        true
                     }
-                    enemy.health += 2;
-                    enemy.health = enemy.health.min(enemy.variant.max_health());
-                    true
+                    None => {
+                        let mut amount =
+                            (crate::random() as usize % (((energy / 3).pow(2) + 1) * 4)) + 1;
+                        if crate::SETTINGS.difficulty() < crate::Difficulty::Hard {
+                            amount *= 2;
+                        }
+                        player.heal(amount);
+                        true
+                    }
                 }
-                None => {
-                    player.heal(if crate::SETTINGS.difficulty() < crate::Difficulty::Hard {
-                        crate::random::random16()
-                    } else {
-                        crate::random::random8()
-                    } as usize);
-                    true
-                }
-            },
+            }
         }
     }
-    pub fn cast_time(&self) -> usize {
+    pub fn cast_time(&self, energy: Option<usize>) -> usize {
+        let energy = energy.unwrap_or(self.energy_needed());
         match self {
-            Self::Swap => 3,
-            Self::BidenBlast => 4,
-            Self::Identify => 0,
-            Self::Charge => 2,
-            Self::BigExplode => 10,
-            Self::Teleport => 3,
-            Self::SummonSpirit => 10,
-            Self::Heal => 2,
+            Self::Swap => energy,
+            Self::BidenBlast => energy / 2,
+            Self::Identify => 0, // Does nothing with more energy
+            Self::Charge => energy / 2,
+            Self::Teleport => 3,      // Does nothing with more energy
+            Self::SummonSpirit => 10, // Does nothing with more energy
+            Self::Heal => energy * 2,
         }
     }
     pub fn energy_needed(&self) -> usize {
@@ -618,7 +639,6 @@ impl NormalSpell {
             Self::BidenBlast => 5,
             Self::Identify => 1,
             Self::Charge => 5,
-            Self::BigExplode => 20,
             Self::Teleport => 10,
             Self::SummonSpirit => 10,
             Self::Heal => 1,
@@ -630,7 +650,6 @@ impl NormalSpell {
             Self::BidenBlast => get(44),
             Self::Identify => get(45),
             Self::Charge => get(46),
-            Self::BigExplode => crate::debug_only!(get(47)),
             Self::Teleport => get(48),
             Self::SummonSpirit => get(49),
             Self::Heal => get(50),
@@ -642,10 +661,9 @@ impl NormalSpell {
             1 => Self::BidenBlast,
             2 => Self::Identify,
             3 => Self::Charge,
-            4 => Self::BigExplode,
-            5 => Self::Teleport,
-            6 => Self::SummonSpirit,
-            7 => Self::Heal,
+            4 => Self::Teleport,
+            5 => Self::SummonSpirit,
+            6 => Self::Heal,
             _ => unreachable!("Someone is bad at math and needs a slap on the wrist"),
         }
     }
@@ -658,7 +676,6 @@ impl std::str::FromStr for NormalSpell {
             "biden_blast" => Ok(Self::BidenBlast),
             "identify" => Ok(Self::Identify),
             "charge" => Ok(Self::Charge),
-            "big_explode" => Ok(Self::BigExplode),
             "teleport" => Ok(Self::Teleport),
             "summon_spirit" => Ok(Self::SummonSpirit),
             "heal" => Ok(Self::Heal),
@@ -676,7 +693,6 @@ impl std::fmt::Display for NormalSpell {
                 Self::BidenBlast => "biden_blast",
                 Self::Identify => "identify",
                 Self::Charge => "charge",
-                Self::BigExplode => "big_explode",
                 Self::Teleport => "teleport",
                 Self::SummonSpirit => "summon_spirit",
                 Self::Heal => "heal",
@@ -694,10 +710,9 @@ impl FromBinary for NormalSpell {
             1 => Self::BidenBlast,
             2 => Self::Identify,
             3 => Self::Charge,
-            4 => Self::BigExplode,
-            5 => Self::Teleport,
-            6 => Self::SummonSpirit,
-            7 => Self::Heal,
+            4 => Self::Teleport,
+            5 => Self::SummonSpirit,
+            6 => Self::Heal,
             _ => unreachable!("Failed to get NormalSpell from binary"),
         })
     }
@@ -709,10 +724,9 @@ impl ToBinary for NormalSpell {
             Self::BidenBlast => 1,
             Self::Identify => 2,
             Self::Charge => 3,
-            Self::BigExplode => 4,
-            Self::Teleport => 5,
-            Self::SummonSpirit => 6,
-            Self::Heal => 7,
+            Self::Teleport => 4,
+            Self::SummonSpirit => 5,
+            Self::Heal => 6,
         }
         .to_binary(binary)
     }

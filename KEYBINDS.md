@@ -26,9 +26,11 @@ tab: do nothing
 t: swap camera focus
 c: convert energy to money
 1-6: use items or casting spells in relevant slot
+    Shift to cast spells with variable input
 i: toggle inspect mode
 z: toggle aiming
 C: clear feedback
 m: memorize selected position
 R: Remember selected position
 x: swap right column meaning
+`: shout 

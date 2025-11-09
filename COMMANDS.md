@@ -174,7 +174,7 @@ set\_detect\_mod \[mod\]
 set\_perception \[perception\]
     Sets the player's perception to the given \[perception\]
 
-cast \[spell type\] \[spell\]
+cast \[spell type\] \[spell\] \[energy\]
     Casts the given \[spell\] at the selector, the spells(and the type
     they are in are as follows):
         normal
@@ -182,19 +182,24 @@ cast \[spell type\] \[spell\]
             biden\_blast
             identify
             charge
-            big\_explode
             teleport
             summon\_spirit
+            heal
         contact
             drain\_health
+    The energy field should either be a number (for manual energy
+    input), or "none" for automatic
 
-create\_circle \[spell type\] \[spell\] \[pos x\] \[pos y\] {target x} {targety}
+create\_circle \[spell type\] \[spell\] \[energy\] \[energy per shot\] \[pos x\] \[pos y\] {target x} {targety}
     Creates a spell circle at the given relative position. Uses the
     same spell selection rules as cast. The target position is not
     always needed by spells, so it can be ignored for those spells.
+    The energy field is the amount of energy the circle has to cast
+    from. The energy per shot field should be a number to specify how
+    much to spend per shot, or "none" for automatic.
 
 get\_data {x} {y}
-    Gets all data at the given relative position(except path data >:})
+    Gets all data at the given relative position
 
 get\_boss
    Gives the boss's position, type, and index if it exists

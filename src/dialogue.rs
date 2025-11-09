@@ -266,9 +266,6 @@ fn full_reset(index: &mut usize) {
     if abes_nice_things::Input::<()>::yn()
         .msg("Are you sure?")
         .get()
-        .unwrap()
-        .as_str()
-        == "y"
     {
         *index = 0;
         let test_msg = "Testing... YIPPY!!!".to_string();

@@ -1,4 +1,4 @@
-RELATIVE POSITIONS:
+# RELATIVE POSITIONS:
 The relative position format is used when specifying positions. The
 format applies to each number individually instead of the position as
 a whole. The format is as follows:
@@ -24,7 +24,7 @@ meaning that you cannot just skip one and have it be relative to the
 selector for that axis alone. If you need to, simply use "s0" for that
 axis.
 
-ARGUMENTS:
+# ARGUMENTS:
 Arguments marked with \[name\] are required while arguments marked
 with {name} are optional and can be inferred by the command. However,
 when typing in the command, do not include the square or curly

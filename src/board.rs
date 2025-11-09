@@ -475,7 +475,11 @@ impl Board {
         for spell in self.spells.iter() {
             if self.is_visible(spell.pos, bounds.clone(), full_vis) {
                 crossterm::queue!(lock, (spell.pos - bounds.start).to_move()).unwrap();
-                write!(lock, "{}∆\x1b[0m", Style::new().purple()).unwrap();
+                if spell.active {
+                    write!(lock, "{}∆\x1b[0m", Style::new().purple()).unwrap();
+                } else {
+                    write!(lock, "∆").unwrap();
+                }
             }
         }
     }

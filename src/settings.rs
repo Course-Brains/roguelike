@@ -10,6 +10,7 @@ pub struct Settings {
     fast_mode: Field,
     auto_move: Field,
     selector_follows_player: Field,
+    circles_spawn_enabled: Field,
 }
 macro_rules! getter {
     ($name:ident, $out:ty) => {
@@ -87,6 +88,7 @@ impl Settings {
                             "fast_mode" => thing!(fast_mode, bool),
                             "auto_move" => thing!(auto_move, bool),
                             "selector_follows_player" => thing!(selector_follows_player, bool),
+                            "circles_spawn_enabled" => thing!(circles_spawn_enabled, bool),
                             _ => {}
                         }
                     }
@@ -107,42 +109,24 @@ impl Settings {
     }
     fn to_file(&self) {
         let mut file = std::fs::File::create("settings").unwrap();
-        writeln!(
-            file,
-            "kick_enemies {}",
-            bool::try_from(*self.kick_enemies).unwrap()
-        )
-        .unwrap();
-        writeln!(
-            file,
-            "kick_doors {}",
-            bool::try_from(*self.kick_doors).unwrap()
-        )
-        .unwrap();
-        writeln!(
-            file,
-            "difficulty {}",
-            Difficulty::try_from(*self.difficulty).unwrap()
-        )
-        .unwrap();
-        writeln!(
-            file,
-            "fast_mode {}",
-            bool::try_from(*self.fast_mode).unwrap()
-        )
-        .unwrap();
-        writeln!(
-            file,
-            "auto_move {}",
-            bool::try_from(*self.auto_move).unwrap()
-        )
-        .unwrap();
-        writeln!(
-            file,
-            "selector_follows_player {}",
-            bool::try_from(*self.selector_follows_player).unwrap()
-        )
-        .unwrap();
+        macro_rules! helper {
+            ($name:literal, $field:ident, $type:ty) => {
+                writeln!(
+                    file,
+                    "{} {}",
+                    $name,
+                    <$type>::try_from(*self.$field).unwrap()
+                )
+                .unwrap();
+            };
+        }
+        helper!("kick_enemies", kick_enemies, bool);
+        helper!("kick doors", kick_doors, bool);
+        helper!("difficulty", difficulty, Difficulty);
+        helper!("fast_mode", fast_mode, bool);
+        helper!("auto_move", auto_move, bool);
+        helper!("selector_follows_player", selector_follows_player, bool);
+        helper!("circles_spawn_enabled", circles_spawn_enabled, bool);
 
         file.flush().unwrap();
     }
@@ -154,6 +138,7 @@ impl Settings {
             3 => &mut self.fast_mode,
             4 => &mut self.auto_move,
             5 => &mut self.selector_follows_player,
+            6 => &mut self.circles_spawn_enabled,
             _ => panic!("I diddly done goofed up the math"),
         }
     }
@@ -165,11 +150,12 @@ impl Settings {
             3 => &self.fast_mode,
             4 => &self.auto_move,
             5 => &self.selector_follows_player,
+            6 => &self.circles_spawn_enabled,
             _ => panic!("Someone is bad at math, and it is probably me"),
         }
     }
     const fn num_fields(&self) -> usize {
-        6
+        7
     }
 
     getter!(kick_enemies, bool);
@@ -178,6 +164,7 @@ impl Settings {
     getter!(fast_mode, bool);
     getter!(auto_move, bool);
     getter!(selector_follows_player, bool);
+    getter!(circles_spawn_enabled, bool);
 }
 // Unchanging editor methods
 impl Settings {
@@ -378,6 +365,7 @@ impl Default for Settings {
             fast_mode: Field::new("fast mode", false),
             auto_move: Field::new("auto move", false),
             selector_follows_player: Field::new("selector follows player", false),
+            circles_spawn_enabled: Field::new("circles spawn enabled", true),
         }
     }
 }
@@ -386,6 +374,11 @@ impl FromBinary for Settings {
     where
         Self: Sized,
     {
+        macro_rules! help {
+            ($type:ty) => {
+                Value::from(<$type>::from_binary(binary)?).into()
+            };
+        }
         Ok(Settings {
             kick_enemies: Value::from(bool::from_binary(binary)?).into(),
             kick_doors: Value::from(bool::from_binary(binary)?).into(),
@@ -393,6 +386,7 @@ impl FromBinary for Settings {
             fast_mode: Value::from(bool::from_binary(binary)?).into(),
             auto_move: Value::from(bool::from_binary(binary)?).into(),
             selector_follows_player: Value::from(bool::from_binary(binary)?).into(),
+            circles_spawn_enabled: help!(bool),
         })
     }
 }
@@ -409,6 +403,7 @@ impl ToBinary for Settings {
         help!(fast_mode, bool);
         help!(auto_move, bool);
         help!(selector_follows_player, bool);
+        help!(circles_spawn_enabled, bool);
         Ok(())
     }
 }

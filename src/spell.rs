@@ -19,6 +19,7 @@ pub struct SpellCircle {
     pub has_fired: bool,
     pub cooldown: usize,
     pub energy_per_cast: Option<usize>,
+    pub active: bool,
 }
 impl SpellCircle {
     pub fn new_player(
@@ -37,6 +38,7 @@ impl SpellCircle {
             has_fired: false,
             cooldown: spell.cast_time(energy_per_cast),
             energy_per_cast,
+            active: crate::SETTINGS.circles_spawn_enabled(),
         }
     }
     pub fn new_enemy(
@@ -55,10 +57,14 @@ impl SpellCircle {
             has_fired: false,
             cooldown: spell.cast_time(energy_per_cast),
             energy_per_cast,
+            active: true,
         }
     }
     // returns true if the circle should be kept (false = removal)
     pub fn update(&mut self, board: &mut Board, player: &mut Player) -> bool {
+        if !self.active {
+            return true;
+        }
         let energy_used = self.energy_per_cast.unwrap_or(self.spell.energy_needed());
         match self.spell {
             Spell::Normal(spell) => {
@@ -409,6 +415,10 @@ impl NormalSpell {
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
                 }
+                let death_message = match energy > 15 {
+                    true => get(51),
+                    false => get(47),
+                };
                 FireBall {
                     caster: caster.clone(),
                     player,
@@ -420,7 +430,7 @@ impl NormalSpell {
                     player_damage: damage * 5,
                     death_name: caster
                         .map(|enemy| enemy.try_read().unwrap().variant.kill_name())
-                        .unwrap_or("a lack of depth perception".to_string()),
+                        .unwrap_or(death_message),
                 }
                 .evaluate(time);
                 true

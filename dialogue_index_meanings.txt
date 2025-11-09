@@ -45,7 +45,8 @@
 44: spell(normal): biden blast
 45: spell(normal): identify
 46: spell(normal): charge
-47(DEPRICATED): spell(normal): big explode
+47: spell suicide: biden blast
 48: spell(normal): teleport
 49: spell(normal): summon spirit
 50: spell(normal): heal
+51: spell suicide(overcharge): biden blast

@@ -17,7 +17,7 @@ name = "launcher"
 path = "src/bin/launcher.rs"
 
 [dependencies]
-abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "1ffbd57", features = ["dyn_binary"] }
+abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "30b8184", features = ["dyn_binary"] }
 crossterm = "0.29.0"
 
 [features]

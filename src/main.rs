@@ -242,6 +242,7 @@ fn main() {
         *LOG.lock().unwrap() = Some(File::create("log").unwrap());
     }
     random::initialize();
+    abes_nice_things::random::initialize();
     crate::log!(
         "Recieved args: {:?}",
         std::env::args().collect::<Vec<String>>()
@@ -624,6 +625,14 @@ fn main() {
                             } else {
                                 state.open_door(state.player.selector, false);
                             }
+                        } else {
+                            for circle in state.board.spells.iter_mut() {
+                                if circle.pos == state.player.selector {
+                                    circle.active ^= true;
+                                    state.increment();
+                                    break;
+                                }
+                            }
                         }
                     }
                     Input::Use(index, alt) => {
@@ -865,6 +874,7 @@ fn main() {
                                 enemy.try_write().unwrap().active = true;
                             }
                         }
+                        state.increment();
                     }
                 }
             }

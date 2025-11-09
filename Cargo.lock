@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "abes_nice_things"
 version = "0.2.0"
-source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=1ffbd57#1ffbd57869dab3ed9d332ae1ceb3361750bd6d3b"
+source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=30b8184#30b81842bc7f4ab478a3916a58a34c18666fb262"
 
 [[package]]
 name = "autocfg"

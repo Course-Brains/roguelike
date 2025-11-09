@@ -73,14 +73,18 @@ impl ItemType {
                 }
                 if min_dist != usize::MAX {
                     crate::set_feedback(format!("The nearest boss is at {min_pos}"));
+                    crate::draw_feedback();
                     true
                 } else {
                     crate::set_feedback("There are no remaining bosses".to_string());
+                    crate::draw_feedback();
                     false
                 }
             }
             Self::Gamba => {
-                let random = crate::random();
+                let random = ((abes_nice_things::random::random()
+                    .rotate_left(crate::random() as u32))
+                    & 255) as u8;
                 if random == 0 {
                     // super good luck
                     *crate::feedback() = "You feel blessed".to_string();
@@ -89,8 +93,8 @@ impl ItemType {
                     } else if state.player.effects.unlucky.is_active() {
                         state.player.effects.unlucky.remove();
                     } else {
-                        state.player.max_health += state.player.max_health / 2;
-                        state.player.max_energy += state.player.max_energy / 2;
+                        state.player.max_health += state.player.max_health;
+                        state.player.max_energy += state.player.max_energy;
                         state.player.give_money(state.player.get_money());
                         state.player.perception += 5;
                     }

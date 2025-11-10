@@ -2,7 +2,6 @@
 use crate::Style;
 use crate::{
     Board, Enemy, MapGenSettings, Vector, board::Piece, enemy::Variant, pieces::door::Door,
-    random::*,
 };
 use abes_nice_things::debug;
 use std::cell::RefCell;
@@ -52,6 +51,23 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
         board
     })
 }
+fn random() -> u8 {
+    if DO_DELAY.load(Ordering::Relaxed) {
+        crate::random()
+    } else {
+        (abes_nice_things::random() & 255) as u8
+    }
+}
+fn random_index(len: usize) -> Option<usize> {
+    if len == 0 {
+        return None;
+    }
+    if DO_DELAY.load(Ordering::Relaxed) {
+        Some(crate::random() as usize % len)
+    } else {
+        Some((abes_nice_things::random() % len as u64) as usize)
+    }
+}
 fn promote_boss(board: &mut Board, num_bosses: usize) {
     let mut current_tier = board.get_highest_tier();
     let mut potential = Vec::new();
@@ -73,7 +89,7 @@ fn promote_boss(board: &mut Board, num_bosses: usize) {
             failed = false;
         }
         delay();
-        if current_tier > 1 && (failed || bool::random()) {
+        if current_tier > 1 && (failed || (random() & 1) != 0) {
             // > 1 because lowest is 1
             crate::log!("{STYLE}Decrimenting current tier\x1b[0m");
             current_tier -= 1;
@@ -88,9 +104,19 @@ fn attempt_pick_pos(
 ) -> Option<Vector> {
     for _ in 0..10 {
         delay();
-        let x = random_in_usize_range(x_range);
+        let x = if DO_DELAY.load(Ordering::Relaxed) {
+            (abes_nice_things::random() % (x_range.end - x_range.start) as u64) as usize
+                + x_range.start
+        } else {
+            crate::random::random_in_usize_range(x_range)
+        };
         delay();
-        let y = random_in_usize_range(y_range);
+        let y = if DO_DELAY.load(Ordering::Relaxed) {
+            (abes_nice_things::random() % (y_range.end - y_range.start) as u64) as usize
+                + y_range.start
+        } else {
+            crate::random::random_in_usize_range(y_range)
+        };
         let pos = Vector::new(x, y);
         if board.get_enemy(pos, None).is_none() && board[pos].is_none() {
             return Some(pos);
@@ -115,7 +141,7 @@ pub fn checksum(board: &Board) -> Result<(), String> {
     Ok(())
 }
 fn delay() {
-    if DO_DELAY.load(Ordering::SeqCst) {
+    if DO_DELAY.load(Ordering::Relaxed) {
         std::thread::sleep(DELAY)
     }
 }

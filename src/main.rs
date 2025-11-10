@@ -627,7 +627,7 @@ fn main() {
                             }
                         } else {
                             for circle in state.board.spells.iter_mut() {
-                                if circle.pos == state.player.selector {
+                                if circle.pos == state.player.selector && circle.caster.is_none() {
                                     circle.active ^= true;
                                     state.increment();
                                     break;

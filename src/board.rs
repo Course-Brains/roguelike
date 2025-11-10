@@ -400,11 +400,7 @@ impl Board {
                 player.effects.full_vis.is_active(),
             )
         }
-        self.draw_spells(
-            &mut lock,
-            bounds.clone(),
-            player.effects.full_vis.is_active(),
-        );
+        self.draw_spells(&mut lock, bounds.clone(), player);
         self.draw_enemies(&mut lock, bounds.clone(), player);
         self.draw_specials(
             &mut lock,
@@ -471,9 +467,13 @@ impl Board {
             }
         }
     }
-    fn draw_spells(&self, lock: &mut impl Write, bounds: Range<Vector>, full_vis: bool) {
+    fn draw_spells(&self, lock: &mut impl Write, bounds: Range<Vector>, player: &Player) {
+        let full_vis = player.effects.full_vis.is_active();
+        let mage_eye = player.limbs.count_mage_eyes() > 0;
         for spell in self.spells.iter() {
-            if self.is_visible(spell.pos, bounds.clone(), full_vis) {
+            if (self.is_reachable(spell.pos) && mage_eye)
+                || self.is_visible(spell.pos, bounds.clone(), full_vis)
+            {
                 crossterm::queue!(lock, (spell.pos - bounds.start).to_move()).unwrap();
                 if spell.active {
                     write!(lock, "{}∆\x1b[0m", Style::new().purple()).unwrap();

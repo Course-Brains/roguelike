@@ -1,3 +1,5 @@
+use abes_nice_things::Number;
+
 use crate::proj_delay;
 use crate::{
     Board, Collision, Enemy, Entity, FromBinary, Player, Style, ToBinary, Vector, board::Special,
@@ -379,6 +381,9 @@ impl NormalSpell {
             crate::stats().add_spell(Spell::Normal(*self));
         }
         let energy = energy.unwrap_or(self.energy_needed());
+        if energy < self.energy_needed() {
+            return false;
+        }
         match self {
             Self::Swap => {
                 let addr = caster.as_ref().map(|arc| Arc::as_ptr(arc).addr());
@@ -408,9 +413,6 @@ impl NormalSpell {
                 false
             }
             Self::BidenBlast => {
-                if energy < 4 {
-                    return false;
-                }
                 let damage = (crate::random::random16() as usize * energy) / 4;
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
@@ -545,9 +547,6 @@ impl NormalSpell {
                 true
             }
             Self::Teleport => {
-                if energy != 10 {
-                    return false;
-                }
                 let aim = aim.unwrap();
                 let stop = caster
                     .as_ref()
@@ -594,9 +593,6 @@ impl NormalSpell {
                 true
             }
             Self::SummonSpirit => {
-                if energy != 10 {
-                    return false;
-                }
                 assert!(caster.is_none(), "Only the player can summon spirits");
                 if let Some(time) = time {
                     *time += start.elapsed()
@@ -604,42 +600,55 @@ impl NormalSpell {
                 // quite frankly doesn't matter enough how long this takes for me to do it properly
                 player.add_item(crate::ItemType::Spirit)
             }
-            Self::Heal => {
-                if energy < 1 {
-                    return false;
-                }
-                match caster {
-                    Some(arc) => {
-                        let mut enemy = arc.try_write().unwrap();
-                        if enemy.health >= enemy.variant.max_health() {
-                            return false;
-                        }
-                        enemy.health += energy;
-                        enemy.health = enemy.health.min(enemy.variant.max_health());
-                        true
+            Self::Heal => match caster {
+                Some(arc) => {
+                    let mut enemy = arc.try_write().unwrap();
+                    if enemy.health >= enemy.variant.max_health() {
+                        return false;
                     }
-                    None => {
-                        let mut amount =
-                            (crate::random() as usize % (((energy / 3).pow(2) + 1) * 4)) + 1;
-                        if crate::SETTINGS.difficulty() < crate::Difficulty::Hard {
-                            amount *= 2;
-                        }
-                        player.heal(amount);
-                        true
-                    }
+                    enemy.health += energy;
+                    enemy.health = enemy.health.min(enemy.variant.max_health());
+                    true
                 }
-            }
+                None => {
+                    let mut amount =
+                        (crate::random() as usize % (((energy / 3).pow(2) + 1) * 4)) + 1;
+                    if crate::SETTINGS.difficulty() < crate::Difficulty::Hard {
+                        amount *= 2;
+                    }
+                    player.heal(amount);
+                    true
+                }
+            },
         }
     }
     pub fn cast_time(&self, energy: Option<usize>) -> usize {
-        let energy = energy.unwrap_or(self.energy_needed());
+        let mut energy = energy.unwrap_or(self.energy_needed());
         match self {
             Self::Swap => energy,
             Self::BidenBlast => energy / 2,
             Self::Identify => 0, // Does nothing with more energy
             Self::Charge => energy / 2,
-            Self::Teleport => 3,      // Does nothing with more energy
-            Self::SummonSpirit => 10, // Does nothing with more energy
+            Self::Teleport => {
+                // 10 -> 3 turns
+                // decreases by 1 turn every 5
+                energy.max_assign(10);
+                if energy >= 25 {
+                    0
+                } else {
+                    3 - ((energy - 10) / 5)
+                }
+            }
+            Self::SummonSpirit => {
+                // 10 -> 10 turns
+                // decrease by 1 turn every 2
+                energy.max_assign(10);
+                if energy >= 30 {
+                    0
+                } else {
+                    10 - ((energy - 10) / 2)
+                }
+            }
             Self::Heal => energy * 2,
         }
     }

@@ -134,7 +134,7 @@ impl Enemy {
             if this.as_ref().unwrap().variant.mage_aggro() && player.mage_aggro() {
                 this.as_mut()
                     .unwrap()
-                    .log("Woke up due to mage sight".to_string());
+                    .log("Woke up due to mage aggro".to_string());
                 this.as_mut().unwrap().active = true;
             } else if this
                 .as_ref()
@@ -1077,13 +1077,23 @@ impl Variant {
                 }
             }
         };
+        // Mages have a harder time detecting you when you are at low energy
+        let mage_detect_bonus = player.energy > 0;
         match self {
             Variant::Basic => advantage_pass(
                 || cost <= luck_roll8(player) as usize,
                 player.get_detect_mod(),
             ),
             Variant::Mage(_) => advantage_pass(
-                || cost <= ((luck_roll8(player) + 1) << 2) as usize,
+                || {
+                    cost <= {
+                        if mage_detect_bonus {
+                            (luck_roll8(player) + 1) << 3
+                        } else {
+                            luck_roll8(player)
+                        }
+                    } as usize
+                },
                 player.get_detect_mod(),
             ),
             Variant::Fighter(_) => advantage_pass(

@@ -20,6 +20,7 @@ pub enum Input {
     ChangeRightColumn,          // rotate what is shown/used by the right column
     Delay(std::time::Duration), // Internal non player input for auto move
     Shout,                      // Alert all reachable enemies
+    StopAutomove,               // Internal signal that the automove has ended
 }
 impl Input {
     pub fn get() -> Input {

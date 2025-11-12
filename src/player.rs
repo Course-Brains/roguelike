@@ -38,6 +38,8 @@ pub struct Player {
     // If the player just cast a spell
     // (or if they spent their turn winding up for one in hard mode or harder)
     pub just_cast: bool,
+    // If the player is currently automoving
+    pub automoving: bool,
 }
 impl Player {
     pub fn new(pos: Vector) -> Player {
@@ -65,6 +67,7 @@ impl Player {
             known_spells: Player::starting_spells(),
             right_column: RightColumn::Items,
             just_cast: false,
+            automoving: false,
         }
     }
     fn starting_max_health() -> usize {
@@ -119,8 +122,11 @@ impl Player {
     fn starting_spells() -> [Option<crate::Spell>; 6] {
         let mut out = [None; 6];
         let mut index = 0;
-        out[index] = Some(crate::Spell::Normal(crate::spell::NormalSpell::Heal));
-        index += 1;
+        let difficulty = crate::SETTINGS.difficulty();
+        if difficulty >= crate::Difficulty::Hard {
+            out[index] = Some(crate::Spell::Normal(crate::spell::NormalSpell::Heal));
+            index += 1;
+        }
         if crate::SETTINGS.difficulty() <= crate::Difficulty::Easy {
             out[index] = Some(crate::Spell::Normal(crate::spell::NormalSpell::BidenBlast));
         }
@@ -724,6 +730,7 @@ impl FromBinary for Player {
             known_spells: <[Option<crate::Spell>; 6]>::from_binary(binary)?,
             right_column: RightColumn::from_binary(binary)?,
             just_cast: bool::from_binary(binary)?,
+            automoving: bool::from_binary(binary)?,
         })
     }
 }
@@ -757,7 +764,8 @@ impl ToBinary for Player {
             .map(Option::as_ref)
             .to_binary(binary)?;
         self.right_column.to_binary(binary)?;
-        self.just_cast.to_binary(binary)
+        self.just_cast.to_binary(binary)?;
+        self.automoving.to_binary(binary)
     }
 }
 #[derive(Debug, Clone, Copy)]

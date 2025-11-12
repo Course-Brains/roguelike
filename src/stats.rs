@@ -61,6 +61,8 @@ pub struct Stats {
     pub times_remembered: usize,
     // The damage of the attack that killed the player
     pub killing_damage: usize,
+    // If the player died while automoving
+    pub was_automoving: bool,
 }
 impl Stats {
     pub fn new() -> Stats {
@@ -95,6 +97,7 @@ impl Stats {
             times_memorized: 0,
             times_remembered: 0,
             killing_damage: 0,
+            was_automoving: false,
         }
     }
     pub fn collect_death(&mut self, state: &State) {
@@ -105,6 +108,7 @@ impl Stats {
         self.killer = killing_data.1;
         self.killing_damage = killing_data.2;
         self.settings = SETTINGS.clone();
+        self.was_automoving = state.player.automoving;
     }
     pub fn add_item(&mut self, item: ItemType) {
         self.buy_list
@@ -170,6 +174,7 @@ impl FromBinary for Stats {
             times_memorized: usize::from_binary(binary)?,
             times_remembered: usize::from_binary(binary)?,
             killing_damage: usize::from_binary(binary)?,
+            was_automoving: bool::from_binary(binary)?,
         })
     }
 }
@@ -204,7 +209,8 @@ impl ToBinary for Stats {
         self.settings.to_binary(binary)?;
         self.times_memorized.to_binary(binary)?;
         self.times_remembered.to_binary(binary)?;
-        self.killing_damage.to_binary(binary)
+        self.killing_damage.to_binary(binary)?;
+        self.was_automoving.to_binary(binary)
     }
 }
 pub fn save_stats() {
@@ -384,6 +390,7 @@ pub fn view_stats() {
                         "settings" => list!(settings, index),
                         "times_memorized" => list!(times_memorized, index),
                         "times_remembered" => list!(times_remembered, index),
+                        "was_automoving" => list!(was_automoving, index),
                         other => println!("{other} is not a valid field"),
                     }
                 }

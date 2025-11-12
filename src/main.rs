@@ -1,7 +1,7 @@
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 0x00000013;
+const SAVE_VERSION: Version = 0x00000015;
 mod player;
 use player::Player;
 mod board;
@@ -617,20 +617,27 @@ fn main() {
                         state.render();
                     }
                     Input::Enter => {
-                        if let Some(Piece::Door(door)) = &mut state.board[state.player.selector] {
-                            if door.open {
-                                door.open = false;
-                                state.board.flood(state.player.pos);
-                                state.increment();
-                            } else {
-                                state.open_door(state.player.selector, false);
-                            }
-                        } else {
-                            for circle in state.board.spells.iter_mut() {
-                                if circle.pos == state.player.selector && circle.caster.is_none() {
-                                    circle.active ^= true;
+                        if state.player.upgrades.telekinesis
+                            || state.player.selector.is_near(state.player.pos, 5)
+                        {
+                            if let Some(Piece::Door(door)) = &mut state.board[state.player.selector]
+                            {
+                                if door.open {
+                                    door.open = false;
+                                    state.board.flood(state.player.pos);
                                     state.increment();
-                                    break;
+                                } else {
+                                    state.open_door(state.player.selector, false);
+                                }
+                            } else {
+                                for circle in state.board.spells.iter_mut() {
+                                    if circle.pos == state.player.selector
+                                        && circle.caster.is_none()
+                                    {
+                                        circle.active ^= true;
+                                        state.increment();
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -822,6 +829,8 @@ fn main() {
                         set_feedback(match state.player.memory {
                             Some(memory) => {
                                 stats().times_remembered += 1;
+                                state.player.focus = player::Focus::Selector;
+                                state.player.selector = memory;
                                 format!("You remember the position {memory}")
                             }
                             None => "You have made no mental notes in this place.".to_string(),
@@ -853,6 +862,7 @@ fn main() {
                             let send = &INPUT_SYSTEM.0;
                             state.player.fast = false;
                             state.player.focus = player::Focus::Player;
+                            state.player.automoving = true;
                             let duration =
                                 std::time::Duration::from_secs(1) / directions.len() as u32;
                             for direction in directions.into_iter() {
@@ -861,6 +871,7 @@ fn main() {
                                 send.send(CommandInput::Input(Input::Delay(duration)))
                                     .unwrap();
                             }
+                            send.send(CommandInput::Input(Input::StopAutomove)).unwrap();
                         }
                     }
                     Input::ChangeRightColumn => {
@@ -876,6 +887,7 @@ fn main() {
                         }
                         state.increment();
                     }
+                    Input::StopAutomove => state.player.automoving = false,
                 }
             }
             CommandInput::Command(command) => {

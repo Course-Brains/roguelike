@@ -11,6 +11,7 @@ pub struct Upgrades {
     pub precise_convert: bool,
     pub lifesteal: bool,
     pub full_energy_ding: bool,
+    pub telekinesis: bool,
 }
 impl Upgrades {
     pub const fn new() -> Upgrades {
@@ -20,6 +21,7 @@ impl Upgrades {
             precise_convert: false,
             lifesteal: false,
             full_energy_ding: false,
+            telekinesis: false,
         }
     }
     pub fn get_available(&self) -> Vec<UpgradeType> {
@@ -44,6 +46,9 @@ impl Upgrades {
         if !self.lifesteal {
             out.push(UpgradeType::FullEnergyDing)
         }
+        if !self.telekinesis {
+            out.push(UpgradeType::Telekinesis)
+        }
 
         out
     }
@@ -59,6 +64,7 @@ impl FromBinary for Upgrades {
             precise_convert: bool::from_binary(binary)?,
             lifesteal: bool::from_binary(binary)?,
             full_energy_ding: bool::from_binary(binary)?,
+            telekinesis: bool::from_binary(binary)?,
         })
     }
 }
@@ -68,7 +74,8 @@ impl ToBinary for Upgrades {
         self.soft_shoes.to_binary(binary)?;
         self.precise_convert.to_binary(binary)?;
         self.lifesteal.to_binary(binary)?;
-        self.full_energy_ding.to_binary(binary)
+        self.full_energy_ding.to_binary(binary)?;
+        self.telekinesis.to_binary(binary)
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -79,6 +86,7 @@ pub enum UpgradeType {
     PreciseConvert, // convert one energy at a time
     FullEnergyDing, // send bell character when full energy
     Lifesteal,      // health on kill
+    Telekinesis,    // allows interacting with things from any range
     // Infinite upgrades
     EnergyBoost, // max energy (exponential cost?)
     HealthBoost, // max health ...
@@ -127,7 +135,7 @@ impl UpgradeType {
             Self::SoftShoes => 200,
             Self::PreciseConvert | Self::Lifesteal => 150,
             Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => 100,
-            Self::FullEnergyDing => 50,
+            Self::FullEnergyDing | Self::Telekinesis => 50,
             Self::Spell(spell) => spell.get_cost(),
             // The free shit
             Self::SavePint
@@ -266,6 +274,10 @@ impl UpgradeType {
                 player.known_spells[index] = Some(spell);
                 true
             }
+            Self::Telekinesis => {
+                player.upgrades.telekinesis = true;
+                true
+            }
         }
     }
     pub fn can_pickup(self, player: &Player) -> bool {
@@ -287,6 +299,7 @@ impl UpgradeType {
             Self::HealthBoost => crate::debug_only!(get(12)),
             Self::EnergyBoost => crate::debug_only!(get(13)),
             Self::Lifesteal => crate::debug_only!(get(14)),
+            Self::Telekinesis => get(52),
             // Bonuses
             Self::BonusNoWaste => crate::debug_only!(get(15)),
             Self::BonusNoDamage => get(16),
@@ -309,7 +322,8 @@ impl UpgradeType {
             | Self::SoftShoes
             | Self::PreciseConvert
             | Self::FullEnergyDing
-            | Self::Lifesteal => Some(false),
+            | Self::Lifesteal
+            | Self::Telekinesis => Some(false),
             Self::EnergyBoost | Self::HealthBoost | Self::LimbMageEye | Self::LimbSeerEye => {
                 Some(true)
             }
@@ -335,6 +349,7 @@ impl std::fmt::Display for UpgradeType {
             Self::LimbSeerEye => write!(f, "limb seer eye"),
             Self::FullEnergyDing => write!(f, "full energy ding"),
             Self::Spell(spell) => write!(f, "Spell ({spell})"),
+            Self::Telekinesis => write!(f, "telekinesis"),
         }
     }
 }
@@ -358,6 +373,12 @@ impl std::str::FromStr for UpgradeType {
                 "limb_mage_eye" => Ok(Self::LimbMageEye),
                 "limb_seer_eye" => Ok(Self::LimbSeerEye),
                 "full_energy_ding" => Ok(Self::FullEnergyDing),
+                "spell" => Ok(Self::Spell(
+                    args.map(|s| s.to_string() + " ")
+                        .collect::<String>()
+                        .parse()?,
+                )),
+                "telekinesis" => Ok(Self::Telekinesis),
                 other => Err(format!("{other} is not a valid upgrade")),
             },
             None => Err("Need to specify what upgrade".to_string()),
@@ -367,7 +388,7 @@ impl std::str::FromStr for UpgradeType {
 impl Random for UpgradeType {
     fn random() -> Self {
         // save pint and bonuses intentionally ommitted
-        match random() % 9 {
+        match random() % 10 {
             0 => Self::Map,
             1 => Self::SoftShoes,
             2 => Self::PreciseConvert,
@@ -377,6 +398,7 @@ impl Random for UpgradeType {
             6 => Self::LimbMageEye,
             7 => Self::LimbSeerEye,
             8 => Self::FullEnergyDing,
+            9 => Self::Telekinesis,
             _ => unreachable!("Le fucked is up"),
         }
     }
@@ -402,6 +424,7 @@ impl FromBinary for UpgradeType {
             12 => Self::LimbSeerEye,
             13 => Self::FullEnergyDing,
             14 => Self::Spell(crate::spell::Spell::from_binary(binary)?),
+            15 => Self::Telekinesis,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -432,6 +455,7 @@ impl ToBinary for UpgradeType {
                 14_u8.to_binary(binary)?;
                 spell.to_binary(binary)
             }
+            Self::Telekinesis => 15_u8.to_binary(binary),
         }
     }
 }

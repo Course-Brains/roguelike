@@ -509,6 +509,13 @@ impl NormalSpell {
                         }
                     }
                 }
+                // Without this charges stop at the end of the visible area
+                if let Some(pos) = path.last() {
+                    match caster {
+                        Some(ref caster) => caster.try_write().unwrap().pos = *pos,
+                        None => player.pos = *pos,
+                    }
+                }
                 if let Some(collision) = collision
                     && let Some(entity) = collision.into_entity(player)
                 {

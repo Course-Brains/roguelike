@@ -11,6 +11,7 @@ pub struct Settings {
     auto_move: Field,
     selector_follows_player: Field,
     circles_spawn_enabled: Field,
+    input_queueing: Field,
 }
 macro_rules! getter {
     ($name:ident, $out:ty) => {
@@ -89,6 +90,7 @@ impl Settings {
                             "auto_move" => thing!(auto_move, bool),
                             "selector_follows_player" => thing!(selector_follows_player, bool),
                             "circles_spawn_enabled" => thing!(circles_spawn_enabled, bool),
+                            "input_queueing" => thing!(input_queueing, bool),
                             _ => {}
                         }
                     }
@@ -96,7 +98,7 @@ impl Settings {
                 if difficulty_was_not_set {
                     *settings.difficulty = Value::from(*difficulty_choice);
                 }
-                crate::log!("Settings chosen: {settings:?}");
+                crate::log!("Settings chosen: {settings:#?}");
                 settings
             }
             false => {
@@ -119,6 +121,9 @@ impl Settings {
                 )
                 .unwrap();
             };
+            ($name:literal, $field:ident) => {
+                helper!($name, $field, bool);
+            };
         }
         helper!("kick_enemies", kick_enemies, bool);
         helper!("kick doors", kick_doors, bool);
@@ -127,6 +132,7 @@ impl Settings {
         helper!("auto_move", auto_move, bool);
         helper!("selector_follows_player", selector_follows_player, bool);
         helper!("circles_spawn_enabled", circles_spawn_enabled, bool);
+        helper!("input_queueing", input_queueing);
 
         file.flush().unwrap();
     }
@@ -139,6 +145,7 @@ impl Settings {
             4 => &mut self.auto_move,
             5 => &mut self.selector_follows_player,
             6 => &mut self.circles_spawn_enabled,
+            7 => &mut self.input_queueing,
             _ => panic!("I diddly done goofed up the math"),
         }
     }
@@ -151,11 +158,12 @@ impl Settings {
             4 => &self.auto_move,
             5 => &self.selector_follows_player,
             6 => &self.circles_spawn_enabled,
+            7 => &self.input_queueing,
             _ => panic!("Someone is bad at math, and it is probably me"),
         }
     }
     const fn num_fields(&self) -> usize {
-        7
+        8
     }
 
     getter!(kick_enemies, bool);
@@ -165,6 +173,7 @@ impl Settings {
     getter!(auto_move, bool);
     getter!(selector_follows_player, bool);
     getter!(circles_spawn_enabled, bool);
+    getter!(input_queueing, bool);
 }
 // Unchanging editor methods
 impl Settings {
@@ -366,6 +375,7 @@ impl Default for Settings {
             auto_move: Field::new("auto move", false),
             selector_follows_player: Field::new("selector follows player", false),
             circles_spawn_enabled: Field::new("circles spawn enabled", true),
+            input_queueing: Field::new("input queueing", true),
         }
     }
 }
@@ -387,6 +397,7 @@ impl FromBinary for Settings {
             auto_move: Value::from(bool::from_binary(binary)?).into(),
             selector_follows_player: Value::from(bool::from_binary(binary)?).into(),
             circles_spawn_enabled: help!(bool),
+            input_queueing: help!(bool),
         })
     }
 }
@@ -404,9 +415,11 @@ impl ToBinary for Settings {
         help!(auto_move, bool);
         help!(selector_follows_player, bool);
         help!(circles_spawn_enabled, bool);
+        help!(input_queueing, bool);
         Ok(())
     }
 }
+// You're done adding the new field
 #[derive(Debug, Clone)]
 pub struct Field {
     current: Value,

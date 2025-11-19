@@ -287,3 +287,7 @@ set\_max\_energy \[new max\]
 
 set\_spell \[index\] \[spell\]
     Sets the known spell at \[index\] to \[spell\]
+
+force\_dialogue\_index\_recalc
+    Causes the dialogue indexes to reinitialize. Essentially only
+    needs to be used if you modify the index file during a run.

@@ -202,7 +202,13 @@ impl Player {
         }
         // Damage has been determined
         if crate::BONUS_NO_DAMAGE.load(crate::RELAXED) {
-            crate::set_feedback(get(23));
+            let mut possible = vec![23];
+            if self.energy > 0 {
+                possible.push(54);
+            }
+            crate::set_feedback(get(
+                possible[crate::random::random_index(possible.len()).unwrap()]
+            ));
             // Don't need to send bell character because it is already being sent by getting hit
         }
         crate::BONUS_NO_DAMAGE.store(false, crate::RELAXED);
@@ -416,7 +422,7 @@ impl Player {
             valid.push("Have you heard the definition of insanity?")
         }
         // If they have more doors opened than kills
-        if stats.doors_opened / 10 > kills {
+        if stats.doors_opened / 5 > kills {
             valid.push(
                 "Maybe if you spent more time actually fighting instead of opening doors \
                 you'd still be alive.",
@@ -430,6 +436,9 @@ impl Player {
         {
             valid.push("You can open doors by walking into them.")
         }
+        if crate::CHEATS.load(crate::RELAXED) {
+            valid.push("Lie, lie and lie again. Until it becomes truth.")
+        }
         crate::log!("Valid death messages {valid:?}");
         let index = crate::random::random_index(valid.len()).unwrap();
         crate::log!("Picked {}", valid[index]);
@@ -440,12 +449,13 @@ impl Player {
     // returns whether or not the item was added successfully
     pub fn add_item(&mut self, item: ItemType) -> bool {
         crate::log!("Adding {item} to player");
-        let mut stdout = std::io::stdout().lock();
+        let mut stdout = std::io::stdout();
         Self::clear_right_column(&mut stdout);
         self.draw_items(&mut stdout);
         let mut lock = std::io::stdin().lock();
         let mut buf = [0];
-        Board::set_desc(&mut stdout, "Select slot for the item(1-6) or c to cancel");
+        crate::set_feedback(get(55));
+        crate::draw_feedback();
         stdout.flush().unwrap();
         let selected = loop {
             lock.read_exact(&mut buf).unwrap();
@@ -487,7 +497,7 @@ impl Player {
     }
     pub fn aim(&mut self, board: &mut Board) {
         let mut specials = Vec::new();
-        for pos in crate::ray_cast(self.pos, self.selector, board, None, true, self.pos)
+        for pos in crate::ray_cast(self.pos, self.selector, board, None, true, self.pos, true)
             .0
             .iter()
         {

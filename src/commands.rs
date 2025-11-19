@@ -2,8 +2,7 @@ use crate::{
     Entity, ItemType, Player, Spell, State, Style, Vector, spell::SpellCircle,
     upgrades::UpgradeType,
 };
-use abes_nice_things::{FromBinary, Split, ToBinary};
-use std::net::TcpListener;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::sync::mpsc::Sender;
 // Due to the input system, no commands can use stdin
 pub enum Command {
@@ -51,6 +50,7 @@ pub enum Command {
     SetMaxEnergy(usize),
     SetMaxHealth(usize),
     SetSpell(usize, Spell),
+    ForceDialogueIndexRecalc,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -165,6 +165,7 @@ impl Command {
                     .collect::<String>()
                     .parse()?,
             )),
+            "force_dialogue_index_recalc" => Ok(Command::ForceDialogueIndexRecalc),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
@@ -291,9 +292,9 @@ impl Command {
                     );
                 }
                 Spell::Contact(spell) => {
-                    if let Some(enemy) = state.board.get_enemy(state.player.selector, None) {
+                    if let Some(enemy) = &state.board.get_enemy(state.player.selector, None) {
                         spell.cast(
-                            Entity::Enemy(enemy),
+                            enemy.clone().into(),
                             Entity::Player(&mut state.player),
                             energy,
                         );
@@ -569,6 +570,10 @@ impl Command {
             Command::SetSpell(index, spell) => {
                 state.player.known_spells[index] = Some(spell);
             }
+            Command::ForceDialogueIndexRecalc => {
+                *crate::dialogue::INDEX.try_write().unwrap() =
+                    std::sync::LazyLock::new(crate::dialogue::index_initializer);
+            }
         }
     }
     fn is_cheat(&self) -> bool {
@@ -586,50 +591,54 @@ impl Command {
         )
     }
 }
-pub static PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(5287);
 pub fn listen(out: Sender<crate::CommandInput>) -> Sender<String> {
     let (console_tx, console_rx) = std::sync::mpsc::channel();
     let tx_clone = console_tx.clone();
     std::thread::spawn(move || {
+        std::process::Command::new("mkfifo")
+            .arg("console_in")
+            .status()
+            .unwrap();
+        std::process::Command::new("mkfifo")
+            .arg("console_out")
+            .status()
+            .unwrap();
         let mut console_rx = Some(console_rx);
         let out = out.clone();
-        for stream in TcpListener::bind(("127.0.0.1", PORT.load(crate::RELAXED)))
-            .unwrap()
-            .incoming()
-        {
-            if let Ok(stream) = stream {
-                let (mut read, mut write) = stream.split().unwrap();
-                std::thread::scope(|s| {
-                    s.spawn(|| {
-                        loop {
-                            match Command::new(String::from_binary(&mut read).unwrap()) {
-                                Ok(command) => {
-                                    out.send(crate::CommandInput::Command(command)).unwrap()
-                                }
-                                Err(error) => tx_clone.send(error).unwrap(),
-                            }
+        let mut read = std::fs::File::open("console_in").unwrap();
+        crate::log!("console in fifo opened");
+        let mut write = std::fs::OpenOptions::new()
+            .write(true)
+            .open("console_out")
+            .unwrap();
+        crate::log!("console out fifo opened");
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                loop {
+                    match Command::new(String::from_binary(&mut read).unwrap()) {
+                        Ok(command) => out.send(crate::CommandInput::Command(command)).unwrap(),
+                        Err(error) => tx_clone.send(error).unwrap(),
+                    }
+                }
+            });
+            let console = console_rx.take().unwrap();
+            console_rx = Some(
+                s.spawn(|| {
+                    loop {
+                        if let Ok(recv) = console.recv()
+                            && let Ok(_) = recv.to_binary(&mut write)
+                        {
+                        } else {
+                            break;
                         }
-                    });
-                    let console = console_rx.take().unwrap();
-                    console_rx = Some(
-                        s.spawn(|| {
-                            loop {
-                                if let Ok(recv) = console.recv()
-                                    && let Ok(_) = recv.to_binary(&mut write)
-                                {
-                                } else {
-                                    break;
-                                }
-                                //console_rx.recv().unwrap().to_binary(&mut write).unwrap();
-                            }
-                            console
-                        })
-                        .join()
-                        .unwrap(),
-                    );
-                });
-            }
-        }
+                        //console_rx.recv().unwrap().to_binary(&mut write).unwrap();
+                    }
+                    console
+                })
+                .join()
+                .unwrap(),
+            );
+        });
     });
     console_tx
 }

@@ -50,3 +50,7 @@
 49: spell(normal): summon spirit
 50: spell(normal): heal
 51: spell suicide(overcharge): biden blast
+52: upgrade: telekinesis
+53: upgrade: reflexes
+54: bonus fail: no damage(have energy)
+55: item pickup prompt

@@ -18,7 +18,7 @@ macro_rules! log {
 pub struct Enemy {
     pub health: usize,
     pub variant: Variant,
-    stun: usize,
+    pub stun: usize,
     windup: usize,
     pub pos: Vector,
     pub active: bool,
@@ -173,6 +173,7 @@ impl Enemy {
                 Some(Arc::as_ptr(&arc).addr()),
                 false,
                 player_pos,
+                true,
             );
             if let Some(crate::Collision::Player) = collision {
                 if show_line_of_sight {

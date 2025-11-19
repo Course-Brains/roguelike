@@ -1,5 +1,6 @@
 use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Read;
+#[derive(Debug)]
 pub enum Input {
     Arrow(Direction),           // move cursor
     Wasd(Direction, bool),      // move character

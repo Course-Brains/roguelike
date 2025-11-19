@@ -64,6 +64,15 @@ impl SpellCircle {
     }
     // returns true if the circle should be kept (false = removal)
     pub fn update(&mut self, board: &mut Board, player: &mut Player) -> bool {
+        // Circles die with their caster on normal and below
+        if crate::SETTINGS.difficulty() <= crate::Difficulty::Normal
+            && self
+                .caster
+                .clone()
+                .is_some_and(|caster| caster.try_read().unwrap().dead)
+        {
+            return false;
+        }
         if !self.active {
             return true;
         }
@@ -396,10 +405,17 @@ impl NormalSpell {
                         crate::RE_FLOOD.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     match caster {
-                        Some(caster) => std::mem::swap(
-                            &mut swap.try_write().unwrap().pos,
-                            &mut caster.try_write().unwrap().pos,
-                        ),
+                        Some(caster) => {
+                            std::mem::swap(
+                                &mut swap.try_write().unwrap().pos,
+                                &mut caster.try_write().unwrap().pos,
+                            );
+                            // If we don't do this, then an enemy can get swapped next to you and
+                            // have its turn immediately. This is flawed because if the swapee has
+                            // already done their turn then they lose a turn unreasonably, but this
+                            // will do for now.
+                            swap.try_write().unwrap().stun.max_assign(1);
+                        }
                         None => std::mem::swap(&mut swap.try_write().unwrap().pos, &mut player.pos),
                     }
                     if let Some(time) = time {
@@ -413,7 +429,7 @@ impl NormalSpell {
                 false
             }
             Self::BidenBlast => {
-                let damage = (crate::random::random16() as usize * energy) / 4;
+                let damage = (crate::random::random16() as usize * energy) / 12;
                 if let Some(&mut mut time) = time {
                     time += start.elapsed()
                 }
@@ -487,6 +503,7 @@ impl NormalSpell {
                     None,
                     caster.is_none(),
                     player.pos,
+                    true,
                 );
                 // visuals for the charge
                 let bounds = board.get_render_bounds(player);
@@ -559,7 +576,10 @@ impl NormalSpell {
                     .as_ref()
                     .is_none_or(|caster| caster.try_read().unwrap().variant.precise_teleport());
                 let origin = origin.unwrap_or(get_pos(&caster, player));
-                let (mut path, collision) = ray_cast(origin, aim, board, None, stop, player.pos);
+                let enemy_collision =
+                    caster.is_some() && crate::SETTINGS.difficulty() <= crate::Difficulty::Easy;
+                let (mut path, collision) =
+                    ray_cast(origin, aim, board, None, stop, player.pos, enemy_collision);
                 if collision.is_some() {
                     path.pop();
                 }
@@ -781,6 +801,7 @@ impl<'a> FireBall<'a> {
             None,
             self.caster.is_none(),
             self.player.pos,
+            true,
         );
         if let Some(Collision::Piece(_)) = collision {
             path.pop();

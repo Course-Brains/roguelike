@@ -1,7 +1,7 @@
 use crate::log;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{LazyLock, RwLock};
-static INDEX: RwLock<LazyLock<Vec<IndexEntry>>> = RwLock::new(LazyLock::new(index_initializer));
+pub static INDEX: RwLock<LazyLock<Vec<IndexEntry>>> = RwLock::new(LazyLock::new(index_initializer));
 thread_local! {
     static DATA: std::cell::RefCell<std::fs::File> = std::cell::RefCell::new(std::fs::File::open("dialogue").unwrap());
 }
@@ -21,11 +21,11 @@ pub fn get_raw_bytes(index: usize) -> Vec<u8> {
     buf
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct IndexEntry {
+pub struct IndexEntry {
     start: u64,
     length: u64,
 }
-fn index_initializer() -> Vec<IndexEntry> {
+pub fn index_initializer() -> Vec<IndexEntry> {
     let mut file = std::io::BufReader::new(std::fs::File::open("index").unwrap());
     let mut out = Vec::new();
     let mut buf = [0; 8];

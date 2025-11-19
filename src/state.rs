@@ -196,18 +196,20 @@ impl State {
     }
     pub fn increment(&mut self) {
         // Order of events:
-        // decriment effects
-        // enemies move and think (in that order)
-        // last known boss positions are updated
-        // dead are purged
-        // spells are updated
-        // exits are placed
-        // turn increments
-        // turn on map increments
-        // show_nav one turn specials are placed
-        // rendering
-        // one turn specials reset
-        // enemy damage taken flag reset
+        //  reset was_hit
+        //  decriment effects
+        //  enemies move and think (in that order)
+        //  last known boss positions are updated
+        //  dead are purged
+        //  spells are updated
+        //  exits are placed
+        //  turn increments
+        //  turn on map increments
+        //  show_nav one turn specials are placed
+        //  rendering
+        //  one turn specials reset
+        //  enemy damage taken flag reset
+        self.player.was_hit = false;
         let mut start = std::time::Instant::now();
         self.player.decriment_effects();
         let mut time = start.elapsed();

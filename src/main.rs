@@ -192,7 +192,7 @@ static LAYER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::n
 fn layer() -> usize {
     LAYER.load(RELAXED)
 }
-
+static PURGE_INPUT: AtomicBool = AtomicBool::new(false);
 static INPUT_SYSTEM: std::sync::LazyLock<(
     std::sync::mpsc::Sender<CommandInput>,
     Mutex<std::sync::mpsc::Receiver<CommandInput>>,
@@ -204,7 +204,9 @@ fn initialize_stdin_listener() -> std::thread::Thread {
     std::thread::spawn(|| {
         let send = INPUT_SYSTEM.0.clone();
         loop {
-            std::thread::park();
+            if !PURGE_INPUT.load(RELAXED) {
+                std::thread::park();
+            }
             send.send(CommandInput::Input(Input::get())).unwrap();
         }
     })
@@ -293,11 +295,6 @@ fn main() {
                 return;
             }
             "--no-stats" => CHEATS.store(true, Ordering::Relaxed),
-            "--port" | "-p" => {
-                let new_port = args.next().unwrap().parse().unwrap();
-                log!("Setting console port to {new_port}");
-                commands::PORT.store(new_port, RELAXED);
-            }
             "dialogue" => {
                 dialogue::editor();
                 return;
@@ -426,12 +423,26 @@ fn main() {
         else if LOAD_SHOP.swap(false, Ordering::Relaxed) {
             state.load_shop()
         }
+        if !state.player.automoving && !SETTINGS.input_queueing() {
+            log!("Attempting input queue purge");
+            PURGE_INPUT.store(true, RELAXED);
+            input_thread.unpark();
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            while let Ok(input) = input_lock.try_recv() {
+                log!("Purging input");
+                if let CommandInput::Command(command) = input {
+                    command.enact(&mut state, &mut command_tx)
+                }
+            }
+            PURGE_INPUT.store(false, RELAXED);
+        }
         if got_input {
             input_thread.unpark();
             got_input = false
         }
         match input_lock.recv().unwrap() {
             CommandInput::Input(input) => {
+                log!("got input: {input:?}");
                 got_input = true;
                 match input {
                     Input::Wasd(direction, sprint) => match sprint {
@@ -678,8 +689,11 @@ fn main() {
                                     if chosen_energy <= state.player.energy {
                                         let mut succeeded = false;
                                         let cast_time = spell.cast_time(Some(chosen_energy));
-                                        let delay =
-                                            std::time::Duration::from_secs(1) / cast_time as u32;
+                                        let delay = if cast_time == 0 {
+                                            std::time::Duration::ZERO
+                                        } else {
+                                            std::time::Duration::from_secs(1) / cast_time as u32
+                                        };
                                         // Valid cast
                                         match spell {
                                             Spell::Normal(spell) => {
@@ -1066,6 +1080,7 @@ fn ray_cast(
     addr: Option<usize>,
     end_stop: bool,
     player: Vector,
+    enemy_collision: bool,
 ) -> (Vec<Vector>, Option<Collision>) {
     let x = to.x as f64 - from.x as f64;
     let y = to.y as f64 - from.y as f64;
@@ -1109,6 +1124,7 @@ fn ray_cast(
             out.push(Vector::new(x, y));
         }
 
+        // We cannot stop on the first position
         if pos == from {
             continue;
         }
@@ -1119,7 +1135,7 @@ fn ray_cast(
             break;
         }
 
-        if let Some(enemy) = board.get_enemy(pos, addr) {
+        if enemy_collision && let Some(enemy) = board.get_enemy(pos, addr) {
             collision = Some(enemy.into());
             break;
         }
@@ -1163,7 +1179,7 @@ fn arrow<'a>(
     time: &mut std::time::Duration,
 ) -> Option<Entity<'a>> {
     let mut start = std::time::Instant::now();
-    let (path, collision) = ray_cast(from, to, board, None, false, player.pos);
+    let (path, collision) = ray_cast(from, to, board, None, false, player.pos, true);
     let bounds = board.get_render_bounds(player);
     // Visuals
     for pos in path.iter() {

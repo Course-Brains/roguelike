@@ -1,19 +1,13 @@
-use abes_nice_things::{FromBinary, Split, ToBinary, input};
+use abes_nice_things::{FromBinary, ToBinary, input};
 use std::io::Read;
-use std::net::TcpStream;
 fn main() {
-    let mut port = 5287;
-    let mut args = std::env::args();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--port" | "-p" => port = args.next().unwrap().parse().unwrap(),
-            _ => {}
-        }
-    }
-    let (mut read, mut write) = TcpStream::connect(("127.0.0.1", port))
-        .unwrap()
-        .split()
+    let mut write = std::fs::OpenOptions::new()
+        .write(true)
+        .open("console_in")
         .unwrap();
+    println!("in fifo open");
+    let mut read = std::fs::File::open("console_out").unwrap();
+    println!("out fifo open");
     println!("Connection made");
     if std::env::args().any(|arg| &arg == "--auto" || &arg == "-a")
         && let Ok(mut file) = std::fs::File::open("command_auto_run")

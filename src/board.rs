@@ -208,6 +208,10 @@ impl Board {
             Vector::new(5, 5),
             crate::enemy::Variant::Dummy,
         ))));
+        out.enemies.push(Arc::new(RwLock::new(Enemy::new(
+            Vector::new(70, 15),
+            crate::enemy::Variant::Basic,
+        ))));
         out[Vector::new(88, 15)] = Some(Piece::Exit(Exit::Level));
         crate::set_feedback("Learn".to_string());
         out

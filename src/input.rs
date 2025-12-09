@@ -22,6 +22,7 @@ pub enum Input {
     Delay(std::time::Duration), // Internal non player input for auto move
     Shout,                      // Alert all reachable enemies
     StopAutomove,               // Internal signal that the automove has ended
+    CreateCircle,               // Create a spell circle
 }
 impl Input {
     pub fn get() -> Input {
@@ -77,6 +78,7 @@ impl Input {
                 b'M' => return Input::AutoMove,
                 b'x' => return Input::ChangeRightColumn,
                 b'`' => return Input::Shout,
+                b'~' => return Input::CreateCircle,
                 _ => continue,
             };
         }

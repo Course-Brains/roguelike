@@ -33,3 +33,14 @@ pub const PATH: &str = "save";
 
 // The path to the file of stats for previous runs
 pub const STAT_PATH: &str = "stats";
+
+// The minimum amount of time a turn has to take in order to purge the input queue.
+// If you find that it is purging inputs when you don't want it to, increase this. If you find that
+// it is not purging input you want it to, decrease this.
+pub const INPUT_QUEUE_PURGE_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(300);
+
+// The amount of time given to the input thread to send all inputs given during the turn that the
+// input queue is being purged for. This is a bit complicated and I do not recommend changing it
+// generally. However, if the input queue purge is not purging all inputs, then try increasing
+// this.
+pub const INPUT_QUEUE_PURGE_TIME: std::time::Duration = std::time::Duration::from_millis(50);

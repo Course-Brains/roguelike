@@ -63,7 +63,7 @@ impl Enemy {
             Some({
                 let mut out = crate::Style::new();
                 if self.variant.is_boss() {
-                    out.blue().intense(true);
+                    out.blue().intense(true).bold(true);
                 } else if self.active {
                     out.yellow();
                 }

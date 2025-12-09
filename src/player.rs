@@ -571,6 +571,9 @@ impl Player {
     pub fn mage_aggro(&self) -> bool {
         self.just_cast || (self.limbs.count_mage_eyes() > 0)
     }
+    pub fn within_melee_range(&self, pos: Vector) -> bool {
+        self.pos.is_near(pos, 2)
+    }
 }
 // Rendering
 impl Player {

@@ -1,7 +1,7 @@
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 0x00000015;
+const SAVE_VERSION: Version = 0x00000016;
 mod player;
 use player::Player;
 mod board;
@@ -39,7 +39,7 @@ use consts::*;
 use std::collections::HashMap;
 #[cfg(feature = "log")]
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use abes_nice_things::style::{Color, Style};
@@ -392,6 +392,7 @@ fn main() {
     let input_thread = initialize_stdin_listener();
     let input_lock = INPUT_SYSTEM.1.try_lock().unwrap();
     let mut got_input = true;
+    let mut prev_turn_duration = std::time::Duration::ZERO;
     loop {
         if state.player.is_dead() {
             stats().collect_death(&state);
@@ -423,11 +424,18 @@ fn main() {
         else if LOAD_SHOP.swap(false, Ordering::Relaxed) {
             state.load_shop()
         }
-        if !state.player.automoving && !SETTINGS.input_queueing() {
+        log!(
+            "Time taken in previous turn: {}ms",
+            prev_turn_duration.as_millis()
+        );
+        if !state.player.automoving
+            && !SETTINGS.input_queueing()
+            && prev_turn_duration > INPUT_QUEUE_PURGE_THRESHOLD
+        {
             log!("Attempting input queue purge");
             PURGE_INPUT.store(true, RELAXED);
             input_thread.unpark();
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            std::thread::sleep(INPUT_QUEUE_PURGE_TIME);
             while let Ok(input) = input_lock.try_recv() {
                 log!("Purging input");
                 if let CommandInput::Command(command) = input {
@@ -440,7 +448,9 @@ fn main() {
             input_thread.unpark();
             got_input = false
         }
-        match input_lock.recv().unwrap() {
+        let input = input_lock.recv().unwrap();
+        let start_of_turn = std::time::Instant::now();
+        match input {
             CommandInput::Input(input) => {
                 log!("got input: {input:?}");
                 got_input = true;
@@ -579,17 +589,9 @@ fn main() {
                             "{}You can only attack in the 3 by 3 around you\x1b[0m",
                             Style::new().red()
                         );
-                        if state.player.pos.x.abs_diff(state.player.selector.x) > 1 {
-                            Board::set_desc(&mut std::io::stdout(), &fail_msg);
-                            bell(None);
-                            std::io::stdout().flush().unwrap();
-                            continue;
-                        }
-                        if state.player.pos.y.abs_diff(state.player.selector.y) > 1 {
-                            Board::set_desc(&mut std::io::stdout(), &fail_msg);
-                            bell(None);
-                            std::io::stdout().flush().unwrap();
-                            continue;
+                        if !state.player.within_melee_range(state.player.selector) {
+                            set_feedback(fail_msg);
+                            draw_feedback();
                         }
                         if state.board.contains_enemy(state.player.selector, None)
                             && state.attack_enemy(state.player.selector, false, false, false)
@@ -786,6 +788,127 @@ fn main() {
                             }
                         }
                     }
+                    Input::CreateCircle => {
+                        // Can only create a circle within melee range
+                        if !state.player.within_melee_range(state.player.selector) {
+                            set_feedback(get(57));
+                            draw_feedback();
+                            continue;
+                        }
+                        // Getting the spell/whether overclocked
+                        let mut stdout = std::io::stdout().lock();
+                        Player::clear_right_column(&mut stdout);
+                        state.player.draw_spells(&mut stdout);
+                        set_feedback(get(56));
+                        draw_feedback();
+                        if let Some((spell_index, overclock)) = loop {
+                            let mut buf = [0];
+                            std::io::stdin().read_exact(&mut buf).unwrap();
+                            match buf[0] {
+                                b'1' => break Some((0, false)),
+                                b'2' => break Some((1, false)),
+                                b'3' => break Some((2, false)),
+                                b'4' => break Some((3, false)),
+                                b'5' => break Some((4, false)),
+                                b'6' => break Some((5, false)),
+                                b'!' => break Some((0, true)),
+                                b'@' => break Some((1, true)),
+                                b'#' => break Some((2, true)),
+                                b'$' => break Some((3, true)),
+                                b'%' => break Some((4, true)),
+                                b'^' => break Some((5, true)),
+                                b'c' => break None,
+                                _ => {}
+                            }
+                        } {
+                            if state.player.known_spells[spell_index].is_none() {
+                                set_feedback(get(58));
+                                draw_feedback();
+                                continue;
+                            }
+                            let spell = state.player.known_spells[spell_index].unwrap();
+                            let chosen_energy = match overclock {
+                                true => {
+                                    Weirdifier::fix(false);
+                                    let out = loop {
+                                        set_feedback(get(59));
+                                        draw_feedback();
+                                        let mut input = String::new();
+                                        std::io::stdin().read_line(&mut input).unwrap();
+                                        if let Ok(energy) = input.trim().parse() {
+                                            break energy;
+                                        }
+                                    };
+                                    Weirdifier::weirdify(false);
+                                    out
+                                }
+                                false => spell.energy_needed(),
+                            };
+                            // Hard+ = x3
+                            // Normal = x2
+                            // Easy- = x1
+                            let energy_multiplier = if SETTINGS.difficulty() >= Difficulty::Hard {
+                                3
+                            } else if SETTINGS.difficulty() <= Difficulty::Easy {
+                                1
+                            } else {
+                                2
+                            };
+                            Weirdifier::fix(false);
+                            let starting_energy = loop {
+                                set_feedback(get(61));
+                                draw_feedback();
+                                let mut input = String::new();
+                                std::io::stdin().read_line(&mut input).unwrap();
+                                if let Ok(energy) = input.trim().parse()
+                                    && state.player.energy >= energy
+                                {
+                                    break energy;
+                                }
+                            };
+                            Weirdifier::weirdify(false);
+                            state.render();
+                            if starting_energy * energy_multiplier > state.player.energy {
+                                set_feedback(get(60));
+                                draw_feedback();
+                                continue;
+                            }
+                            let cast_time =
+                                spell.cast_time(Some(chosen_energy)) * energy_multiplier;
+                            let delay = if cast_time == 0 {
+                                std::time::Duration::ZERO
+                            } else {
+                                std::time::Duration::from_secs(1) / cast_time as u32
+                            };
+                            let aim: Option<Vector> = if spell.needs_aim() {
+                                set_feedback(get(62));
+                                draw_feedback();
+                                if let Some(selection) = get_selection(&mut state) {
+                                    Some(selection)
+                                } else {
+                                    continue;
+                                }
+                            } else {
+                                None
+                            };
+                            for _ in 0..cast_time {
+                                if SETTINGS.difficulty() >= Difficulty::Hard {
+                                    state.player.just_cast = true;
+                                }
+                                state.increment();
+                                std::thread::sleep(delay)
+                            }
+                            state.player.energy -= starting_energy * energy_multiplier;
+                            state.board.spells.push(spell::SpellCircle::new_player(
+                                spell,
+                                state.player.selector,
+                                aim,
+                                starting_energy,
+                                Some(chosen_energy),
+                            ));
+                            state.render();
+                        }
+                    }
                     Input::Convert => {
                         if state.player.upgrades.precise_convert {
                             if state.player.energy > 0 {
@@ -908,6 +1031,7 @@ fn main() {
                 command.enact(&mut state, &mut command_tx);
             }
         }
+        prev_turn_duration = start_of_turn.elapsed();
         if RE_FLOOD.swap(false, Ordering::Relaxed) {
             state.board.flood(state.player.pos);
             state.render();
@@ -1202,4 +1326,38 @@ enum InitialBoard {
     Normal,
     Empty,
     Tutorial,
+}
+fn get_selection(state: &mut State) -> Option<Vector> {
+    let revert_focus = state.player.focus;
+    state.player.focus = player::Focus::Selector;
+    let revert_selector = state.player.selector;
+    let mut stdin = std::io::stdin().lock();
+    let mut buf = [0];
+    let out = loop {
+        stdin.read_exact(&mut buf).unwrap();
+        let direction = match buf[0] {
+            27 => {
+                stdin.read_exact(&mut buf).unwrap();
+                stdin.read_exact(&mut buf).unwrap();
+                match buf[0] {
+                    b'A' => Direction::Up,
+                    b'B' => Direction::Down,
+                    b'D' => Direction::Left,
+                    b'C' => Direction::Right,
+                    _ => continue,
+                }
+            }
+            b'c' => break None,
+            b'\n' => break Some(state.player.selector),
+            _ => continue,
+        };
+        if !state.is_on_board(state.player.selector, direction) {
+            continue;
+        }
+        state.player.selector += direction;
+        state.render();
+    };
+    state.player.focus = revert_focus;
+    state.player.selector = revert_selector;
+    out
 }

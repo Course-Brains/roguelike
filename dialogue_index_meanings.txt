@@ -54,3 +54,10 @@
 53: upgrade: reflexes
 54: bonus fail: no damage(have energy)
 55: item pickup prompt
+56: circle spell: select prompt
+57: circle spell: out of range error
+58: circle spell: empty slot error
+59: circle spell: energy per cast prompt
+60: circle spell: insufficient energy error
+61: circle spell: starting energy prompt
+64: circle spell: target aim prompt

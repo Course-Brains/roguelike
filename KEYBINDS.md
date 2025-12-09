@@ -33,4 +33,5 @@ C: clear feedback
 m: memorize selected position
 R: Remember selected position
 x: swap right column meaning
-`: shout 
+\`: shout 
+~: Create spell circle

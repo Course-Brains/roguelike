@@ -179,11 +179,17 @@ impl Spell {
     pub fn get_cost(self) -> usize {
         (self.energy_needed() * self.cast_time(None)).isqrt().max(1) * 10
     }
+    pub fn needs_aim(self) -> bool {
+        match self {
+            Spell::Contact(_) => false,
+            Spell::Normal(spell) => spell.needs_aim(),
+        }
+    }
 }
 impl std::str::FromStr for Spell {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split(' ');
+        let mut split = s.trim().split(' ');
         match split.next() {
             Some(spell_type) => {
                 let args: String = split.map(|x| x.to_string() + " ").collect();
@@ -712,6 +718,12 @@ impl NormalSpell {
             6 => Self::Heal,
             _ => unreachable!("Someone is bad at math and needs a slap on the wrist"),
         }
+    }
+    pub fn needs_aim(self) -> bool {
+        matches!(
+            self,
+            Self::BidenBlast | Self::Identify | Self::Charge | Self::Teleport
+        )
     }
 }
 impl std::str::FromStr for NormalSpell {

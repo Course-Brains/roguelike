@@ -12,9 +12,13 @@ fn main() {
         Choice::new("settings", || {
             run(Command::new("./run_script").arg("settings"))
         }),
-        Choice::new("update", || run(Command::new("git").arg("pull"))),
         Choice::new("quit", || false),
     ];
+    if std::fs::exists(".git").is_ok_and(|x| x) {
+        choices.push(Choice::new("update", || {
+            run(Command::new("git").arg("pull"))
+        }));
+    }
     weirdify();
     let mut index = 0;
     loop {
@@ -72,9 +76,18 @@ fn process_input(index: &mut usize, choices: &mut Vec<Choice>) -> bool {
                 run(Command::new("./run_script").arg("empty"))
             }))
         }
+        n @ (b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9') => {
+            number(index, choices.len(), n)
+        }
         _ => {}
     }
     true
+}
+fn number(index: &mut usize, len: usize, ch: u8) {
+    let choice: usize = String::from_utf8(vec![ch]).unwrap().parse().unwrap();
+    if choice <= len {
+        *index = choice - 1
+    }
 }
 fn selector_up(index: &mut usize, len: usize) {
     if *index == 0 {

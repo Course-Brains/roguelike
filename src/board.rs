@@ -1392,6 +1392,22 @@ impl Piece {
     pub fn on_map(&self) -> bool {
         matches!(self, Self::Wall(_) | Self::Door(_))
     }
+    pub fn get_inspect(&self) -> usize {
+        match self {
+            Piece::Wall(_) => 64,
+            Piece::Door(door) => {
+                if door.open {
+                    65
+                } else {
+                    66
+                }
+            }
+            Piece::Exit(_) => 67,
+            Piece::Item(item) => item.item_type.get_inspect(),
+            Piece::Upgrade(upgrade) => upgrade.0.get_inspect(),
+            Piece::Sign(_) => 68,
+        }
+    }
 }
 impl std::fmt::Display for Piece {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

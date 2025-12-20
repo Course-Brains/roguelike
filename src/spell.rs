@@ -185,6 +185,12 @@ impl Spell {
             Spell::Normal(spell) => spell.needs_aim(),
         }
     }
+    pub fn get_inspect(self) -> usize {
+        match self {
+            Self::Contact(contact) => contact.get_inspect(),
+            Self::Normal(normal) => normal.get_inspect(),
+        }
+    }
 }
 impl std::str::FromStr for Spell {
     type Err = String;
@@ -280,7 +286,10 @@ impl ContactSpell {
                         {
                             return false;
                         }
-                        let damage = (((crate::random() as usize & 7) + 1) * multiple) / 2;
+                        // 0-7
+                        // 1-8
+                        // (1-4) * (energy/5)
+                        let damage = ((((crate::random() as usize & 7) + 1) * multiple) / 2).max(1);
                         target.try_write().unwrap().attacked(damage);
                         match caster {
                             Entity::Player(player) => player.heal(damage * 10),
@@ -313,6 +322,9 @@ impl ContactSpell {
             0 => Self::DrainHealth,
             _ => unreachable!("I can't think up a proper error"),
         }
+    }
+    fn get_inspect(self) -> usize {
+        105
     }
 }
 impl std::str::FromStr for ContactSpell {
@@ -724,6 +736,17 @@ impl NormalSpell {
             self,
             Self::BidenBlast | Self::Identify | Self::Charge | Self::Teleport
         )
+    }
+    fn get_inspect(self) -> usize {
+        match self {
+            Self::Swap => 106,
+            Self::BidenBlast => 107,
+            Self::Identify => 108,
+            Self::Charge => 109,
+            Self::Teleport => 110,
+            Self::SummonSpirit => 111,
+            Self::Heal => 112,
+        }
     }
 }
 impl std::str::FromStr for NormalSpell {

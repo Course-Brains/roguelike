@@ -1322,6 +1322,19 @@ impl Variant {
             _ => {}
         }
     }
+    pub fn get_inspect(&self) -> usize {
+        match self {
+            Variant::Basic => 69,
+            Variant::BasicBoss(_) => 72,
+            Variant::Mage(_) => 73,
+            Variant::MageBoss(_) => 74,
+            Variant::Fighter(_) => 75,
+            Variant::FighterBoss { .. } => 76,
+            Variant::Archer(_) => 77,
+            Variant::ArcherBoss(_) => 78,
+            Variant::Dummy => 79,
+        }
+    }
     fn set_fighter_boss_action(&mut self, new_action: FighterBossAction) {
         if let Variant::FighterBoss { action, .. } = self {
             *action = new_action;

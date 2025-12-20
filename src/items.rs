@@ -204,12 +204,11 @@ impl ItemType {
             }
             Self::Fish => {
                 state.player.heal(20);
-                state.player.effects.poison *= 2;
                 state.player.effects.poison += 10;
                 true
             }
             Self::EnergyPotion => {
-                if state.player.energy >= state.player.max_health {
+                if state.player.energy >= state.player.max_energy {
                     return false;
                 }
                 state.player.energy += 10;
@@ -246,6 +245,20 @@ impl ItemType {
             Self::FarSightPotion => get(39),
             Self::Fish => get(40),
             Self::EnergyPotion => get(41),
+        }
+    }
+    pub fn get_inspect(self) -> usize {
+        match self {
+            Self::HealthPotion => 80,
+            Self::BossFinder => 81,
+            Self::Gamba => 82,
+            Self::EnderPearl => 83,
+            Self::Warp => 84,
+            Self::Tea => 85,
+            Self::Spirit => 86,
+            Self::FarSightPotion => 87,
+            Self::Fish => 88,
+            Self::EnergyPotion => 89,
         }
     }
     pub fn render(self, player: &crate::Player) -> (char, Option<Style>) {

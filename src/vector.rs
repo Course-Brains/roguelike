@@ -57,6 +57,17 @@ impl Vector {
 impl std::ops::Sub for Vector {
     type Output = Vector;
     fn sub(self, rhs: Self) -> Self::Output {
+        abes_nice_things::debug!({
+            if self.x < rhs.x || self.y < rhs.y {
+                let escape = 0_u8;
+                while escape == 0 {
+                    crate::log!("Le fucked is UP");
+                    // trap for making sure I can use a debugger before it crashes
+                    crate::bell(None);
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            }
+        });
         Vector {
             x: self.x - rhs.x,
             y: self.y - rhs.y,

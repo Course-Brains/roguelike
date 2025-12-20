@@ -1,6 +1,6 @@
 use crate::{Entity, FromBinary, Random, ToBinary, upgrades::UpgradeType};
 #[derive(Clone, Copy, Debug)]
-pub struct Upgrade(UpgradeType);
+pub struct Upgrade(pub UpgradeType);
 impl Upgrade {
     pub fn new(which: Option<UpgradeType>) -> Upgrade {
         Upgrade(which.unwrap_or(UpgradeType::random()))

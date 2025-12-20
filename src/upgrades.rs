@@ -198,7 +198,10 @@ impl UpgradeType {
                 true
             }
             Self::BonusKillAll => {
-                if !player.upgrades.map
+                if player.health < player.health / 5 {
+                    player.max_health += (player.max_health / 5).max(1);
+                    player.health = player.max_health;
+                } else if !player.upgrades.map
                     && player.limbs.count_mage_eyes() == 0
                     && player.perception < 30
                 {
@@ -312,6 +315,31 @@ impl UpgradeType {
             Self::LimbSeerEye => get(21),
             Self::FullEnergyDing => get(22),
             Self::Spell(spell) => spell.get_name().to_string(),
+        }
+    }
+    pub fn get_inspect(self) -> usize {
+        match self {
+            Self::Map => 90,
+            Self::SoftShoes => 91,
+            Self::PreciseConvert => 92,
+            Self::FullEnergyDing => 93,
+            Self::Lifesteal => 94,
+            Self::Telekinesis => 95,
+
+            Self::EnergyBoost => 96,
+            Self::HealthBoost => 97,
+
+            Self::LimbMageEye => 98,
+            Self::LimbSeerEye => 99,
+
+            Self::BonusNoWaste => 100,
+            Self::BonusNoDamage => 101,
+            Self::BonusKillAll => 102,
+            Self::BonusNoEnergy => 103,
+
+            Self::SavePint => 104,
+
+            Self::Spell(spell) => spell.get_inspect(),
         }
     }
     // For the normal upgrades, can they be meaningfully picked up multiple times?

@@ -60,4 +60,46 @@
 59: circle spell: energy per cast prompt
 60: circle spell: insufficient energy error
 61: circle spell: starting energy prompt
-64: circle spell: target aim prompt
+62: circle spell: target aim prompt
+63: inspect: Player
+64: inspect: wall
+65: inspect: door(open)
+66: inspect: door(closed)
+67: inspect: exit
+68: inspect: sign
+69: inspect: enemy(basic)
+70: mock: no items
+71: mock: no spells
+72: inspect: enemy(basic_boss)
+73: inspect: enemy(mage)
+74: inspect: enemy(mage_boss)
+75: inspect: enemy(fighter)
+76: inspect: enemy(fighter_boss)
+77: inspect: enemy(archer)
+78: inspect: enemy(archer_boss)
+78: inspect: enemy(dummy)
+80: inspect: item(health_potion)
+81: inspect: item(boss_finder)
+82: inspect: item(gamba)
+83: inspect: item(ender_pearl)
+84: inspect: item(warp)
+85: inspect: item(tea)
+86: inspect: item(spirit)
+87: inspect: item(far_sight_potion)
+88: inspect: item(fish)
+89: inspect: item(energy_potion)
+90: inspect: upgrade(map)
+91: inspect: upgrade(soft_shoes)
+92: inspect: upgrade(precise_convert)
+93: inspect: upgrade(full_energy_ding)
+94: inspect: upgrade(lifesteal)
+95: inspect: upgrade(telekinesis)
+96: inspect: upgrade(energy_boost)
+97: inspect: upgrade(health_boost)
+98: inspect: upgrade(limb_mage_eye)
+99: inspect: upgrade(limb_seer_eye)
+100: inspect: upgrade(bonus_no_waste)
+101: inspect: upgrade(bonus_no_damage)
+102: inspect: upgrade(bonus_kill_all)
+103: inspect: upgrade(bonus_no_energy)
+104: inspect: upgrade(savepint)

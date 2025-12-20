@@ -1,1 +1,252 @@
-Repurposed AutomataSpecialized AutomataMage ConstructLazy MageSquireKnightarcherSethDummyA mapA pair of particularly soft shoesprecise_converthealth_boostenergy_boostlifestealbonus_no_wasteA result of your fearA result of your crueltyA result of your frugalityA SavepintA mage's eyeA seer's eyeA magical bellCouldn't you have avoided that hit?So wasteful...Was going faster worth it?Did you really need to block that?Don't get hurtbonus_sign_no_wasteBe more thoroughBe more frugalThanks for the tip, dumbassPotion of healingScroll of seekingScroll of chanceScroll of teleportationScroll of warpingTeaSpiritPotion of quasi-omnisciencefishPotion of vigorDrain healthSwapFireballIdentifyChargea lack of dealth perceptionTeleportSummon spiritHeala common lapse in judgementTelekinetic kicka better spineSurely you could have blocked thatSelect slot for the item (1-6 or c to cancel)Which spell? (c to cancel)You can only create circles within melee rangeNo spell in that slotHow much energy per cast?Insufficient energyHow much starting energy?Select target position
+Repurposed AutomataSpecialized AutomataMage ConstructLazy MageSquireKnightarcherSethDummyA mapA pair of particularly soft shoesprecise_converthealth_boostenergy_boostlifestealbonus_no_wasteA result of your fearA result of your crueltyA result of your frugalityA SavepintA mage's eyeA seer's eyeA magical bellCouldn't you have avoided that hit?So wasteful...Was going faster worth it?Did you really need to block that?Don't get hurtbonus_sign_no_wasteBe more thoroughBe more frugalThanks for the tip, dumbassPotion of healingScroll of seekingScroll of chanceScroll of teleportationScroll of warpingTeaSpiritPotion of quasi-omnisciencefishPotion of vigorDrain healthSwapFireballIdentifyChargea lack of dealth perceptionTeleportSummon spiritHeala common lapse in judgementTelekinetic kicka better spineSurely you could have blocked thatSelect slot for the item (1-6 or c to cancel)Which spell? (c to cancel)You can only create circles within melee rangeNo spell in that slotHow much energy per cast?Insufficient energyHow much starting energy?Select target positionThe player, you.
+Press x to change
+this column.A wall.
+You cannot step
+through these.
+Obviously.An open door.
+Feel free to
+step through.
+
+But remember:
+they can also
+step through.A closed door.
+Maybe try opening
+it first?
+
+Ram your face into
+it, or walk up and
+press enter on it.The exit.
+Walk on it when
+you are ready
+to leave.A sign.
+It has a message.
+Maybe read it.The most basic and
+weakest enemy.
+
+If it glows red, it
+is winding up to
+smack you.
+
+Don't let it.Maybe get some
+items, then you
+can use this
+panel.No magics?The most basic boss.
+
+That doesn't mean
+weakest.When it glows purple
+it is winding up to
+cast a spell.
+
+Don't stand on it
+or stand still.
+
+Kill it to remove
+the spells.Another boss.
+
+It will make more.
+
+No there isn't a
+limit.
+
+That isn't all it
+does though,
+be careful.A nasty one if you
+aren't careful.
+
+You can beat these
+without getting hit
+
+Just not without
+spending energy.
+
+
+Don't run too far,
+they will catch upAn exceptionally
+nasty boss.
+
+Do NOT run away in
+an open room.
+
+ALWAYS be on the
+move.
+
+It also kind of
+looks like a
+crawfish...
+
+Fun fact: I had to
+modify map gen
+because this was
+nuking people the
+moment they spawned
+in.He is an archer
+He fires arrows
+
+What did you
+expect?Archer but boss.
+
+His regular arrows
+hit like a truck.
+
+But the magical
+barrage doesn't hit
+as hard.A target dummy.
+
+Learn how to hit it.
+
+When enemies take
+damage, they go
+[3mitalic[0m
+
+This one won't fight
+back, others will.Gives you health regen
+for 10 turns at 2
+health per turn.It tells you the
+location of the
+nearest boss or
+exit.It doubles or halves
+your money.
+
+It isn't actually
+that simple but that
+is all you need to
+know, for now.It teleports you where
+you throw it.
+
+If it hits something
+along the way then you
+will teleport there
+instead.Teleport you to your
+selector.
+
+It does not care about
+obstacles.
+
+It will not work if
+you try to teleport
+onto an invalid space.It makes you TITLECARD
+for 10 turns.
+
+It makes you have
+boosted damage for
+40.
+
+It even sobers you
+up!A "spirit"
+
+Probably not the kind
+you were thinking of.
+
+You get a bit stupid
+when drunk.
+
+But at least you hit
+hard?Gives you far sight
+for 20 turns.Immediately heals
+you for 20 health
+
+but then poisons
+you for 10 turns
+at 1 damage per.
+
+Yes the poison
+does stack.
+
+And yes this is
+a poison poisson.Immediately restore
+10 energy.
+
+You don't get any
+of the extra.Allows you to see
+all map geometry
+even if you haven't
+seen it yet.Gives enemies
+disadvantage on
+perception checks.Causes convertion
+to happen on energy
+at a time instead of
+consuming all in one
+go.Causes a signal when
+your energy is full.Causes you to regain
+health equal to the
+amount of energy
+given by a kill.Causes you to be able
+to interact with map
+objects (like doors)
+from anywhere.Increses your max
+energy by 50%Increases your max
+health by 50%With one mage eye
+you can see the
+positions of
+reachable enemies.
+
+With two you can
+see them fully.With one seer eye
+you can see when an
+enemy is aiming at
+you.
+
+With two you can see
+where they are aiming.Doubles your moneyIncreases your max
+health by 50% and
+heals you to full.Fairly complicated.
+
+It picks from a bunch
+of positive things it
+can do based on your
+state.
+
+First it will
+increase your
+perception.Increases your max
+energy by 50%A savepint.
+
+You can figure it
+out, I believe in
+you.A contact spell which
+drains health and
+gives it back to you.
+
+Deals one to four hits
+of damage, multiplied
+by energy / 5
+
+It heals you for 10x
+the hits dealt.
+
+So if it deals three
+hits of damage, then
+you will heal for 30
+health.Swaps your position
+with a random enemy
+within a radius of
+energy x 10
+
+So by default it has
+a radius of 30It's a fireball
+
+More energy ->
+More radius and
+damage.
+
+What did you expect?It gets information
+about the thing under
+the selector.
+
+It will fail if you
+give it any other
+amount of energy.Charge towards a
+position.
+
+If you hit an enemy,
+you will stop and deal
+damage.Teleport you along a
+path.
+
+If an obstacle is hit
+you will stop.Summons a "spirit"Heals you.
+
+What is special about
+this is that it gets
+more efficient the
+more energy you put in

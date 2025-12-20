@@ -2,7 +2,7 @@ use crate::{Entity, FromBinary, Random, Style, ToBinary};
 use std::fmt::Display;
 #[derive(Clone, Copy, Debug)]
 pub struct Item {
-    item_type: crate::ItemType,
+    pub item_type: crate::ItemType,
 }
 impl Item {
     pub fn new(item_type: Option<crate::ItemType>) -> Item {

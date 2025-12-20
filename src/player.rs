@@ -65,7 +65,7 @@ impl Player {
             limbs: Limbs::new(),
             memory: None,
             known_spells: Player::starting_spells(),
-            right_column: RightColumn::Items,
+            right_column: RightColumn::Inspect,
             just_cast: false,
             automoving: false,
         }
@@ -574,6 +574,24 @@ impl Player {
     pub fn within_melee_range(&self, pos: Vector) -> bool {
         self.pos.is_near(pos, 2)
     }
+    pub fn count_items(&self) -> usize {
+        let mut count = 0;
+        for item in self.items.iter() {
+            if item.is_some() {
+                count += 1;
+            }
+        }
+        count
+    }
+    pub fn count_spells(&self) -> usize {
+        let mut count = 0;
+        for item in self.items.iter() {
+            if item.is_some() {
+                count += 1;
+            }
+        }
+        count
+    }
 }
 // Rendering
 impl Player {
@@ -585,6 +603,7 @@ impl Player {
         match self.right_column {
             RightColumn::Items => self.draw_items(&mut lock),
             RightColumn::Spells => self.draw_spells(&mut lock),
+            RightColumn::Inspect => self.draw_inspect(&mut lock, board),
         }
         self.draw_limbs(&mut lock);
     }
@@ -637,11 +656,9 @@ impl Player {
         )
         .unwrap();
     }
-    fn draw_right_column(lock: &mut impl std::io::Write, text: [String; 6], title: String) {
+    fn draw_right_column(lock: &mut impl std::io::Write, text: [String; 6]) {
         // Maximum initial y is 6 * 3 = 18, but accounting for the last item, the last allocated y
         // is 21
-        crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, 0).to_move()).unwrap();
-        write!(lock, "{title}").unwrap();
         for (index, text) in text.iter().enumerate() {
             crossterm::queue!(
                 lock,
@@ -659,14 +676,23 @@ impl Player {
         }
     }
     pub fn draw_items(&self, lock: &mut impl Write) {
+        Player::draw_right_column_title("ITEMS".to_string(), lock);
+        if self.count_items() == 0 {
+            Player::draw_right_column_by_line(Player::get_inspect_dialogue(70), lock);
+            return;
+        }
         Player::draw_right_column(
             lock,
             self.items
                 .map(|option| option.map(|item| item.get_name()).unwrap_or("".to_string())),
-            "ITEMS".to_string(),
         );
     }
     pub fn draw_spells(&self, lock: &mut impl std::io::Write) {
+        Player::draw_right_column_title("SPELLS".to_string(), lock);
+        if self.count_spells() == 0 {
+            Player::draw_right_column_by_line(Player::get_inspect_dialogue(71), lock);
+            return;
+        }
         Player::draw_right_column(
             lock,
             self.known_spells.map(|option| {
@@ -681,8 +707,46 @@ impl Player {
                     })
                     .unwrap_or("".to_string())
             }),
-            "SPELLS".to_string(),
         );
+    }
+    // Will cause problems if any enemy locks are owned when called
+    fn draw_inspect(&self, lock: &mut impl std::io::Write, board: &Board) {
+        // We have 21 lines max
+
+        crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, 0).to_move()).unwrap();
+        write!(lock, "INSPECT").unwrap();
+
+        // Priority:
+        //  Player
+        //  Enemy
+        //  Map
+        let text = Player::get_inspect_dialogue(if self.selector == self.pos {
+            63
+            // Player
+        } else if let Some(enemy) = board.get_enemy(self.selector, None) {
+            enemy.try_read().unwrap().variant.get_inspect()
+            // Enemy
+        } else if let Some(piece) = &board[self.selector] {
+            // Map piece
+            piece.get_inspect()
+        } else {
+            return;
+        });
+        Player::draw_right_column_by_line(text, lock)
+    }
+    pub fn get_inspect_dialogue(index: usize) -> Vec<String> {
+        let raw = get(index);
+        raw.split('\n').map(|s| s.to_string()).collect()
+    }
+    fn draw_right_column_by_line(text: Vec<String>, lock: &mut impl std::io::Write) {
+        for (index, line) in text.iter().enumerate() {
+            crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, index + 2).to_move()).unwrap();
+            write!(lock, "{line}").unwrap();
+        }
+    }
+    fn draw_right_column_title(title: String, lock: &mut impl std::io::Write) {
+        crossterm::queue!(lock, Vector::new(RENDER_X * 2 + 2, 0).to_move()).unwrap();
+        write!(lock, "{title}").unwrap();
     }
     fn draw_limbs(&self, lock: &mut impl std::io::Write) {
         // 1 per line, starting at line 23
@@ -1091,12 +1155,14 @@ impl ToBinary for Duration {
 pub enum RightColumn {
     Items,
     Spells,
+    Inspect,
 }
 impl RightColumn {
     pub fn increment(&mut self) {
         match self {
             Self::Items => *self = Self::Spells,
-            Self::Spells => *self = Self::Items,
+            Self::Spells => *self = Self::Inspect,
+            Self::Inspect => *self = Self::Items,
         }
     }
 }
@@ -1108,6 +1174,7 @@ impl FromBinary for RightColumn {
         Ok(match u8::from_binary(binary)? {
             0 => Self::Items,
             1 => Self::Spells,
+            2 => Self::Inspect,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -1122,6 +1189,7 @@ impl ToBinary for RightColumn {
         match self {
             Self::Items => 0_u8,
             Self::Spells => 1,
+            Self::Inspect => 2,
         }
         .to_binary(binary)
     }

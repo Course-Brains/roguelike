@@ -581,6 +581,8 @@ fn main() {
                             );
                             if let player::Focus::Selector = state.player.focus {
                                 state.render();
+                            } else if let player::RightColumn::Inspect = state.player.right_column {
+                                state.render();
                             }
                         }
                     }
@@ -786,6 +788,7 @@ fn main() {
                                     bell(None);
                                 }
                             }
+                            _ => {}
                         }
                     }
                     Input::CreateCircle => {
@@ -847,13 +850,13 @@ fn main() {
                             // Hard+ = x3
                             // Normal = x2
                             // Easy- = x1
-                            let energy_multiplier = if SETTINGS.difficulty() >= Difficulty::Hard {
+                            /*let energy_multiplier = if SETTINGS.difficulty() >= Difficulty::Hard {
                                 3
                             } else if SETTINGS.difficulty() <= Difficulty::Easy {
                                 1
                             } else {
                                 2
-                            };
+                            };*/
                             Weirdifier::fix(false);
                             let starting_energy = loop {
                                 set_feedback(get(61));
@@ -868,13 +871,13 @@ fn main() {
                             };
                             Weirdifier::weirdify(false);
                             state.render();
-                            if starting_energy * energy_multiplier > state.player.energy {
+                            if starting_energy /* * energy_multiplier */ > state.player.energy {
                                 set_feedback(get(60));
                                 draw_feedback();
                                 continue;
                             }
                             let cast_time =
-                                spell.cast_time(Some(chosen_energy)) * energy_multiplier;
+                                spell.cast_time(Some(chosen_energy)) /* * energy_multiplier */;
                             let delay = if cast_time == 0 {
                                 std::time::Duration::ZERO
                             } else {
@@ -898,7 +901,7 @@ fn main() {
                                 state.increment();
                                 std::thread::sleep(delay)
                             }
-                            state.player.energy -= starting_energy * energy_multiplier;
+                            state.player.energy -= starting_energy /* * energy_multiplier */;
                             state.board.spells.push(spell::SpellCircle::new_player(
                                 spell,
                                 state.player.selector,

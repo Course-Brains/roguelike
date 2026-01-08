@@ -262,6 +262,9 @@ cheats
         toggle\_show\_reachable
         cheats
         get\_feedback
+        log\_input\_timing
+        stop\_input\_log
+        map\_gen\_status
     The criteria for a command to not require cheats is for it to
     neither do an illegal action nor give illegal information.
 
@@ -291,3 +294,13 @@ set\_spell \[index\] \[spell\]
 force\_dialogue\_index\_recalc
     Causes the dialogue indexes to reinitialize. Essentially only
     needs to be used if you modify the index file during a run.
+
+log\_input\_timing \[file\]
+    Starts logging the relative time between the starts and stops of the input
+    thread getting input to the given \[file\]
+
+stop\_input\_log
+    Stops log\_input\_timing from doing its thing.
+
+map\_gen\_status
+    Tells the status of both map gen threads.

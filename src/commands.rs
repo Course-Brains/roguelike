@@ -51,6 +51,9 @@ pub enum Command {
     SetMaxHealth(usize),
     SetSpell(usize, Spell),
     ForceDialogueIndexRecalc,
+    LogInputTiming(String),
+    StopInputLog,
+    MapGenStatus,
 }
 impl Command {
     fn new(string: String) -> Result<Command, String> {
@@ -166,6 +169,9 @@ impl Command {
                     .parse()?,
             )),
             "force_dialogue_index_recalc" => Ok(Command::ForceDialogueIndexRecalc),
+            "log_input_timing" => Ok(Command::LogInputTiming(parse(iter.next())?)),
+            "stop_input_log" => Ok(Command::StopInputLog),
+            "map_gen_status" => Ok(Command::MapGenStatus),
             _ => Err(format!("Unknown command: ({string})")),
         }
     }
@@ -574,6 +580,32 @@ impl Command {
                 *crate::dialogue::INDEX.try_write().unwrap() =
                     std::sync::LazyLock::new(crate::dialogue::index_initializer);
             }
+            Command::LogInputTiming(path) => {
+                crate::input::HAS_LOG.store(false, std::sync::atomic::Ordering::Relaxed);
+                *crate::input::LOG.lock().unwrap() = Some(std::fs::File::create(path).unwrap());
+                crate::input::HAS_LOG.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            Command::StopInputLog => {
+                crate::input::HAS_LOG.store(false, std::sync::atomic::Ordering::Relaxed);
+                *crate::input::LOG.lock().unwrap() = None;
+            }
+            Command::MapGenStatus => {
+                if state.next_map.is_finished() {
+                    out.send("The next map is generated".to_string()).unwrap();
+                } else if crate::generator::DO_DELAY.load(crate::RELAXED) {
+                    out.send("The next map is generating normally".to_string())
+                        .unwrap()
+                } else {
+                    out.send("The next map is rushing generation".to_string())
+                        .unwrap()
+                }
+
+                if state.next_shop.is_finished() {
+                    out.send("The next shop is generated".to_string()).unwrap()
+                } else {
+                    out.send("The next shop is generating".to_string()).unwrap();
+                }
+            }
         }
     }
     fn is_cheat(&self) -> bool {
@@ -588,6 +620,9 @@ impl Command {
                 | Self::ToggleShowReachable
                 | Self::Cheats
                 | Self::GetFeedback
+                | Self::LogInputTiming(_)
+                | Self::StopInputLog
+                | Self::MapGenStatus
         )
     }
 }

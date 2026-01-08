@@ -1,5 +1,12 @@
 use abes_nice_things::{FromBinary, ToBinary};
-use std::io::Read;
+use std::io::{Read, Write};
+pub static HAS_LOG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static LOG: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+pub fn log(msg: String) {
+    if HAS_LOG.load(std::sync::atomic::Ordering::Relaxed) {
+        writeln!(LOG.try_lock().unwrap().as_mut().unwrap(), "{msg}").unwrap();
+    }
+}
 #[derive(Debug)]
 pub enum Input {
     Arrow(Direction),           // move cursor
@@ -24,12 +31,75 @@ pub enum Input {
     StopAutomove,               // Internal signal that the automove has ended
     CreateCircle,               // Create a spell circle
 }
+// false = normal output
+// true = alternate output
+pub static TARGET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static DESTINATION: std::sync::LazyLock<std::sync::Mutex<std::sync::mpsc::Receiver<u8>>> =
+    std::sync::LazyLock::new(|| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *SENDER.try_lock().unwrap() = Some(tx);
+        std::sync::Mutex::new(rx)
+    });
+static SENDER: std::sync::Mutex<Option<std::sync::mpsc::Sender<u8>>> = std::sync::Mutex::new(None);
+pub fn read_stdin() -> u8 {
+    TARGET.store(true, crate::RELAXED);
+    let out = DESTINATION.try_lock().unwrap().recv().unwrap();
+    TARGET.store(false, crate::RELAXED);
+    out
+}
+pub fn read_stdin_buf(buf: &mut [u8]) {
+    TARGET.store(true, crate::RELAXED);
+    let lock = DESTINATION.try_lock().unwrap();
+    for value in buf.iter_mut() {
+        *value = lock.recv().unwrap();
+    }
+    TARGET.store(false, crate::RELAXED);
+}
+pub fn read_stdin_available() -> Vec<u8> {
+    TARGET.store(true, crate::RELAXED);
+    let mut out = Vec::new();
+    let lock = DESTINATION.try_lock().unwrap();
+    while let Ok(byte) = lock.try_recv() {
+        out.push(byte);
+    }
+    TARGET.store(false, crate::RELAXED);
+    out
+}
+pub fn read_stdin_line() -> String {
+    TARGET.store(true, crate::RELAXED);
+    let lock = DESTINATION.try_lock().unwrap();
+    let mut buf = Vec::new();
+    loop {
+        let current = lock.recv().unwrap();
+        if current == b'\n' {
+            break;
+        }
+        buf.push(current);
+    }
+    String::from_utf8(buf).unwrap()
+}
 impl Input {
     pub fn get() -> Input {
         let mut lock = std::io::stdin().lock();
         let mut buf = [0_u8];
         loop {
             lock.read_exact(&mut buf).unwrap();
+            if TARGET.load(crate::RELAXED) {
+                crate::unlikely();
+                SENDER
+                    .try_lock()
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .send(buf[0])
+                    .unwrap();
+                continue;
+            } else {
+                // If we are getting data for the input then we should purge the alternate data
+                // just in case. It would be ideal to redirect it by that you be annoying when
+                // accounting for escape sequences
+                while let Ok(_) = DESTINATION.try_lock().unwrap().try_recv() {}
+            }
             break match buf[0] {
                 27 => {
                     // escape byte

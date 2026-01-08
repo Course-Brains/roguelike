@@ -509,7 +509,7 @@ impl NormalSpell {
                     *time += start.elapsed()
                 }
                 println!("Press enter to continue");
-                std::io::stdin().read_line(&mut String::new()).unwrap();
+                crate::input::read_stdin_line();
                 true
             }
             Self::Charge => {

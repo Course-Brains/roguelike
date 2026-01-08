@@ -6,7 +6,7 @@ use crate::{
 };
 use abes_nice_things::{FromBinary, ToBinary};
 use std::collections::{BinaryHeap, HashSet, VecDeque};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::ops::Range;
 use std::sync::RwLock;
 use std::sync::{Arc, Weak};
@@ -139,6 +139,8 @@ impl Board {
     pub const BONUS_NO_ENERGY: Vector = Vector::new(45, 15);
     pub const SPELLS: [Vector; 2] = [Vector::new(88, 10), Vector::new(88, 20)];
     pub fn new_shop() -> Board {
+        #[cfg(debug_assertions)]
+        crate::SHOP_GEN_STATUS.store(false, crate::RELAXED);
         let mut out = Board::new(90, 30);
 
         // Creating room
@@ -193,6 +195,9 @@ impl Board {
                 crate::upgrades::UpgradeType::Spell(Spell::get_random()),
             ))));
         }
+
+        #[cfg(debug_assertions)]
+        crate::SHOP_GEN_STATUS.store(true, crate::RELAXED);
 
         out
     }
@@ -762,17 +767,17 @@ impl Board {
                         player_mut.effects.full_vis.is_active(),
                     )
                 {
+                    crate::unlikely();
                     specials.push(self.add_special(Special::new(
                         path_data.pos,
                         ' ',
                         Some(*Style::new().background_green()),
                     )));
                     self.smart_render(player_mut);
-                    let mut buf = [0];
-                    std::io::stdin().read_exact(&mut buf).unwrap();
-                    if buf[0] == b's' {
+                    let input = crate::input::read_stdin();
+                    if input == b's' {
                         skip_stepthrough_single = true
-                    } else if buf[0] == b'S' {
+                    } else if input == b'S' {
                         skip_stepthrough = true
                     }
                 }

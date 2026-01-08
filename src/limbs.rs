@@ -73,12 +73,8 @@ impl Limbs {
     pub fn pick_eye(&mut self) -> Option<&mut Eye> {
         crate::set_feedback("L for left eye, R for right eye, C for cancel".to_string());
         crate::draw_feedback();
-        let mut buf = [0];
-        let mut lock = std::io::stdin().lock();
         loop {
-            lock.read_exact(&mut buf).unwrap();
-            buf[0].make_ascii_uppercase();
-            match buf[0] {
+            match crate::input::read_stdin().to_ascii_uppercase() {
                 b'L' | b'1' => break Some(&mut self.left_eye),
                 b'R' | b'2' => break Some(&mut self.right_eye),
                 _ => {}

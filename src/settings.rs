@@ -1,3 +1,4 @@
+use crate::player::RightColumn;
 use crate::{FromBinary, ToBinary};
 use std::fmt::Display;
 use std::io::{Read, Write};
@@ -12,6 +13,7 @@ pub struct Settings {
     selector_follows_player: Field,
     circles_spawn_enabled: Field,
     input_queueing: Field,
+    start_column: Field,
 }
 macro_rules! getter {
     ($name:ident, $out:ty) => {
@@ -91,6 +93,7 @@ impl Settings {
                             "selector_follows_player" => thing!(selector_follows_player, bool),
                             "circles_spawn_enabled" => thing!(circles_spawn_enabled, bool),
                             "input_queueing" => thing!(input_queueing, bool),
+                            "start_column" => thing!(start_column, RightColumn),
                             _ => {}
                         }
                     }
@@ -133,6 +136,7 @@ impl Settings {
         helper!("selector_follows_player", selector_follows_player, bool);
         helper!("circles_spawn_enabled", circles_spawn_enabled, bool);
         helper!("input_queueing", input_queueing);
+        helper!("start_column", start_column, RightColumn);
 
         file.flush().unwrap();
     }
@@ -146,6 +150,7 @@ impl Settings {
             5 => &mut self.selector_follows_player,
             6 => &mut self.circles_spawn_enabled,
             7 => &mut self.input_queueing,
+            8 => &mut self.start_column,
             _ => panic!("I diddly done goofed up the math"),
         }
     }
@@ -159,11 +164,12 @@ impl Settings {
             5 => &self.selector_follows_player,
             6 => &self.circles_spawn_enabled,
             7 => &self.input_queueing,
+            8 => &self.start_column,
             _ => panic!("Someone is bad at math, and it is probably me"),
         }
     }
     const fn num_fields(&self) -> usize {
-        8
+        9
     }
 
     getter!(kick_enemies, bool);
@@ -174,6 +180,7 @@ impl Settings {
     getter!(selector_follows_player, bool);
     getter!(circles_spawn_enabled, bool);
     getter!(input_queueing, bool);
+    getter!(start_column, RightColumn);
 }
 // Unchanging editor methods
 impl Settings {
@@ -365,6 +372,7 @@ impl Settings {
         *selecting_field = false;
     }
 }
+// Do have to change this though
 impl Default for Settings {
     fn default() -> Self {
         Settings {
@@ -376,6 +384,7 @@ impl Default for Settings {
             selector_follows_player: Field::new("selector follows player", false),
             circles_spawn_enabled: Field::new("circles spawn enabled", true),
             input_queueing: Field::new("input queueing", true),
+            start_column: Field::new("start column", RightColumn::Inspect),
         }
     }
 }
@@ -398,6 +407,7 @@ impl FromBinary for Settings {
             selector_follows_player: Value::from(bool::from_binary(binary)?).into(),
             circles_spawn_enabled: help!(bool),
             input_queueing: help!(bool),
+            start_column: help!(RightColumn),
         })
     }
 }
@@ -416,6 +426,7 @@ impl ToBinary for Settings {
         help!(selector_follows_player, bool);
         help!(circles_spawn_enabled, bool);
         help!(input_queueing, bool);
+        help!(start_column, RightColumn);
         Ok(())
     }
 }
@@ -458,6 +469,7 @@ impl std::ops::DerefMut for Field {
 pub enum Value {
     Bool(bool),
     Difficulty(Difficulty),
+    RightColumn(RightColumn),
 }
 impl Value {
     fn get_values(&self) -> Vec<Value> {
@@ -465,6 +477,14 @@ impl Value {
             Value::Bool(_) => Vec::from([true, false].map(Value::Bool)),
             Value::Difficulty(_) => Vec::from(
                 [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard].map(Value::Difficulty),
+            ),
+            Value::RightColumn(_) => Vec::from(
+                [
+                    RightColumn::Inspect,
+                    RightColumn::Items,
+                    RightColumn::Spells,
+                ]
+                .map(Value::RightColumn),
             ),
         }
     }
@@ -487,11 +507,17 @@ impl From<Difficulty> for Value {
         Value::Difficulty(value)
     }
 }
+impl From<RightColumn> for Value {
+    fn from(value: RightColumn) -> Self {
+        Value::RightColumn(value)
+    }
+}
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Bool(val) => val.fmt(f),
             Value::Difficulty(val) => val.fmt(f),
+            Value::RightColumn(val) => val.fmt(f),
         }
     }
 }
@@ -510,6 +536,16 @@ impl TryFrom<Value> for Difficulty {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         if let Value::Difficulty(val) = value {
             Ok(val)
+        } else {
+            Err(())
+        }
+    }
+}
+impl TryFrom<Value> for RightColumn {
+    type Error = ();
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if let Value::RightColumn(value) = value {
+            Ok(value)
         } else {
             Err(())
         }

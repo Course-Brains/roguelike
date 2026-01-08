@@ -158,11 +158,8 @@ impl UpgradeType {
             }
             Self::SavePint => {
                 crate::set_desc("Drink the save pint? y/n");
-                let mut lock = std::io::stdin().lock();
-                let mut buf = [0];
                 loop {
-                    lock.read_exact(&mut buf).unwrap();
-                    match buf[0] {
+                    match crate::input::read_stdin() {
                         b'y' => {
                             crate::SAVE.store(true, std::sync::atomic::Ordering::Relaxed);
                             break true;
@@ -257,9 +254,7 @@ impl UpgradeType {
                 crate::set_feedback("Pick the slot for your new spell, c to cancel".to_string());
                 crate::draw_feedback();
                 let index = loop {
-                    let mut buf = [0];
-                    std::io::stdin().lock().read_exact(&mut buf).unwrap();
-                    break match buf[0] {
+                    break match crate::input::read_stdin() {
                         b'1' => 0,
                         b'2' => 1,
                         b'3' => 2,

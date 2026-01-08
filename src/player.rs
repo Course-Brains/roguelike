@@ -65,7 +65,7 @@ impl Player {
             limbs: Limbs::new(),
             memory: None,
             known_spells: Player::starting_spells(),
-            right_column: RightColumn::Inspect,
+            right_column: crate::SETTINGS.start_column(),
             just_cast: false,
             automoving: false,
         }
@@ -327,11 +327,8 @@ impl Player {
             Style::new().cyan()
         );
         std::io::stdout().flush().unwrap();
-        let mut buf = [0];
-        let mut stdin = std::io::stdin().lock();
         loop {
-            stdin.read_exact(&mut buf).unwrap();
-            match buf[0].to_ascii_uppercase() {
+            match crate::input::read_stdin().to_ascii_uppercase() {
                 b'S' => break true,
                 b'\n' => break false,
                 _ => {}
@@ -452,15 +449,11 @@ impl Player {
         let mut stdout = std::io::stdout();
         Self::clear_right_column(&mut stdout);
         self.draw_items(&mut stdout);
-        let mut lock = std::io::stdin().lock();
-        let mut buf = [0];
         crate::set_feedback(get(55));
         crate::draw_feedback();
         stdout.flush().unwrap();
         let selected = loop {
-            lock.read_exact(&mut buf).unwrap();
-            crate::log!("  recieved {}", buf[0].to_string());
-            match buf[0] {
+            match crate::input::read_stdin() {
                 b'1' => break Some(0),
                 b'2' => break Some(1),
                 b'3' => break Some(2),
@@ -585,7 +578,7 @@ impl Player {
     }
     pub fn count_spells(&self) -> usize {
         let mut count = 0;
-        for item in self.items.iter() {
+        for item in self.known_spells.iter() {
             if item.is_some() {
                 count += 1;
             }
@@ -604,6 +597,8 @@ impl Player {
             RightColumn::Items => self.draw_items(&mut lock),
             RightColumn::Spells => self.draw_spells(&mut lock),
             RightColumn::Inspect => self.draw_inspect(&mut lock, board),
+            #[cfg(debug_assertions)]
+            RightColumn::Debug => self.draw_debug(&mut lock),
         }
         self.draw_limbs(&mut lock);
     }
@@ -733,6 +728,23 @@ impl Player {
             return;
         });
         Player::draw_right_column_by_line(text, lock)
+    }
+    #[cfg(debug_assertions)]
+    fn draw_debug(&self, lock: &mut impl std::io::Write) {
+        Player::draw_right_column_title("DEBUG".to_string(), lock);
+        Player::draw_right_column_by_line(
+            vec![
+                format!(
+                    "Map gen done? {}",
+                    crate::MAP_GEN_STATUS.load(crate::RELAXED)
+                ),
+                format!(
+                    "Shop gen done? {}",
+                    crate::SHOP_GEN_STATUS.load(crate::RELAXED)
+                ),
+            ],
+            lock,
+        );
     }
     pub fn get_inspect_dialogue(index: usize) -> Vec<String> {
         let raw = get(index);
@@ -1151,18 +1163,25 @@ impl ToBinary for Duration {
         }
     }
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RightColumn {
     Items,
     Spells,
     Inspect,
+    #[cfg(debug_assertions)]
+    Debug,
 }
 impl RightColumn {
     pub fn increment(&mut self) {
         match self {
+            #[cfg(debug_assertions)]
+            Self::Debug => *self = Self::Items,
             Self::Items => *self = Self::Spells,
             Self::Spells => *self = Self::Inspect,
+            #[cfg(not(debug_assertions))]
             Self::Inspect => *self = Self::Items,
+            #[cfg(debug_assertions)]
+            Self::Inspect => *self = Self::Debug,
         }
     }
 }
@@ -1190,7 +1209,33 @@ impl ToBinary for RightColumn {
             Self::Items => 0_u8,
             Self::Spells => 1,
             Self::Inspect => 2,
+            #[cfg(debug_assertions)]
+            Self::Debug => 2, // Debug does not save
         }
         .to_binary(binary)
+    }
+}
+impl std::str::FromStr for RightColumn {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "items" => Self::Items,
+            "spells" => Self::Spells,
+            "inspect" => Self::Inspect,
+            #[cfg(debug_assertions)]
+            "debug" => Self::Debug,
+            _ => return Err(()),
+        })
+    }
+}
+impl std::fmt::Display for RightColumn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Items => write!(f, "items"),
+            Self::Spells => write!(f, "spells"),
+            Self::Inspect => write!(f, "inspect"),
+            #[cfg(debug_assertions)]
+            Self::Debug => write!(f, "debug"),
+        }
     }
 }

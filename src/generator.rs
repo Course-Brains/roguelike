@@ -23,6 +23,8 @@ pub static DO_DELAY: AtomicBool = AtomicBool::new(false);
 
 pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
     std::thread::spawn(move || {
+        #[cfg(debug_assertions)]
+        crate::MAP_GEN_STATUS.store(false, crate::RELAXED);
         crate::log!(
             "{}Generating map with settings: {:#?}\x1b[0m",
             STYLE,
@@ -48,6 +50,8 @@ pub fn generate(settings: MapGenSettings) -> JoinHandle<Board> {
             elapsed.as_millis()
         );
         checksum(&board).unwrap();
+        #[cfg(debug_assertions)]
+        crate::MAP_GEN_STATUS.store(true, crate::RELAXED);
         board
     })
 }

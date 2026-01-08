@@ -1,7 +1,7 @@
 // The format version of the save data, different versions are incompatible and require a restart
 // of the save, but the version will only change on releases, so if the user is not going by
 // release, then they could end up with two incompatible save files.
-const SAVE_VERSION: Version = 0x00000016;
+const SAVE_VERSION: Version = 0x00000017;
 mod player;
 use player::Player;
 mod board;
@@ -161,6 +161,11 @@ fn reset_bonuses() {
     BONUS_NO_WASTE.store(true, Ordering::Relaxed);
     BONUS_NO_ENERGY.store(true, RELAXED);
 }
+// Whether or not they are done
+#[cfg(debug_assertions)]
+static MAP_GEN_STATUS: AtomicBool = AtomicBool::new(false);
+#[cfg(debug_assertions)]
+static SHOP_GEN_STATUS: AtomicBool = AtomicBool::new(false);
 
 /////////////////////////////
 // General purpose globals //
@@ -203,11 +208,29 @@ static INPUT_SYSTEM: std::sync::LazyLock<(
 fn initialize_stdin_listener() -> std::thread::Thread {
     std::thread::spawn(|| {
         let send = INPUT_SYSTEM.0.clone();
+        let mut prev_time;
         loop {
+            prev_time = std::time::Instant::now();
             if !PURGE_INPUT.load(RELAXED) {
-                std::thread::park();
+                input::log(format!(
+                    "Getting input after {}ms",
+                    prev_time.elapsed().as_millis()
+                ));
+                log!("\x1b[35mGetting input\x1b[0m");
+            } else {
+                input::log(format!(
+                    "GETTING INPUT IN PURGE after {}ms",
+                    prev_time.elapsed().as_millis()
+                ));
+                log!("\x1b[35mGetting input in purge\x1b[0m");
             }
+            prev_time = std::time::Instant::now();
             send.send(CommandInput::Input(Input::get())).unwrap();
+            input::log(format!(
+                "Got input after {}ms",
+                prev_time.elapsed().as_millis()
+            ));
+            log!("\x1b[35mGot input\x1b[0m");
         }
     })
     .thread()
@@ -245,7 +268,7 @@ fn main() {
     }
     random::initialize();
     abes_nice_things::random::initialize();
-    crate::log!(
+    log!(
         "Recieved args: {:?}",
         std::env::args().collect::<Vec<String>>()
     );
@@ -389,9 +412,8 @@ fn main() {
     state.board.flood(state.player.pos);
     let _weirdifier = Weirdifier::new();
     state.render();
-    let input_thread = initialize_stdin_listener();
+    initialize_stdin_listener();
     let input_lock = INPUT_SYSTEM.1.try_lock().unwrap();
-    let mut got_input = true;
     let mut prev_turn_duration = std::time::Duration::ZERO;
     loop {
         if state.player.is_dead() {
@@ -401,7 +423,7 @@ fn main() {
             if show_stats {
                 log!("Showing end of game stats:\n{:#?}", stats());
                 println!("\n\n\n{:#?}\n\n\nPress enter to quit.", stats());
-                std::io::stdin().read_line(&mut String::new()).unwrap();
+                while b'\n' != input::read_stdin() {}
             }
             break;
         }
@@ -434,7 +456,6 @@ fn main() {
         {
             log!("Attempting input queue purge");
             PURGE_INPUT.store(true, RELAXED);
-            input_thread.unpark();
             std::thread::sleep(INPUT_QUEUE_PURGE_TIME);
             while let Ok(input) = input_lock.try_recv() {
                 log!("Purging input");
@@ -444,16 +465,11 @@ fn main() {
             }
             PURGE_INPUT.store(false, RELAXED);
         }
-        if got_input {
-            input_thread.unpark();
-            got_input = false
-        }
         let input = input_lock.recv().unwrap();
         let start_of_turn = std::time::Instant::now();
         match input {
             CommandInput::Input(input) => {
                 log!("got input: {input:?}");
-                got_input = true;
                 match input {
                     Input::Wasd(direction, sprint) => match sprint {
                         true => {
@@ -675,14 +691,13 @@ fn main() {
                                     let chosen_energy = match alt {
                                         true => {
                                             Weirdifier::fix(false);
-                                            let mut stdin = std::io::stdin().lock();
-                                            let mut buf = String::new();
                                             loop {
                                                 set_feedback("How much energy? ".to_string());
                                                 draw_feedback();
                                                 bell(None);
-                                                stdin.read_line(&mut buf).unwrap();
-                                                if let Ok(energy) = buf.trim().parse() {
+                                                if let Ok(energy) =
+                                                    input::read_stdin_line().trim().parse()
+                                                {
                                                     Weirdifier::weirdify(false);
                                                     break energy;
                                                 }
@@ -805,9 +820,7 @@ fn main() {
                         set_feedback(get(56));
                         draw_feedback();
                         if let Some((spell_index, overclock)) = loop {
-                            let mut buf = [0];
-                            std::io::stdin().read_exact(&mut buf).unwrap();
-                            match buf[0] {
+                            match input::read_stdin() {
                                 b'1' => break Some((0, false)),
                                 b'2' => break Some((1, false)),
                                 b'3' => break Some((2, false)),
@@ -836,9 +849,8 @@ fn main() {
                                     let out = loop {
                                         set_feedback(get(59));
                                         draw_feedback();
-                                        let mut input = String::new();
-                                        std::io::stdin().read_line(&mut input).unwrap();
-                                        if let Ok(energy) = input.trim().parse() {
+                                        if let Ok(energy) = input::read_stdin_line().trim().parse()
+                                        {
                                             break energy;
                                         }
                                     };
@@ -861,9 +873,7 @@ fn main() {
                             let starting_energy = loop {
                                 set_feedback(get(61));
                                 draw_feedback();
-                                let mut input = String::new();
-                                std::io::stdin().read_line(&mut input).unwrap();
-                                if let Ok(energy) = input.trim().parse()
+                                if let Ok(energy) = input::read_stdin_line().trim().parse()
                                     && state.player.energy >= energy
                                 {
                                     break energy;
@@ -1334,15 +1344,13 @@ fn get_selection(state: &mut State) -> Option<Vector> {
     let revert_focus = state.player.focus;
     state.player.focus = player::Focus::Selector;
     let revert_selector = state.player.selector;
-    let mut stdin = std::io::stdin().lock();
-    let mut buf = [0];
+    input::TARGET.store(true, RELAXED);
+    let lock = input::DESTINATION.try_lock().unwrap();
     let out = loop {
-        stdin.read_exact(&mut buf).unwrap();
-        let direction = match buf[0] {
+        let direction = match lock.recv().unwrap() {
             27 => {
-                stdin.read_exact(&mut buf).unwrap();
-                stdin.read_exact(&mut buf).unwrap();
-                match buf[0] {
+                lock.recv().unwrap();
+                match lock.recv().unwrap() {
                     b'A' => Direction::Up,
                     b'B' => Direction::Down,
                     b'D' => Direction::Left,
@@ -1360,7 +1368,10 @@ fn get_selection(state: &mut State) -> Option<Vector> {
         state.player.selector += direction;
         state.render();
     };
+    input::TARGET.store(false, RELAXED);
     state.player.focus = revert_focus;
     state.player.selector = revert_selector;
     out
 }
+#[cold]
+fn unlikely() {}

@@ -714,6 +714,7 @@ impl Player {
         // Priority:
         //  Player
         //  Enemy
+        //  Spells
         //  Map
         let text = Player::get_inspect_dialogue(if self.selector == self.pos {
             63
@@ -721,6 +722,8 @@ impl Player {
         } else if let Some(enemy) = board.get_enemy(self.selector, None) {
             enemy.try_read().unwrap().variant.get_inspect()
             // Enemy
+        } else if board.contact_spell_at(self.selector).is_some() {
+            113
         } else if let Some(piece) = &board[self.selector] {
             // Map piece
             piece.get_inspect()

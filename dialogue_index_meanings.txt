@@ -4,7 +4,7 @@
 3: enemy: mage boss
 4: enemy: fighter
 5: enemy: fighter boss
-6(DEBUG): enemy: archer
+6: enemy: archer
 7: enemy: archer boss
 8: enemy: dummy
 9: upgrade: map
@@ -111,3 +111,4 @@
 110: inspect: spell: normal(teleport)
 111: inspect: spell: normal(summon_spirit)
 112: inspect: spell: normal(heal)
+113: inspect: spell_circle

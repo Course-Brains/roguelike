@@ -610,8 +610,7 @@ fn main() {
                         if !state.player.within_melee_range(state.player.selector) {
                             set_feedback(fail_msg);
                             draw_feedback();
-                        }
-                        if state.board.contains_enemy(state.player.selector, None)
+                        } else if state.board.contains_enemy(state.player.selector, None)
                             && state.attack_enemy(state.player.selector, false, false, false)
                         {
                             state.increment();
@@ -649,25 +648,77 @@ fn main() {
                     }
                     Input::Enter => {
                         if state.player.upgrades.telekinesis
-                            || state.player.selector.is_near(state.player.pos, 5)
+                            || state.player.selector.is_near(state.player.pos, 4)
                         {
-                            if let Some(Piece::Door(door)) = &mut state.board[state.player.selector]
+                            // Getting possible interactions
+                            let mut selection: Vec<(&str, u8, Box<dyn Fn(&mut State)>)> =
+                                Vec::new();
+                            // Doors
+                            if let Some(Piece::Door(_)) = state.board[state.player.selector] {
+                                selection.push((
+                                    "d for door",
+                                    b'd',
+                                    Box::new(|state| {
+                                        if let Some(Piece::Door(door)) =
+                                            &mut state.board[state.player.selector]
+                                        {
+                                            if door.open {
+                                                door.open = false;
+                                                state.board.flood(state.player.pos);
+                                                state.increment();
+                                            } else {
+                                                state.open_door(state.player.selector, false);
+                                            }
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    }),
+                                ));
+                            }
+                            // Spell circles
+                            if let Some((spell, index)) =
+                                state.board.contact_spell_at(state.player.selector)
+                                && spell.caster.is_none()
                             {
-                                if door.open {
-                                    door.open = false;
-                                    state.board.flood(state.player.pos);
-                                    state.increment();
-                                } else {
-                                    state.open_door(state.player.selector, false);
-                                }
-                            } else {
-                                for circle in state.board.spells.iter_mut() {
-                                    if circle.pos == state.player.selector
-                                        && circle.caster.is_none()
-                                    {
-                                        circle.active ^= true;
+                                selection.push((
+                                    "s for spell circle",
+                                    b's',
+                                    Box::new(move |state| {
+                                        state.board.spells[index].active ^= true;
                                         state.increment();
-                                        break;
+                                    }),
+                                ));
+                            }
+
+                            // Getting rid of the easy ones
+                            if selection.len() == 0 {
+                                continue;
+                            }
+                            if selection.len() == 1 {
+                                (selection[0].2)(&mut state);
+                                continue;
+                            }
+
+                            // Setting feedback
+                            let mut feedback = "c to cancel ".to_string();
+                            for (msg, _, _) in selection.iter() {
+                                feedback += msg;
+                                feedback += " ";
+                            }
+                            set_feedback(feedback);
+                            draw_feedback();
+                            state.reposition_cursor();
+
+                            // Getting selection
+                            'outer: loop {
+                                let ch = input::read_stdin();
+                                if ch == b'c' {
+                                    break;
+                                }
+                                for (_, check, closure) in selection.iter() {
+                                    if ch == *check {
+                                        closure(&mut state);
+                                        break 'outer;
                                     }
                                 }
                             }
@@ -1341,10 +1392,14 @@ enum InitialBoard {
     Tutorial,
 }
 fn get_selection(state: &mut State) -> Option<Vector> {
+    log!("Getting selection");
     let revert_focus = state.player.focus;
     state.player.focus = player::Focus::Selector;
     let revert_selector = state.player.selector;
     input::TARGET.store(true, RELAXED);
+    let reverter = OnDrop::new(|| {
+        input::TARGET.store(false, RELAXED);
+    });
     let lock = input::DESTINATION.try_lock().unwrap();
     let out = loop {
         let direction = match lock.recv().unwrap() {
@@ -1362,16 +1417,32 @@ fn get_selection(state: &mut State) -> Option<Vector> {
             b'\n' => break Some(state.player.selector),
             _ => continue,
         };
+        log!("Moving selection selector {direction}");
         if !state.is_on_board(state.player.selector, direction) {
             continue;
         }
         state.player.selector += direction;
         state.render();
     };
-    input::TARGET.store(false, RELAXED);
+    log!("Done getting selection");
+    reverter.drop();
     state.player.focus = revert_focus;
     state.player.selector = revert_selector;
     out
 }
 #[cold]
 fn unlikely() {}
+struct OnDrop<F: Fn() = fn()> {
+    on_drop: F,
+}
+impl<F: Fn()> OnDrop<F> {
+    fn new(on_drop: F) -> Self {
+        Self { on_drop }
+    }
+    fn drop(self) {}
+}
+impl<F: Fn()> Drop for OnDrop<F> {
+    fn drop(&mut self) {
+        (self.on_drop)()
+    }
+}

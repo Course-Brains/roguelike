@@ -8,20 +8,11 @@ default-run = "main"
 name = "main"
 path = "src/main.rs"
 
-[[bin]]
-name = "console"
-path = "src/bin/console.rs"
-
-[[bin]]
-name = "launcher"
-path = "src/bin/launcher.rs"
-
 [dependencies]
-abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "30b8184", features = ["dyn_binary"] }
-crossterm = "0.29.0"
+abes_nice_things = { git = "https://github.com/Course-Brains/abes_nice_things.git", rev = "316b602", features = ["dyn_binary"] }
+anyhow = "1.0"
 
 [features]
-log = []
 
 [profile.release-with-debug]
 inherits="release"

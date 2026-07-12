@@ -1,3 +1,0 @@
-kick_enemies true
-kick_doors true
-fast_mode false

@@ -109,6 +109,12 @@ impl<T: Number> Zone<T> {
             bottom,
         }
     }
+    pub fn width(&self) -> T {
+        self.right - self.left
+    }
+    pub fn height(&self) -> T {
+        self.bottom - self.top
+    }
 }
 impl<T: Integer> Zone<T> {
     /// Creates an iterator over the area of the zone which goes left to right then down a line

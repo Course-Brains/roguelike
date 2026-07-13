@@ -20,18 +20,27 @@ pub struct Board {
     axis_length: usize,
 }
 impl Board {
-    /// Creates a blank board which is not populated by tile objects or map objects
+    /// Creates a blank board which is not populated by tile objects or map objects and is
+    /// therefore not valid
     pub fn new(tile_axis_bits: usize) -> Result<Board> {
         Ok(Board {
             tiles: Board::create_blank_tile_array(tile_axis_bits)?,
             axis_length: 1 << tile_axis_bits,
         })
     }
+    pub fn axis_length(&self) -> usize {
+        self.axis_length
+    }
 }
 
 // RENDERING
 impl Board {
-    /// Zeros the cursor and draws the tiles onto the screen, this is the first layer of rendering
+    const VIEWPORT_BORDER_RIGHT: char = '│';
+    const VIEWPORT_BORDER_BOTTOM: char = '─';
+    const VIEWPORT_BORDER_CORNER: char = '╯';
+    /// Zeros the cursor and draws the tiles onto the screen, this is the first layer of rendering.
+    ///
+    /// Additionally it draws the border of the viewport
     pub fn render_tiles(&self, view: Zone<usize>) {
         // Putting the cursor in the top corner
         print!("\x1b[H");
@@ -56,12 +65,18 @@ impl Board {
                 }
             }
             if last {
-                // erase until end of line
-                println!("\x1b[0K");
+                // erase until end of line and draw right border
+                println!("{}\x1b[0K", Board::VIEWPORT_BORDER_RIGHT);
             }
         }
-        // erase from cursor to end of screen
-        print!("\x1b[0J");
+        // erase from cursor to end of screen and draw bottom of border
+        print!(
+            "{}{}\x1b[0J",
+            Board::VIEWPORT_BORDER_BOTTOM
+                .to_string()
+                .repeat(view.width() + 1),
+            Board::VIEWPORT_BORDER_CORNER
+        );
     }
 }
 

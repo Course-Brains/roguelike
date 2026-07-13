@@ -9,22 +9,129 @@ use vector::Zone;
 
 fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
+    let board = board::Board::new(7).unwrap(); // 64x64
+    let (desired_width, desired_height) = calc_desired_dimensions();
+    let zone = Zone::from_vectors(
+        Vector::ZERO,
+        Vector::new(
+            desired_width.min(board.axis_length()),
+            desired_height.min(board.axis_length()),
+        ),
+    );
+    board.render_tiles(zone);
+    /*loop {
+        std::io::stdin().read_line(&mut String::new()).unwrap();
+        let start = std::time::Instant::now();
+        let (width, height) = get_terminal_size();
+        let elapsed = start.elapsed();
+        println!("Terminal size: ({width}, {height})");
+        println!("Time taken: {} ms", elapsed.as_millis());
+    }*/
+}
+fn calc_desired_dimensions() -> (usize, usize) {
+    let (mut width, mut height) = get_terminal_size();
 
+    // Viewport border
+    width -= 1;
+    height -= 1;
+
+    // bars
+    height -= 5;
+
+    // Right column
+    width -= 25;
+
+    // validity checks
+    if width < 20 {
+        panic!("Terminal is under width")
+    }
+    if height < 10 {
+        panic!("terminal is under height")
+    }
+    (width, height)
+}
+/// Gets the size of the terminal in width, height.
+///
+/// This takes about 10ms independant of whether it is release or debug.
+fn get_terminal_size() -> (usize, usize) {
+    // These get the width and height respectively, the reason why they have to inherit stderr is
+    // because they ask stderr what size it is
+    (
+        String::from_utf8(
+            std::process::Command::new("tput")
+                .arg("cols")
+                .stderr(std::process::Stdio::inherit())
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap(),
+        String::from_utf8(
+            std::process::Command::new("tput")
+                .arg("lines")
+                .stderr(std::process::Stdio::inherit())
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap(),
+    )
+}
+#[cfg(debug_assertions)]
+fn test_random() {
     let sample_size = 10000000;
     let mut average = 0.0;
     let start = std::time::Instant::now();
+    let mut sections = [0, 0, 0, 0, 0]; // 0.5-6 6-7 7-8 8-9 9-1.0
     for _ in 0..sample_size {
-        average += random::random() / sample_size as f64;
+        let random = random::random();
+        if random < 0.6 {
+            sections[0] += 1;
+        } else if random < 0.7 {
+            sections[1] += 1;
+        } else if random < 0.8 {
+            sections[2] += 1;
+        } else if random < 0.9 {
+            sections[3] += 1;
+        } else {
+            sections[4] += 1;
+        }
+        average += random / sample_size as f64;
     }
     let elapsed = start.elapsed();
+    println!("Sample size: {sample_size}");
     println!("average: {average}");
+    println!("Number in range 0.5-0.6: {}", sections[0]);
+    println!("Number in range 0.6-0.7: {}", sections[1]);
+    println!("Number in range 0.7-0.8: {}", sections[2]);
+    println!("Number in range 0.8-0.9: {}", sections[3]);
+    println!("Number in range 0.9-1.0: {}", sections[4]);
     println!("Time taken: {} seconds", elapsed.as_secs_f32());
     println!(
         "Average time: {} nano seconds",
         elapsed.as_nanos() / sample_size
     );
-
-    /*let board = board::Board::new(6).unwrap(); // 64x64
-    let zone = Zone::from_vectors(Vector::ZERO, Vector::new(59, 29));
-    board.render_tiles(zone);*/
+    let options = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let mut picks = [0; 10];
+    let sample_size = 1000000000;
+    let start = std::time::Instant::now();
+    for _ in 0..sample_size {
+        picks[*random::pick(&options)] += 1;
+    }
+    let elapsed = start.elapsed();
+    for (slot, num_picks) in picks.iter().enumerate() {
+        println!("Slot {slot} was picked {num_picks} times");
+    }
+    println!("Sample size: {sample_size}");
+    println!("Time taken: {} seconds", elapsed.as_secs_f32());
+    println!(
+        "Average time: {} nano seconds",
+        elapsed.as_nanos() / sample_size
+    );
 }

@@ -3,7 +3,10 @@ thread_local! {
     static URANDOM: std::cell::RefCell<std::io::BufReader<std::fs::File>> =
         std::cell::RefCell::new(std::io::BufReader::new(std::fs::File::open("/dev/urandom").unwrap()));
 }
-/// Creates a random number between 0.5 and 1
+/// Creates a uniform random number between 0.5 and 1
+///
+/// Specifically this creates a 64 bit floating point number with an exponent of -1, a positive
+/// sign and random data in the mantissa
 pub fn random() -> f64 {
     let mut bits: u64 = 0b00111111_11100000_00000000_00000000_00000000_00000000_00000000_00000000;
     //                    ^ sign
@@ -16,7 +19,13 @@ pub fn random() -> f64 {
 
     f64::from_bits(bits)
 }
+/// Picks a random option from a list
+pub fn pick<T>(options: &[T]) -> &T {
+    &options[((random() - 0.5) * 2.0 * options.len() as f64) as usize]
+}
 pub trait Random {
+    /// Get a random value from all possible states of the type. Because it is for all possible
+    /// states, floats do not implement this. If you want a float, try [random]
     fn random() -> Self;
 }
 macro_rules! int_helper {

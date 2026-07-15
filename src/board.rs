@@ -1,8 +1,11 @@
-mod tile;
+pub mod tile;
 
 use crate::Vector;
 use crate::Zone;
+use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
+use abes_nice_things::log;
+use abes_nice_things::require_debug;
 use anyhow::{Context, Result, bail};
 use tile::Tile;
 /// This contains all data which is tied to the specific map, which is everything that does not
@@ -18,14 +21,18 @@ pub struct Board {
     tiles: Vec<Option<Tile>>,
     /// The length of each axis of the map
     axis_length: usize,
+    /// The size of the viewport, the center will tend towards the top left
+    viewport_size: Vector<usize>,
 }
 impl Board {
     /// Creates a blank board which is not populated by tile objects or map objects and is
     /// therefore not valid
-    pub fn new(tile_axis_bits: usize) -> Result<Board> {
+    pub fn new(tile_axis_bits: usize, viewport_size: Vector<usize>) -> Result<Board> {
+        let axis_length = 1 << tile_axis_bits;
         Ok(Board {
             tiles: Board::create_blank_tile_array(tile_axis_bits)?,
-            axis_length: 1 << tile_axis_bits,
+            axis_length,
+            viewport_size: viewport_size.min(Vector::new(axis_length, axis_length)),
         })
     }
     pub fn axis_length(&self) -> usize {
@@ -41,10 +48,10 @@ impl Board {
     /// Zeros the cursor and draws the tiles onto the screen, this is the first layer of rendering.
     ///
     /// Additionally it draws the border of the viewport
-    pub fn render_tiles(&self, view: Zone<usize>) {
+    pub fn render_tiles(&self, viewport: Zone<usize>) {
         // Putting the cursor in the top corner
         print!("\x1b[H");
-        for (position, last) in view.scanlines() {
+        for (position, last) in viewport.scanlines() {
             if let Some(tile) = self[position] {
                 let (ch, style) = tile.render(self, position);
                 match style {
@@ -52,17 +59,7 @@ impl Board {
                     None => print!("{ch}"),
                 }
             } else {
-                if last {
-                    print!(
-                        "{} \x1b[0m",
-                        abes_nice_things::Style::new().background_red()
-                    );
-                } else {
-                    print!(
-                        "{} \x1b[0m",
-                        abes_nice_things::Style::new().background_green()
-                    );
-                }
+                print!(" ");
             }
             if last {
                 // erase until end of line and draw right border
@@ -74,9 +71,36 @@ impl Board {
             "{}{}\x1b[0J",
             Board::VIEWPORT_BORDER_BOTTOM
                 .to_string()
-                .repeat(view.width() + 1),
+                .repeat(viewport.width()),
             Board::VIEWPORT_BORDER_CORNER
         );
+    }
+    pub fn calculate_viewport(&self, mut center: Vector<usize>) -> Zone<usize> {
+        // We can assume that there will be no situation in which we are against opposing walls and
+        // that the viewport will not be bigger than the map in either axis
+        //
+        // Center will tend toward the top left
+        let distance_left = self.viewport_size.x / 2;
+        let distance_right = self.viewport_size.x - distance_left;
+        let distance_up = self.viewport_size.y / 2;
+        let distance_down = self.viewport_size.y - distance_up;
+
+        center
+            .x
+            .max_assign(distance_left)
+            .min_assign(self.axis_length - distance_right);
+        center
+            .y
+            .max_assign(distance_up)
+            .min_assign(self.axis_length - distance_down);
+
+        Zone::new(
+            center.x - distance_left,
+            center.x + distance_right - 1,
+            center.y - distance_up,
+            center.y + distance_down - 1,
+        )
+        .unwrap()
     }
 }
 
@@ -145,10 +169,10 @@ impl std::ops::IndexMut<Vector<usize>> for Board {
 }
 fn convert_z_order_index(index: Vector<usize>, axis_length: usize) -> Result<usize> {
     // Checking validity
-    if index.x > axis_length || index.y > axis_length {
+    if index.x >= axis_length || index.y >= axis_length {
         bail!(
-            "Could not generate z order index because logical index was out of bounds.
-            ({},{}) is out of bounds for z order array with axis length {axis_length}",
+            "Could not generate z order index because logical index was out of bounds.\
+            \n({},{}) is out of bounds for z order array with axis length {axis_length}",
             index.x,
             index.y
         );
@@ -182,7 +206,7 @@ fn validate_z_order() {
 #[cfg(test)]
 #[test]
 fn validate_tile_indexing() {
-    let board = Board::new(6).unwrap(); // 64 x 64
+    let board = Board::new(6, Vector::new(0, 0)).unwrap(); // 64 x 64
 
     for x in 0..64_usize {
         for y in 0..64_usize {

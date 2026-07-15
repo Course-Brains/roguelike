@@ -10,7 +10,10 @@ pub enum Tile {
     /// you can't blow it up (it's stronger than you)
     Wall,
     /// Like a wall, but you can make it pretend it doesn't exist. For a while anyway.
-    Door { open: bool },
+    Door {
+        open: bool,
+    },
+    Marker,
 }
 impl Tile {
     /// Gets the character and optionally the [Style] to draw the tile with
@@ -19,6 +22,7 @@ impl Tile {
             Tile::Wall => (get_wall_char(board, position), None),
             Tile::Door { open: false } => (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE)),
             Tile::Door { open: true } => OPEN_DOOR,
+            Tile::Marker => ('X', Some(*Style::new().purple().background_green())),
         }
     }
     /// Returns if the player will collide with this tile (not be able to walk through it)
@@ -26,6 +30,7 @@ impl Tile {
         match self {
             Tile::Wall => true,
             Tile::Door { open } => !open,
+            Tile::Marker => false,
         }
     }
     pub fn is_wall_connectable(&self) -> bool {

@@ -43,6 +43,14 @@ impl<T: Number> Vector<T> {
             y: self.y,
         }
     }
+    /// Applies min to each axis individually, this does mean that the resulting [Vector] can be a
+    /// mix between the two inputs.
+    pub fn min(self, other: Vector<T>) -> Vector<T> {
+        Vector {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y),
+        }
+    }
 }
 impl<T: Number> std::fmt::Display for Vector<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -65,6 +73,28 @@ impl<T: Number + PrimFrom<U>, U: Number> PrimFrom<Vector<U>> for Vector<T> {
         }
     }
 }
+impl<T: Integer> std::ops::Add<Direction> for Vector<T> {
+    type Output = Vector<T>;
+    fn add(self, rhs: Direction) -> Self::Output {
+        match rhs {
+            Direction::Up => self.up(),
+            Direction::Down => self.down(),
+            Direction::Left => self.left(),
+            Direction::Right => self.right(),
+        }
+    }
+}
+impl<T: Integer> std::ops::AddAssign<Direction> for Vector<T> {
+    fn add_assign(&mut self, rhs: Direction) {
+        *self = *self + rhs;
+    }
+}
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
 /// A 2 dimensional area with INCLUSIVE BOUNDS
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Zone<T: Number> {
@@ -74,6 +104,18 @@ pub struct Zone<T: Number> {
     bottom: T,
 }
 impl<T: Number> Zone<T> {
+    pub fn new(left: T, right: T, top: T, bottom: T) -> Option<Zone<T>> {
+        if left > right || top > bottom {
+            None
+        } else {
+            Some(Zone {
+                left,
+                right,
+                top,
+                bottom,
+            })
+        }
+    }
     pub fn contains(&self, position: Vector<T>) -> bool {
         // Once again, y of 0 is the top to make certain things easier
         self.left <= position.x
@@ -110,10 +152,21 @@ impl<T: Number> Zone<T> {
         }
     }
     pub fn width(&self) -> T {
-        self.right - self.left
+        self.right - self.left + T::ONE
     }
     pub fn height(&self) -> T {
-        self.bottom - self.top
+        self.bottom - self.top + T::ONE
+    }
+}
+impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {
+    type Output = Zone<T>;
+    fn add(self, rhs: Vector<T>) -> Self::Output {
+        Zone {
+            left: self.left + rhs.x,
+            right: self.right + rhs.x,
+            top: self.top + rhs.y,
+            bottom: self.bottom + rhs.y,
+        }
     }
 }
 impl<T: Integer> Zone<T> {
@@ -159,4 +212,12 @@ impl<'a, T: Integer> Iterator for Scanlines<'a, T> {
             .prim_as();
         (size, Some(size))
     }
+}
+#[cfg(test)]
+#[test]
+fn validate_scanlines() {
+    let zone = Zone::new(0, 63, 0, 63).unwrap(); // 64x64 = 4096
+    assert_eq!(zone.width(), 64);
+    assert_eq!(zone.height(), 64);
+    assert_eq!(zone.scanlines().count(), 4096)
 }

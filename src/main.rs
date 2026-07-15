@@ -1,38 +1,56 @@
 // Modules
 mod board;
+mod input;
 mod random;
 mod state;
 mod vector;
 
+use input::Input;
+use input::normalize;
+use input::weirdify;
 use vector::Vector;
 use vector::Zone;
 
 fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
-    let board = board::Board::new(7).unwrap(); // 64x64
-    let (desired_width, desired_height) = calc_desired_dimensions();
-    let zone = Zone::from_vectors(
-        Vector::ZERO,
-        Vector::new(
-            desired_width.min(board.axis_length()),
-            desired_height.min(board.axis_length()),
-        ),
-    );
-    board.render_tiles(zone);
-    /*loop {
-        std::io::stdin().read_line(&mut String::new()).unwrap();
-        let start = std::time::Instant::now();
-        let (width, height) = get_terminal_size();
-        let elapsed = start.elapsed();
-        println!("Terminal size: ({width}, {height})");
-        println!("Time taken: {} ms", elapsed.as_millis());
-    }*/
+    if let Err(error) = std::panic::catch_unwind(run) {
+        // Panic handling
+        let _ = normalize();
+
+        std::panic::panic_any(error)
+    }
 }
+fn run() {
+    let (desired_width, desired_height) = calc_desired_dimensions();
+    let mut board = board::Board::new(6, Vector::new(desired_width, desired_height)).unwrap(); // 128x128
+    let len = board.axis_length() - 1;
+    board[Vector::new(0, 0)] = Some(board::tile::Tile::Marker);
+    board[Vector::new(len, 0)] = Some(board::tile::Tile::Marker);
+    board[Vector::new(0, len)] = Some(board::tile::Tile::Marker);
+    board[Vector::new(len, len)] = Some(board::tile::Tile::Marker);
+
+    let mut position = Vector::new(5, 5);
+    weirdify().unwrap();
+    loop {
+        if let Input::Direction(direction) = input::Input::get() {
+            position += direction;
+            let viewport = board.calculate_viewport(position);
+            board.render_tiles(viewport);
+        }
+    }
+    normalize().unwrap();
+}
+/// Calculates the desired width, height for the viewport. It gets the terminal's size then
+/// subtracts the areas needed for other parts of the ui. If the resulting viewport would be too
+/// small then it panics.
+///
+/// When using this to create a [Zone] for the viewport, remember to subtract 1 from the width and
+/// height first because [Zone]s are inclusive.
 fn calc_desired_dimensions() -> (usize, usize) {
     let (mut width, mut height) = get_terminal_size();
 
     // Viewport border
-    width -= 1;
+    width -= 2;
     height -= 1;
 
     // bars

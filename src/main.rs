@@ -1,10 +1,12 @@
 // Modules
 mod board;
+mod enemy;
 mod input;
 mod random;
 mod state;
 mod vector;
 
+use board::AxisLength;
 use input::Input;
 use input::normalize;
 use input::weirdify;
@@ -22,8 +24,12 @@ fn main() {
 }
 fn run() {
     let (desired_width, desired_height) = calc_desired_dimensions();
-    let mut board = board::Board::new(6, Vector::new(desired_width, desired_height)).unwrap(); // 128x128
-    let len = board.axis_length() - 1;
+    let mut board = board::Board::new(
+        AxisLength::Small,
+        Vector::new(desired_width, desired_height),
+    )
+    .unwrap(); // 128x128
+    let len = board.axis_length().to_inner() - 1;
     board[Vector::new(0, 0)] = Some(board::tile::Tile::Marker);
     board[Vector::new(len, 0)] = Some(board::tile::Tile::Marker);
     board[Vector::new(0, len)] = Some(board::tile::Tile::Marker);

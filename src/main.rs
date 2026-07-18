@@ -34,14 +34,15 @@ fn run() {
     board[Vector::new(len, 0)] = Some(board::tile::Tile::Marker);
     board[Vector::new(0, len)] = Some(board::tile::Tile::Marker);
     board[Vector::new(len, len)] = Some(board::tile::Tile::Marker);
+    board.add_enemy(enemy::Enemy::new(&enemy::dummy::VTABLE, Vector::new(5, 5)));
 
     let mut position = Vector::new(5, 5);
     weirdify().unwrap();
+    board.render(position);
     loop {
         if let Input::Direction(direction) = input::Input::get() {
             position += direction;
-            let viewport = board.calculate_viewport(position);
-            board.render_tiles(viewport);
+            board.render(position);
         }
     }
     normalize().unwrap();

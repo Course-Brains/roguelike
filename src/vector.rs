@@ -52,6 +52,15 @@ impl<T: Number> Vector<T> {
         }
     }
 }
+impl<T: Number> std::ops::Sub for Vector<T> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vector {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
 impl<T: Number> std::fmt::Display for Vector<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.x, self.y)
@@ -157,6 +166,9 @@ impl<T: Number> Zone<T> {
     pub fn height(&self) -> T {
         self.bottom - self.top + T::ONE
     }
+    pub fn top_left(&self) -> Vector<T> {
+        Vector::new(self.left, self.top)
+    }
 }
 impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {
     type Output = Zone<T>;
@@ -166,6 +178,17 @@ impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {
             right: self.right + rhs.x,
             top: self.top + rhs.y,
             bottom: self.bottom + rhs.y,
+        }
+    }
+}
+impl<T: Number> std::ops::Sub<Vector<T>> for Zone<T> {
+    type Output = Zone<T>;
+    fn sub(self, rhs: Vector<T>) -> Self::Output {
+        Zone {
+            left: self.left - rhs.x,
+            right: self.right - rhs.x,
+            top: self.top - rhs.y,
+            bottom: self.bottom - rhs.y,
         }
     }
 }

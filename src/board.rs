@@ -5,11 +5,12 @@ pub use axis_length::AxisLength;
 use crate::Vector;
 use crate::Zone;
 use crate::enemy::Enemy;
+use crate::state::State;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use abes_nice_things::log;
-use abes_nice_things::require_debug;
 use anyhow::{Context, Result, bail};
+use std::io::Write;
 use tile::Tile;
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
@@ -31,7 +32,15 @@ pub struct Board {
     axis_length: AxisLength,
     /// The size of the viewport, the center will tend towards the top left
     viewport_size: Vector<usize>,
-    enemies: Vec<Option<Enemy>>,
+    /// Elements in this array MUST never be removed or reordered, if an enemy dies, its entry
+    /// must change to None instead of removing the entry. This is to preserve index validity even
+    /// if the enemy at that index dies.
+    ///
+    /// Do not interact with this directly, there are functions which are defined ways which will
+    /// not change out from under you.
+    pub enemies: Vec<Option<Enemy>>,
+    /// The number of turns spent on this map
+    local_turns: usize,
 }
 impl Board {
     /// Creates a blank board which is not populated by tile objects or map objects and is
@@ -42,6 +51,8 @@ impl Board {
             axis_length,
             viewport_size: desired_viewport
                 .min(Vector::new(axis_length.to_inner(), axis_length.to_inner())),
+            enemies: Vec::new(),
+            local_turns: 0,
         })
     }
     pub fn axis_length(&self) -> AxisLength {
@@ -54,36 +65,6 @@ impl Board {
     const VIEWPORT_BORDER_RIGHT: char = '│';
     const VIEWPORT_BORDER_BOTTOM: char = '─';
     const VIEWPORT_BORDER_CORNER: char = '╯';
-    /// Zeros the cursor and draws the tiles onto the screen, this is the first layer of rendering.
-    ///
-    /// Additionally it draws the border of the viewport
-    pub fn render_tiles(&self, viewport: Zone<usize>) {
-        // Putting the cursor in the top corner
-        print!("\x1b[H");
-        for (position, last) in viewport.scanlines() {
-            if let Some(tile) = self[position] {
-                let (ch, style) = tile.render(self, position);
-                match style {
-                    Some(style) => print!("{style}{ch}\x1b[0m"),
-                    None => print!("{ch}"),
-                }
-            } else {
-                print!(" ");
-            }
-            if last {
-                // erase until end of line and draw right border
-                println!("{}\x1b[0K", Board::VIEWPORT_BORDER_RIGHT);
-            }
-        }
-        // erase from cursor to end of screen and draw bottom of border
-        print!(
-            "{}{}\x1b[0J",
-            Board::VIEWPORT_BORDER_BOTTOM
-                .to_string()
-                .repeat(viewport.width()),
-            Board::VIEWPORT_BORDER_CORNER
-        );
-    }
     pub fn calculate_viewport(&self, mut center: Vector<usize>) -> Zone<usize> {
         // We can assume that there will be no situation in which we are against opposing walls and
         // that the viewport will not be bigger than the map in either axis
@@ -110,6 +91,67 @@ impl Board {
             center.y + distance_down - 1,
         )
         .unwrap()
+    }
+    pub fn render(&self, center: Vector<usize>) {
+        let viewport = self.calculate_viewport(center);
+
+        self.render_tiles(viewport);
+        self.render_enemies(viewport);
+        std::io::stdout().flush().unwrap()
+    }
+    /// Zeros the cursor and draws the tiles onto the screen and clears the screen, this is the first layer of rendering.
+    ///
+    /// Additionally it draws the border of the viewport
+    fn render_tiles(&self, viewport: Zone<usize>) {
+        // Putting the cursor in the top corner
+        print!("\x1b[H");
+        for (position, last) in viewport.scanlines() {
+            if let Some(tile) = self[position] {
+                let (ch, style) = tile.render(self, position);
+                match style {
+                    Some(style) => print!("{style}{ch}\x1b[0m"),
+                    None => print!("{ch}"),
+                }
+            } else {
+                print!(" ");
+            }
+            if last {
+                // erase until end of line and draw right border
+                println!("{}\x1b[0K", Board::VIEWPORT_BORDER_RIGHT);
+            }
+        }
+        // erase from cursor to end of screen and draw bottom of border
+        print!(
+            "{}{}\x1b[0J",
+            Board::VIEWPORT_BORDER_BOTTOM
+                .to_string()
+                .repeat(viewport.width()),
+            Board::VIEWPORT_BORDER_CORNER
+        );
+    }
+    /// Moves the cursor about to draw the enemies, this is the second layer of rendering.
+    fn render_enemies(&self, viewport: Zone<usize>) {
+        // The weird iterator stuff ensures that we only are rendering enemies which are alive and
+        // on screen on top of getting us the on screen position of that enemy
+        for (position, (character, style)) in self
+            .enemies
+            .iter()
+            .filter_map(|enemy| enemy.as_ref())
+            .filter(|enemy| viewport.contains(enemy.position))
+            .map(|enemy| (enemy.position - viewport.top_left(), enemy.render()))
+        {
+            match style {
+                Some(style) => {
+                    print!(
+                        "\x1b[{};{}H{style}{character}\x1b[0m",
+                        position.y, position.x
+                    );
+                }
+                None => {
+                    print!("\x1b[{};{}H{character}", position.y, position.x);
+                }
+            }
+        }
     }
 }
 
@@ -161,11 +203,23 @@ impl Board {
 // ENEMIES
 pub struct EnemyID(usize);
 impl Board {
+    pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
+        self.enemies.push(Some(enemy));
+        return EnemyID(self.enemies.len() - 1);
+    }
     pub fn get_enemy(&self, id: EnemyID) -> &Option<Enemy> {
         &self.enemies[id.0]
     }
     pub fn get_enemy_mut(&mut self, id: EnemyID) -> &mut Option<Enemy> {
         &mut self.enemies[id.0]
+    }
+    pub fn run_thinkers(state: &mut State) {
+        for index in 0..state.board.enemies.len() {
+            if state.board.enemies[index].is_some() {
+                let vtable = state.board.enemies[index].as_ref().unwrap().get_vtable();
+                (vtable.think)(state, EnemyID(index));
+            }
+        }
     }
 }
 

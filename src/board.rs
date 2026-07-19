@@ -1,6 +1,7 @@
 mod axis_length;
 pub mod tile;
 pub use axis_length::AxisLength;
+pub mod map_gen;
 
 use crate::Vector;
 use crate::Zone;
@@ -8,7 +9,6 @@ use crate::enemy::Enemy;
 use crate::state::State;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
-use abes_nice_things::log;
 use anyhow::{Context, Result, bail};
 use std::io::Write;
 use tile::Tile;
@@ -140,17 +140,10 @@ impl Board {
             .filter(|enemy| viewport.contains(enemy.position))
             .map(|enemy| (enemy.position - viewport.top_left(), enemy.render()))
         {
-            match style {
-                Some(style) => {
-                    print!(
-                        "\x1b[{};{}H{style}{character}\x1b[0m",
-                        position.y, position.x
-                    );
-                }
-                None => {
-                    print!("\x1b[{};{}H{character}", position.y, position.x);
-                }
-            }
+            print!(
+                "\x1b[{};{}H{style}{character}\x1b[0m",
+                position.y, position.x
+            );
         }
     }
 }
@@ -159,7 +152,7 @@ impl Board {
 impl Board {
     /// ALWAYS ensure this matches the implementations for indexing into the tiles.
     /// This is the maximum length of each axis for the board.
-    const MAX_AXIS_LENGTH: usize = (0b1 << Board::MAX_AXIS_BITS) - 1; // 1024
+    const MAX_AXIS_LENGTH: usize = 0b1 << Board::MAX_AXIS_BITS; // 1024
     /// The maximum number of bits in an axis of an index.
     /// This must be less than or equal to half of the length of usize
     const MAX_AXIS_BITS: usize = 10; // see above
@@ -259,7 +252,7 @@ fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Resul
             index.y
         );
     }
-    debug_assert!(axis_length.to_inner() < Board::MAX_AXIS_LENGTH);
+    debug_assert!(axis_length.to_inner() <= Board::MAX_AXIS_LENGTH);
 
     // They call me Jacque the Zipper
     let mut true_index = 0;

@@ -169,6 +169,21 @@ impl<T: Number> Zone<T> {
     pub fn top_left(&self) -> Vector<T> {
         Vector::new(self.left, self.top)
     }
+    pub fn bottom_right(&self) -> Vector<T> {
+        Vector::new(self.right, self.bottom)
+    }
+    pub fn left(&self) -> T {
+        self.left
+    }
+    pub fn top(&self) -> T {
+        self.top
+    }
+    pub fn right(&self) -> T {
+        self.right
+    }
+    pub fn bottom(&self) -> T {
+        self.bottom
+    }
 }
 impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {
     type Output = Zone<T>;

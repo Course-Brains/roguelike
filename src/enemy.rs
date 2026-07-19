@@ -1,6 +1,6 @@
 // Place mod for enemies here
 pub mod dummy;
-
+// CONSIDER STATIC VTABLE ARRAY TO ALLOW SAVE/LOAD OF ENEMIES AND MORE COMPACT DATA
 use crate::Vector;
 use crate::board::EnemyID;
 use crate::state::State;
@@ -9,7 +9,7 @@ use std::any::Any;
 
 pub struct Enemy {
     /// The state which the logic can read and write to
-    state: Box<dyn Any>,
+    state: Box<dyn Any + Send>,
     /// The number of base hits required to kill it
     health: usize,
     /// The position of the enemy on the map
@@ -32,17 +32,24 @@ impl Enemy {
             flags: Flags::new(),
         }
     }
-    pub fn render(&self) -> (char, Option<Style>) {
-        (
-            self.vtable.render_char,
-            if self.flags.is_windup() {
-                let mut style = Style::new();
-                self.flags.get_windup().get_style(&mut style);
-                Some(style)
-            } else {
-                None
-            },
-        )
+    pub fn render(&self) -> (char, Style) {
+        let mut style = Style::new();
+
+        // Foreground
+
+        // These are mutually exclusive because bosses skip detection checks and are always awake
+        if self.vtable.is_boss {
+            // Bosses are blue
+            style.blue();
+        } else if self.flags.is_awake() {
+            // Awake are yellow
+            style.yellow();
+        }
+
+        // Background
+        self.flags.get_windup().get_style(&mut style);
+
+        (self.vtable.render_char, style)
     }
     pub fn get_vtable(&self) -> &'static VTable {
         self.vtable
@@ -51,22 +58,22 @@ impl Enemy {
 /// Where enemy type specific logic is stored as well as some constants
 #[derive(Clone, Copy, Debug)]
 pub struct VTable {
-    pub starting_health: usize,
+    starting_health: usize,
     /// The character used to represent this enemy type during rendering
-    pub render_char: char,
+    render_char: char,
     /// Whether or not to render this as a boss, this does not affect logic in any way
-    pub is_boss: bool,
+    is_boss: bool,
     /// The function which initializes the state of the enemy. If the enemy does not need a state
     /// then simply give it Box<()> which won't allocate anything
-    pub init: fn() -> Box<dyn Any>,
+    init: fn() -> Box<dyn Any + Send>,
     /// The main logic function which is called for all enemies every turn before other logic
     pub think: fn(&mut State, EnemyID),
     /// How damage is dealt to enemies. It returns if the enemy should be deleted
     pub damage: fn(&mut State, EnemyID, usize) -> bool,
 }
 impl VTable {
-    pub const DEFAULT_INIT: fn() -> Box<dyn Any> = || Box::new(());
-    pub const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
+    const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());
+    const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         if damage >= this.health {
             return true;

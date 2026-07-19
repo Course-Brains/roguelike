@@ -19,6 +19,9 @@ pub fn random() -> f64 {
 
     f64::from_bits(bits)
 }
+pub fn random_in_range(range: std::ops::Range<usize>) -> usize {
+    ((random() - 0.5) * (range.end - range.start) as f64 * 2.0 + range.start as f64) as usize
+}
 /// Picks a random option from a list
 pub fn pick<T>(options: &[T]) -> &T {
     &options[((random() - 0.5) * 2.0 * options.len() as f64) as usize]

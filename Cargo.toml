@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 abes_nice_things = { git =
-"https://github.com/Course-Brains/abes_nice_things.git", rev = "1d923a7", features = ["dyn_binary"] }
+"https://github.com/Course-Brains/abes_nice_things.git", rev = "29d090a", features = ["dyn_binary"] }
 anyhow = "1.0"
 
 [features]

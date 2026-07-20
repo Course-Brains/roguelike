@@ -51,6 +51,30 @@ impl<T: Number> Vector<T> {
             y: self.y.min(other.y),
         }
     }
+    /// Gets if two positions are near each other given a distance.
+    ///
+    /// It will return true if the distance is at most as far as the given target distance
+    ///
+    /// So with a target distance of 1, this is the valid area around the point
+    /// ###
+    /// #0#
+    /// ###
+    ///
+    /// And with two it is
+    /// #####
+    /// #####
+    /// ##0##
+    /// #####
+    /// #####
+    pub fn is_near(self, other: Vector<T>, distance: T) -> bool {
+        self.x.abs_diff(other.x) <= distance || self.y.abs_diff(other.y) <= distance
+    }
+}
+impl<T: Integer> Vector<T> {
+    /// Diagonals do not count
+    pub fn is_adjacent(self, other: Vector<T>) -> bool {
+        (self.x.abs_diff(other.x) == T::ONE) ^ (self.y.abs_diff(other.y) == T::ONE)
+    }
 }
 impl<T: Number> std::ops::Sub for Vector<T> {
     type Output = Self;
@@ -58,6 +82,33 @@ impl<T: Number> std::ops::Sub for Vector<T> {
         Vector {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
+        }
+    }
+}
+impl<T: Number> std::ops::Add for Vector<T> {
+    type Output = Vector<T>;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vector {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+impl<T: Number> std::ops::Div for Vector<T> {
+    type Output = Vector<T>;
+    fn div(self, rhs: Self) -> Self::Output {
+        Vector {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+        }
+    }
+}
+impl<T: Number> std::ops::Add<T> for Vector<T> {
+    type Output = Vector<T>;
+    fn add(self, rhs: T) -> Self::Output {
+        Vector {
+            x: self.x + rhs,
+            y: self.y + rhs,
         }
     }
 }
@@ -82,7 +133,7 @@ impl<T: Number + PrimFrom<U>, U: Number> PrimFrom<Vector<U>> for Vector<T> {
         }
     }
 }
-impl<T: Integer> std::ops::Add<Direction> for Vector<T> {
+impl<T: Number> std::ops::Add<Direction> for Vector<T> {
     type Output = Vector<T>;
     fn add(self, rhs: Direction) -> Self::Output {
         match rhs {
@@ -93,16 +144,53 @@ impl<T: Integer> std::ops::Add<Direction> for Vector<T> {
         }
     }
 }
-impl<T: Integer> std::ops::AddAssign<Direction> for Vector<T> {
+impl<T: Number> std::ops::AddAssign<Direction> for Vector<T> {
     fn add_assign(&mut self, rhs: Direction) {
         *self = *self + rhs;
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Up,
     Down,
     Left,
     Right,
+}
+impl Direction {
+    /// Approximates the direction the vector is going based on the magnitudes of the directions. A
+    /// Zero vector will return None
+    pub fn from_vector<T: Number>(vector: Vector<T>) -> Option<Direction> {
+        if vector == Vector::ZERO {
+            return None;
+        }
+
+        let mut abs = vector;
+        if vector.x < T::ZERO {
+            abs.x = T::ZERO - vector.x;
+        }
+        if vector.y < T::ZERO {
+            abs.y = T::ZERO - vector.y;
+        }
+
+        Some(
+            // Horizontal
+            if abs.x > abs.y {
+                if vector.x < T::ZERO {
+                    Direction::Left
+                } else {
+                    Direction::Right
+                }
+            }
+            // Vertical
+            else {
+                if vector.y < T::ZERO {
+                    Direction::Up
+                } else {
+                    Direction::Down
+                }
+            },
+        )
+    }
 }
 /// A 2 dimensional area with INCLUSIVE BOUNDS
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

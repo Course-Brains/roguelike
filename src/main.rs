@@ -6,6 +6,8 @@ mod random;
 mod state;
 mod vector;
 
+use std::io::Write;
+
 use board::AxisLength;
 use input::Input;
 use input::normalize;
@@ -24,20 +26,45 @@ fn main() {
 }
 fn run() {
     let (desired_width, desired_height) = calc_desired_dimensions();
-    let board =
-        board::map_gen::generate(AxisLength::Full, Vector::new(desired_width, desired_height))
-            .unwrap();
+    let mut state = state::State::new(
+        board::map_gen::generate(
+            AxisLength::Small,
+            Vector::new(desired_width, desired_height),
+        )
+        .unwrap(),
+    );
 
-    let mut position = Vector::new(5, 5);
+    let mut position = Vector::new(10, 10);
     weirdify().unwrap();
-    board.render(position);
+    state.board.render(position);
     loop {
-        if let Input::Direction(direction) = input::Input::get() {
-            position += direction;
-            board.render(position);
+        state.board.render(position);
+        print!("\x1b[{};{}H", position.y, position.x);
+        std::io::stdout().flush().unwrap();
+        match input::Input::get() {
+            input::Input::Direction(direction) => {
+                position += direction;
+            }
+            input::Input::Space => {
+                board::Board::pathfind(&mut state);
+            }
+            input::Input::Enter => {
+                if state.board.count_enemies() == 0 {
+                    state
+                        .board
+                        .add_enemy(enemy::Enemy::new(&enemy::dummy::VTABLE, position));
+                } else {
+                    state
+                        .board
+                        .get_enemy_mut(board::EnemyID(0))
+                        .as_mut()
+                        .unwrap()
+                        .move_target = Some(position);
+                }
+            }
         }
     }
-    normalize().unwrap();
+    //normalize().unwrap();
 }
 /// Calculates the desired width, height for the viewport. It gets the terminal's size then
 /// subtracts the areas needed for other parts of the ui. If the resulting viewport would be too
@@ -67,6 +94,10 @@ fn calc_desired_dimensions() -> (usize, usize) {
     }
     (width, height)
 }
+enum MapObject {
+    Player,
+    Enemy(board::EnemyID),
+}
 /// Gets the size of the terminal in width, height.
 ///
 /// This takes about 10ms independant of whether it is release or debug.
@@ -85,7 +116,7 @@ fn get_terminal_size() -> (usize, usize) {
         .unwrap()
         .trim()
         .parse()
-        .unwrap(),
+        .unwrap_or(113),
         String::from_utf8(
             std::process::Command::new("tput")
                 .arg("lines")
@@ -97,7 +128,7 @@ fn get_terminal_size() -> (usize, usize) {
         .unwrap()
         .trim()
         .parse()
-        .unwrap(),
+        .unwrap_or(35),
     )
 }
 #[cfg(debug_assertions)]

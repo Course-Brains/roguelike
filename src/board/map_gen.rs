@@ -96,9 +96,9 @@ impl Room {
         // Picking division position
         let split_point = ((((crate::random::random() + crate::random::random()) / 2.0) - 0.5)
             * 2.0
-            * (range_end - range_start - 4) as f64) as usize
+            * (range_end - range_start - 8) as f64) as usize
             + range_start
-            + 2;
+            + 4;
 
         // Creating children
 

@@ -42,6 +42,7 @@ pub struct Board {
     /// The number of turns spent on this map
     local_turns: usize,
 }
+// Helpers
 impl Board {
     /// Creates a blank board which is not populated by tile objects or map objects and is
     /// therefore not valid
@@ -184,8 +185,8 @@ impl Board {
             return None;
         }
         // Out of bounds
-        if position.x > T::prim_from(self.axis_length.to_inner())
-            || position.y > T::prim_from(self.axis_length.to_inner())
+        if position.x >= T::prim_from(self.axis_length.to_inner())
+            || position.y >= T::prim_from(self.axis_length.to_inner())
         {
             return None;
         }
@@ -194,7 +195,7 @@ impl Board {
 }
 
 // ENEMIES
-pub struct EnemyID(usize);
+pub struct EnemyID(pub usize);
 impl Board {
     pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
         self.enemies.push(Some(enemy));
@@ -213,6 +214,16 @@ impl Board {
                 (vtable.think)(state, EnemyID(index));
             }
         }
+    }
+    pub fn pathfind(state: &mut State) {
+        for index in 0..state.board.enemies.len() {
+            if state.board.enemies[index].is_some() {
+                Enemy::intra_room_pathfind(state, EnemyID(index));
+            }
+        }
+    }
+    pub fn count_enemies(&self) -> usize {
+        self.enemies.len()
     }
 }
 

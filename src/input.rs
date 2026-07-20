@@ -3,6 +3,8 @@ use anyhow::Result;
 use std::io::Read;
 pub enum Input {
     Direction(Direction),
+    Space,
+    Enter,
 }
 impl Input {
     pub fn get() -> Input {
@@ -10,20 +12,26 @@ impl Input {
         let mut buf = [0];
         loop {
             stdin.read_exact(&mut buf).unwrap();
-            match buf[0] {
+            return match buf[0] {
                 27 => {
                     stdin.read(&mut buf).unwrap();
                     stdin.read(&mut buf).unwrap();
-                    match buf[0] {
-                        b'A' => return Input::Direction(Direction::Up),
-                        b'B' => return Input::Direction(Direction::Down),
-                        b'D' => return Input::Direction(Direction::Left),
-                        b'C' => return Input::Direction(Direction::Right),
-                        _ => {}
-                    }
+                    Input::Direction(match buf[0] {
+                        b'A' => Direction::Up,
+                        b'B' => Direction::Down,
+                        b'D' => Direction::Left,
+                        b'C' => Direction::Right,
+                        _ => continue,
+                    })
                 }
-                _ => {}
-            }
+                b'w' => Input::Direction(Direction::Up),
+                b's' => Input::Direction(Direction::Down),
+                b'a' => Input::Direction(Direction::Left),
+                b'd' => Input::Direction(Direction::Right),
+                b' ' => Input::Space,
+                b'\n' => Input::Enter,
+                _ => continue,
+            };
         }
     }
 }
@@ -39,7 +47,6 @@ pub fn weirdify() -> Result<()> {
         .status()?
         .success()
     {
-        print!("\x1b[?25l");
         return Ok(());
     }
     Err(anyhow::Error::new(std::io::Error::new(
@@ -57,7 +64,6 @@ pub fn normalize() -> Result<()> {
         .status()?
         .success()
     {
-        print!("\x1b[?25h");
         return Ok(());
     }
     Err(anyhow::Error::new(std::io::Error::new(

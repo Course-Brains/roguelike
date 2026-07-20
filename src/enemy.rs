@@ -4,6 +4,8 @@ pub mod dummy;
 use crate::Vector;
 use crate::board::EnemyID;
 use crate::state::State;
+use crate::vector::Direction;
+use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use std::any::Any;
 
@@ -15,11 +17,13 @@ pub struct Enemy {
     /// The position of the enemy on the map
     pub position: Vector<usize>,
     /// Where the enemy is currently pathing towards
-    move_target: Option<Vector<usize>>,
+    pub move_target: Option<Vector<usize>>,
     /// The vtable holding function pointers to the logic and enemy type specific constants
     vtable: &'static VTable,
     /// Various pieces of data which are tied to this specific instance and can spply to any enemy
     flags: Flags,
+    /// The position used in intra room pathfinding
+    pub logical_position: Vector<f64>,
 }
 impl Enemy {
     pub fn new(vtable: &'static VTable, position: Vector<usize>) -> Enemy {
@@ -30,6 +34,7 @@ impl Enemy {
             move_target: None,
             vtable: vtable,
             flags: Flags::new(),
+            logical_position: position.prim_as() + 0.5,
         }
     }
     pub fn render(&self) -> (char, Style) {
@@ -53,6 +58,67 @@ impl Enemy {
     }
     pub fn get_vtable(&self) -> &'static VTable {
         self.vtable
+    }
+    pub fn intra_room_pathfind(state: &mut State, id: EnemyID) {
+        let this = state.board.get_enemy_mut(id).as_mut().unwrap();
+        if this.logical_position.prim_as() != this.position {
+            this.logical_position =
+                PrimAs::<Vector<f64>>::prim_as(this.position) + Vector::new(0.5, 0.5);
+        }
+        // If we aren't moving then we don't need to pathfind
+        if this.move_target.is_none() {
+            return;
+        }
+
+        let diff =
+            PrimAs::<Vector<f64>>::prim_as(this.move_target.unwrap()) - this.logical_position;
+
+        if this.position.is_near(this.move_target.unwrap(), 3) {
+            this.flags.set_windup(WindupState::Physical);
+            this.position += Direction::from_vector(diff).unwrap();
+            if this.position == this.move_target.unwrap() {
+                this.move_target = None;
+            }
+            return;
+        }
+        this.flags.set_windup(WindupState::Magical);
+
+        let target = Vector::new(
+            (this.logical_position.x + (diff.x.signum() / 2.0)).round(),
+            (this.logical_position.y + (diff.y.signum() / 2.0)).round(),
+        );
+
+        let dist_to_target = target - this.logical_position;
+
+        let effective_dist_to_target = dist_to_target / diff;
+        debug_assert!(effective_dist_to_target.x.is_sign_positive());
+        debug_assert!(effective_dist_to_target.y.is_sign_positive());
+
+        let dir =
+            // Horizontal movement
+            if effective_dist_to_target.x < effective_dist_to_target.y {
+                this.logical_position.x = target.x;
+                this.logical_position.y += diff.y * effective_dist_to_target.x;
+                if diff.x.is_sign_positive() {
+                    Direction::Right
+                } else {
+                    Direction::Left
+                }
+            }
+            // Vertical movement
+            else {
+                this.logical_position.y = target.y;
+                this.logical_position.x += diff.x * effective_dist_to_target.y;
+                if diff.y.is_sign_positive() {
+                    Direction::Down
+                } else {
+                    Direction::Up
+                }
+            };
+        this.position += dir;
+        if this.position == this.move_target.unwrap() {
+            this.move_target = None;
+        }
     }
 }
 /// Where enemy type specific logic is stored as well as some constants

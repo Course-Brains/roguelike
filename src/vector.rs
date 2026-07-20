@@ -67,7 +67,7 @@ impl<T: Number> Vector<T> {
     /// #####
     /// #####
     pub fn is_near(self, other: Vector<T>, distance: T) -> bool {
-        self.x.abs_diff(other.x) <= distance || self.y.abs_diff(other.y) <= distance
+        self.x.abs_diff(other.x) <= distance && self.y.abs_diff(other.y) <= distance
     }
 }
 impl<T: Integer> Vector<T> {
@@ -190,6 +190,16 @@ impl Direction {
                 }
             },
         )
+    }
+}
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Direction::Up => write!(f, "Up"),
+            Direction::Down => write!(f, "Down"),
+            Direction::Left => write!(f, "Left"),
+            Direction::Right => write!(f, "Right"),
+        }
     }
 }
 /// A 2 dimensional area with INCLUSIVE BOUNDS

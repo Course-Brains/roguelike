@@ -70,12 +70,15 @@ impl Enemy {
             return;
         }
 
-        let diff =
-            PrimAs::<Vector<f64>>::prim_as(this.move_target.unwrap()) - this.logical_position;
+        let logical_move_target = PrimAs::<Vector<f64>>::prim_as(this.move_target.unwrap()) + 0.5;
+
+        let diff = logical_move_target - this.logical_position;
 
         if this.position.is_near(this.move_target.unwrap(), 3) {
             this.flags.set_windup(WindupState::Physical);
-            this.position += Direction::from_vector(diff).unwrap();
+            let move_dir = Direction::from_vector(diff).unwrap();
+            *crate::board::LAST_DIR.lock().unwrap() = Some(move_dir);
+            this.position += move_dir;
             if this.position == this.move_target.unwrap() {
                 this.move_target = None;
             }

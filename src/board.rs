@@ -60,7 +60,8 @@ impl Board {
         self.axis_length
     }
 }
-
+pub static LAST_DIR: std::sync::Mutex<Option<crate::vector::Direction>> =
+    std::sync::Mutex::new(None);
 // RENDERING
 impl Board {
     const VIEWPORT_BORDER_RIGHT: char = '│';
@@ -97,6 +98,9 @@ impl Board {
         let viewport = self.calculate_viewport(center);
 
         self.render_tiles(viewport);
+        if let Some(dir) = *LAST_DIR.lock().unwrap() {
+            println!("\n{dir}");
+        }
         self.render_enemies(viewport);
         std::io::stdout().flush().unwrap()
     }

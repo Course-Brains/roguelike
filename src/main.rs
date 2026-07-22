@@ -26,11 +26,8 @@ fn main() {
 fn run() {
     let (desired_width, desired_height) = calc_desired_dimensions();
     let mut state = state::State::new(
-        board::map_gen::generate(
-            AxisLength::Small,
-            Vector::new(desired_width, desired_height),
-        )
-        .unwrap(),
+        board::map_gen::generate(AxisLength::Full, Vector::new(desired_width, desired_height))
+            .unwrap(),
         player::Player::new(Vector::new(1, 1)),
     );
 
@@ -79,7 +76,7 @@ fn calc_desired_dimensions() -> (usize, usize) {
     let (mut width, mut height) = get_terminal_size();
 
     // Viewport border
-    width -= 2;
+    width -= 1;
     height -= 1;
 
     // bars

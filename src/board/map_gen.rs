@@ -204,10 +204,10 @@ impl Room {
                 // If the left side of first and the right side of second are touching
                 if board.rooms[first_index].get_bounds().left()
                     == board.rooms[second_index].get_bounds().right()
-                    && (board.rooms[first_index].get_bounds().top()
-                        < board.rooms[second_index].get_bounds().bottom()
-                        || board.rooms[second_index].get_bounds().top()
-                            > board.rooms[first_index].get_bounds().bottom())
+                    && (board.rooms[first_index].get_bounds().top() + 1
+                        < board.rooms[second_index].get_bounds().bottom() - 1
+                        || board.rooms[second_index].get_bounds().top() + 1
+                            > board.rooms[first_index].get_bounds().bottom() - 1)
                 {
                     // We get the top and bottom of the overlapping section of wall
                     let top = board.rooms[first_index]
@@ -233,10 +233,10 @@ impl Room {
                 // If the top side of first and the bottom side of second are touching
                 else if board.rooms[first_index].get_bounds().top()
                     == board.rooms[second_index].get_bounds().bottom()
-                    && (board.rooms[first_index].get_bounds().left()
-                        < board.rooms[second_index].get_bounds().right()
-                        || board.rooms[second_index].get_bounds().left()
-                            < board.rooms[first_index].get_bounds().right())
+                    && (board.rooms[first_index].get_bounds().left() + 1
+                        < board.rooms[second_index].get_bounds().right() - 1
+                        || board.rooms[second_index].get_bounds().left() + 1
+                            < board.rooms[first_index].get_bounds().right() - 1)
                 {
                     // Second verse same as the first
                     let left = board.rooms[first_index]

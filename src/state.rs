@@ -15,6 +15,7 @@ impl State {
             total_turns: 0,
         }
     }
+    /// Clear the screen and draw the board, the player, enemies, everything
     pub fn render(&self) {
         let center = self.player.get_render_target_pos();
         let viewport = self.board.calculate_viewport(center);

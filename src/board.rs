@@ -2,15 +2,18 @@ mod axis_length;
 pub mod tile;
 pub use axis_length::AxisLength;
 pub mod map_gen;
+mod room;
+use room::Room;
+use room::RoomID;
 
 use crate::Vector;
 use crate::Zone;
 use crate::enemy::Enemy;
+use crate::math::Direction;
 use crate::state::State;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use anyhow::{Context, Result, bail};
-use std::io::Write;
 use tile::Tile;
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
@@ -41,6 +44,7 @@ pub struct Board {
     pub enemies: Vec<Option<Enemy>>,
     /// The number of turns spent on this map
     local_turns: usize,
+    rooms: Vec<Room>,
 }
 // Helpers
 impl Board {
@@ -54,14 +58,17 @@ impl Board {
                 .min(Vector::new(axis_length.to_inner(), axis_length.to_inner())),
             enemies: Vec::new(),
             local_turns: 0,
+            rooms: Vec::new(),
         })
     }
     pub fn axis_length(&self) -> AxisLength {
         self.axis_length
     }
+    fn add_room(&mut self, room: Room) -> RoomID {
+        self.rooms.push(room);
+        room::room_id(self.rooms.len() - 1)
+    }
 }
-pub static LAST_DIR: std::sync::Mutex<Option<crate::vector::Direction>> =
-    std::sync::Mutex::new(None);
 // RENDERING
 impl Board {
     const VIEWPORT_BORDER_RIGHT: char = '│';
@@ -94,20 +101,10 @@ impl Board {
         )
         .unwrap()
     }
-    pub fn render(&self, center: Vector<usize>) {
-        let viewport = self.calculate_viewport(center);
-
-        self.render_tiles(viewport);
-        if let Some(dir) = *LAST_DIR.lock().unwrap() {
-            println!("\n{dir}");
-        }
-        self.render_enemies(viewport);
-        std::io::stdout().flush().unwrap()
-    }
     /// Zeros the cursor and draws the tiles onto the screen and clears the screen, this is the first layer of rendering.
     ///
     /// Additionally it draws the border of the viewport
-    fn render_tiles(&self, viewport: Zone<usize>) {
+    pub fn render_tiles(&self, viewport: Zone<usize>) {
         // Putting the cursor in the top corner
         print!("\x1b[H");
         for (position, last) in viewport.scanlines() {
@@ -135,7 +132,7 @@ impl Board {
         );
     }
     /// Moves the cursor about to draw the enemies, this is the second layer of rendering.
-    fn render_enemies(&self, viewport: Zone<usize>) {
+    pub fn render_enemies(&self, viewport: Zone<usize>) {
         // The weird iterator stuff ensures that we only are rendering enemies which are alive and
         // on screen on top of getting us the on screen position of that enemy
         for (position, (character, style)) in self
@@ -147,7 +144,8 @@ impl Board {
         {
             print!(
                 "\x1b[{};{}H{style}{character}\x1b[0m",
-                position.y, position.x
+                position.y + 1,
+                position.x + 1
             );
         }
     }
@@ -196,21 +194,41 @@ impl Board {
         }
         Some(&self[position.prim_as()])
     }
+    /// Checks if moving from a known to be valid position in a given direction will still be on
+    /// the board
+    pub fn is_move_on_board(&self, start: Vector<usize>, direction: Direction) -> bool {
+        match direction {
+            Direction::Up => start.y > 0,
+            Direction::Down => start.y < (self.axis_length.to_inner() - 1),
+            Direction::Left => start.x > 0,
+            Direction::Right => start.x < (self.axis_length.to_inner() - 1),
+        }
+    }
+    /// Checks if the player can move from a known valid position in a given direction
+    pub fn player_can_move(&self, start: Vector<usize>, direction: Direction) -> bool {
+        self.is_move_on_board(start, direction)
+            && self[start + direction].is_none_or(|tile| !tile.is_player_collidable())
+            && !self.is_enemy_at_position(start + direction)
+    }
 }
 
 // ENEMIES
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EnemyID(pub usize);
 impl Board {
     pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
         self.enemies.push(Some(enemy));
         return EnemyID(self.enemies.len() - 1);
     }
+    /// This requires immutable access to that specific enemy
     pub fn get_enemy(&self, id: EnemyID) -> &Option<Enemy> {
         &self.enemies[id.0]
     }
+    /// This requires mutable access to that specific enemy
     pub fn get_enemy_mut(&mut self, id: EnemyID) -> &mut Option<Enemy> {
         &mut self.enemies[id.0]
     }
+    /// This requires mutable accesss to all enemies
     pub fn run_thinkers(state: &mut State) {
         for index in 0..state.board.enemies.len() {
             if state.board.enemies[index].is_some() {
@@ -219,12 +237,38 @@ impl Board {
             }
         }
     }
+    /// This requires mutable access to all enemies
     pub fn pathfind(state: &mut State) {
         for index in 0..state.board.enemies.len() {
             if state.board.enemies[index].is_some() {
                 Enemy::intra_room_pathfind(state, EnemyID(index));
             }
         }
+    }
+    //TODO: Once the player is added, make this check for the player's position
+    pub fn enemy_can_move(&self, start: Vector<usize>, direction: Direction) -> bool {
+        // Is the target location on the board?
+        if !self.is_move_on_board(start, direction) {
+            return false;
+        }
+        let new_pos = start + direction;
+        // Is there a blocking tile?
+        if self[new_pos].is_some_and(|tile| tile.is_enemy_collidable()) {
+            return false;
+        }
+        // Is there an enemy there?
+        if self.is_enemy_at_position(new_pos) {
+            return false;
+        }
+        true
+    }
+    /// This requires immutable access to all enemies
+    pub fn is_enemy_at_position(&self, position: Vector<usize>) -> bool {
+        self.enemies.iter().any(|enemy| {
+            enemy
+                .as_ref()
+                .is_some_and(|enemy| enemy.position == position)
+        })
     }
     pub fn count_enemies(&self) -> usize {
         self.enemies.len()

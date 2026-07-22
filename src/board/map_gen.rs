@@ -4,6 +4,7 @@ use super::Tile;
 use super::convert_z_order_index;
 use crate::Vector;
 use crate::Zone;
+use crate::math::Axis;
 use crate::random::Random;
 use anyhow::Result;
 
@@ -14,10 +15,11 @@ use anyhow::Result;
 // past the 4th round of divisions, subdivisions can stop with the chance increasing as the room
 // gets smaller.
 //
-// adjacent rooms get 2 tile wide connected doors connecting them at the midpoint in the shared
+// adjacent rooms get doors connecting them at the midpoint in the shared
 // section of wall
 
-// Because all of this is happening in a different thread, we do not need to care about performance
+// Because all of this is happening in a different thread, we do not need to care about
+// performance*
 
 pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Result<Board> {
     let mut rooms = Vec::new();
@@ -39,6 +41,8 @@ pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Res
 
     let mut board = Board::new(axis_length, desired_viewport)?;
     board.tiles = tiles;
+    Room::create_counterparts(&mut rooms, 0, &mut board);
+    Room::fill_counterpart_adjacencies(&mut board);
     Ok(board)
 }
 struct Room {
@@ -178,17 +182,83 @@ impl Room {
         }
         Ok(())
     }
-}
-enum Axis {
-    Horizontal,
-    Vertical,
-}
-impl std::ops::Not for Axis {
-    type Output = Axis;
-    fn not(self) -> Self::Output {
-        match self {
-            Axis::Horizontal => Axis::Vertical,
-            Axis::Vertical => Axis::Horizontal,
+    fn create_counterparts(rooms: &mut Vec<Room>, index: usize, board: &mut Board) {
+        // Recursing
+        if let Some(children) = rooms[index].children {
+            Room::create_counterparts(rooms, children[0], board);
+            Room::create_counterparts(rooms, children[1], board);
+            return;
+        }
+
+        // We are at a leaf
+        board.add_room(super::Room::new(rooms[index].bounds));
+    }
+    fn fill_counterpart_adjacencies(board: &mut Board) {
+        // Go room combination by room combination and check if they are touching and if they are
+        // then create the doors and log the adjacency
+        for first_index in 0..board.rooms.len() {
+            for second_index in 0..board.rooms.len() {
+                if first_index == second_index {
+                    continue;
+                }
+                // If the left side of first and the right side of second are touching
+                if board.rooms[first_index].get_bounds().left()
+                    == board.rooms[second_index].get_bounds().right()
+                    && (board.rooms[first_index].get_bounds().top()
+                        < board.rooms[second_index].get_bounds().bottom()
+                        || board.rooms[second_index].get_bounds().top()
+                            > board.rooms[first_index].get_bounds().bottom())
+                {
+                    // We get the top and bottom of the overlapping section of wall
+                    let top = board.rooms[first_index]
+                        .get_bounds()
+                        .top()
+                        .max(board.rooms[second_index].get_bounds().top());
+                    let bottom = board.rooms[first_index]
+                        .get_bounds()
+                        .bottom()
+                        .min(board.rooms[second_index].get_bounds().bottom());
+
+                    // And we get the middle of where they are touching
+                    let mid = top.midpoint(bottom);
+
+                    // Then we place the door and mark the adjacency
+                    let door_pos = Vector::new(board.rooms[first_index].get_bounds().left(), mid);
+                    board[door_pos] = Some(Tile::Door { open: false });
+                    board.rooms[first_index]
+                        .add_connection(door_pos, super::room::room_id(second_index));
+                    board.rooms[second_index]
+                        .add_connection(door_pos, super::room::room_id(first_index));
+                }
+                // If the top side of first and the bottom side of second are touching
+                else if board.rooms[first_index].get_bounds().top()
+                    == board.rooms[second_index].get_bounds().bottom()
+                    && (board.rooms[first_index].get_bounds().left()
+                        < board.rooms[second_index].get_bounds().right()
+                        || board.rooms[second_index].get_bounds().left()
+                            < board.rooms[first_index].get_bounds().right())
+                {
+                    // Second verse same as the first
+                    let left = board.rooms[first_index]
+                        .get_bounds()
+                        .left()
+                        .max(board.rooms[second_index].get_bounds().left());
+                    let right = board.rooms[first_index]
+                        .get_bounds()
+                        .right()
+                        .min(board.rooms[second_index].get_bounds().right());
+                    let mid = left.midpoint(right);
+                    let door_pos = Vector::new(mid, board.rooms[first_index].get_bounds().top());
+                    board[door_pos] = Some(Tile::Door { open: false });
+                    board.rooms[first_index]
+                        .add_connection(door_pos, super::room::room_id(second_index));
+                    board.rooms[second_index]
+                        .add_connection(door_pos, super::room::room_id(first_index));
+                }
+
+                // We don't need to account for the other 2 sides because eventually second_index
+                // and first_index will be swapped
+            }
         }
     }
 }

@@ -1,10 +1,12 @@
-use crate::vector::Direction;
+use crate::math::Direction;
 use anyhow::Result;
 use std::io::Read;
 pub enum Input {
-    Direction(Direction),
+    Walk(Direction),
+    MoveSelector(Direction),
     Space,
-    Enter,
+    Select,
+    ChangeRenderTarget,
 }
 impl Input {
     pub fn get() -> Input {
@@ -16,7 +18,7 @@ impl Input {
                 27 => {
                     stdin.read(&mut buf).unwrap();
                     stdin.read(&mut buf).unwrap();
-                    Input::Direction(match buf[0] {
+                    Input::MoveSelector(match buf[0] {
                         b'A' => Direction::Up,
                         b'B' => Direction::Down,
                         b'D' => Direction::Left,
@@ -24,12 +26,13 @@ impl Input {
                         _ => continue,
                     })
                 }
-                b'w' => Input::Direction(Direction::Up),
-                b's' => Input::Direction(Direction::Down),
-                b'a' => Input::Direction(Direction::Left),
-                b'd' => Input::Direction(Direction::Right),
+                b'w' => Input::Walk(Direction::Up),
+                b's' => Input::Walk(Direction::Down),
+                b'a' => Input::Walk(Direction::Left),
+                b'd' => Input::Walk(Direction::Right),
                 b' ' => Input::Space,
-                b'\n' => Input::Enter,
+                b'\n' => Input::Select,
+                b't' => Input::ChangeRenderTarget,
                 _ => continue,
             };
         }

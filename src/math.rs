@@ -3,6 +3,10 @@ use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use abes_nice_things::PrimFrom;
 
+////////////
+// Vector //
+////////////
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Vector<T: Number> {
     pub x: T,
@@ -68,6 +72,21 @@ impl<T: Number> Vector<T> {
     /// #####
     pub fn is_near(self, other: Vector<T>, distance: T) -> bool {
         self.x.abs_diff(other.x) <= distance && self.y.abs_diff(other.y) <= distance
+    }
+    /// Gets the given axis
+    pub fn isolate_axis(self, axis: Axis) -> T {
+        match axis {
+            Axis::Horizontal => self.x,
+            Axis::Vertical => self.y,
+        }
+    }
+    /// Removes the given axis
+    pub fn zero_axis(&mut self, axis: Axis) -> &mut Self {
+        match axis {
+            Axis::Horizontal => self.x = T::ZERO,
+            Axis::Vertical => self.y = T::ZERO,
+        }
+        self
     }
 }
 impl<T: Integer> Vector<T> {
@@ -149,6 +168,11 @@ impl<T: Number> std::ops::AddAssign<Direction> for Vector<T> {
         *self = *self + rhs;
     }
 }
+
+///////////////
+// Direction //
+///////////////
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Up,
@@ -191,6 +215,30 @@ impl Direction {
             },
         )
     }
+    /// Rotates the direction left (counter clockwise)
+    pub fn left(self) -> Direction {
+        match self {
+            Direction::Up => Direction::Left,
+            Direction::Left => Direction::Down,
+            Direction::Down => Direction::Right,
+            Direction::Right => Direction::Up,
+        }
+    }
+    /// Rotates the direction right (clockwise)
+    pub fn right(self) -> Direction {
+        match self {
+            Direction::Up => Direction::Right,
+            Direction::Right => Direction::Down,
+            Direction::Down => Direction::Left,
+            Direction::Left => Direction::Up,
+        }
+    }
+    pub fn axis(self) -> Axis {
+        match self {
+            Direction::Up | Direction::Down => Axis::Vertical,
+            Direction::Left | Direction::Right => Axis::Horizontal,
+        }
+    }
 }
 impl std::fmt::Display for Direction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -202,6 +250,40 @@ impl std::fmt::Display for Direction {
         }
     }
 }
+impl std::ops::Not for Direction {
+    type Output = Direction;
+    fn not(self) -> Self::Output {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right,
+            Direction::Right => Direction::Left,
+        }
+    }
+}
+
+//////////
+// Axis //
+//////////
+
+pub enum Axis {
+    Horizontal,
+    Vertical,
+}
+impl std::ops::Not for Axis {
+    type Output = Axis;
+    fn not(self) -> Self::Output {
+        match self {
+            Axis::Horizontal => Axis::Vertical,
+            Axis::Vertical => Axis::Horizontal,
+        }
+    }
+}
+
+//////////
+// Zone //
+//////////
+
 /// A 2 dimensional area with INCLUSIVE BOUNDS
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Zone<T: Number> {
@@ -281,6 +363,24 @@ impl<T: Number> Zone<T> {
     }
     pub fn bottom(&self) -> T {
         self.bottom
+    }
+    pub fn clamp(&self, vector: Vector<T>) -> Vector<T> {
+        Vector {
+            x: if vector.x < self.left {
+                self.left
+            } else if vector.x > self.right {
+                self.right
+            } else {
+                vector.x
+            },
+            y: if vector.y < self.top {
+                self.top
+            } else if vector.y > self.bottom {
+                self.bottom
+            } else {
+                vector.y
+            },
+        }
     }
 }
 impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {

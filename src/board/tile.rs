@@ -33,6 +33,9 @@ impl Tile {
             Tile::Marker => false,
         }
     }
+    pub fn is_enemy_collidable(&self) -> bool {
+        self.is_player_collidable()
+    }
     pub fn is_wall_connectable(&self) -> bool {
         true // both walls and doors are always connectable
     }

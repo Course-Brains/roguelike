@@ -3,8 +3,8 @@ pub mod dummy;
 // CONSIDER STATIC VTABLE ARRAY TO ALLOW SAVE/LOAD OF ENEMIES AND MORE COMPACT DATA
 use crate::Vector;
 use crate::board::EnemyID;
+use crate::math::Direction;
 use crate::state::State;
-use crate::vector::Direction;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use std::any::Any;
@@ -23,7 +23,7 @@ pub struct Enemy {
     /// Various pieces of data which are tied to this specific instance and can spply to any enemy
     flags: Flags,
     /// The position used in intra room pathfinding
-    pub logical_position: Vector<f64>,
+    logical_position: Vector<f64>,
 }
 impl Enemy {
     pub fn new(vtable: &'static VTable, position: Vector<usize>) -> Enemy {
@@ -74,10 +74,32 @@ impl Enemy {
 
         let diff = logical_move_target - this.logical_position;
 
-        if this.position.is_near(this.move_target.unwrap(), 3) {
+        // If we are close then let's do the cheaper but less pretty pathfinding
+        // Additionally do the cheap one if it is a straight line to the target
+        if this.position.is_near(this.move_target.unwrap(), 3)
+            || this.position.x == this.move_target.unwrap().x
+            || this.position.y == this.move_target.unwrap().y
+        {
             this.flags.set_windup(WindupState::Physical);
-            let move_dir = Direction::from_vector(diff).unwrap();
-            *crate::board::LAST_DIR.lock().unwrap() = Some(move_dir);
+            let mut move_dir = Direction::from_vector(diff).unwrap();
+            let position = this.position;
+
+            // Fallback direction calculation
+            if !state.board.enemy_can_move(position, move_dir) {
+                // Getting next best direction
+                let remaining = *diff.clone().zero_axis(move_dir.axis());
+                if let Some(direction) = Direction::from_vector(remaining)
+                    && state.board.enemy_can_move(position, direction)
+                {
+                    move_dir = direction;
+                } else {
+                    return;
+                }
+            }
+
+            // Yes this is needed
+            let this = state.board.get_enemy_mut(id).as_mut().unwrap();
+            // Actually moving
             this.position += move_dir;
             if this.position == this.move_target.unwrap() {
                 this.move_target = None;
@@ -85,6 +107,8 @@ impl Enemy {
             return;
         }
         this.flags.set_windup(WindupState::Magical);
+
+        // We can't do the cheap pathfinding :(
 
         let target = Vector::new(
             (this.logical_position.x + (diff.x.signum() / 2.0)).round(),
@@ -94,10 +118,10 @@ impl Enemy {
         let dist_to_target = target - this.logical_position;
 
         let effective_dist_to_target = dist_to_target / diff;
-        debug_assert!(effective_dist_to_target.x.is_sign_positive());
-        debug_assert!(effective_dist_to_target.y.is_sign_positive());
+        assert!(effective_dist_to_target.x.is_sign_positive() || effective_dist_to_target.x == 0.0);
+        assert!(effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0);
 
-        let dir =
+        let mut dir =
             // Horizontal movement
             if effective_dist_to_target.x < effective_dist_to_target.y {
                 this.logical_position.x = target.x;
@@ -118,6 +142,22 @@ impl Enemy {
                     Direction::Up
                 }
             };
+
+        // Handling backup move direction
+        let position = this.position;
+        if !state.board.enemy_can_move(position, dir) {
+            // Getting next best direction
+            let remaining = *diff.clone().zero_axis(dir.axis());
+            if let Some(direction) = Direction::from_vector(remaining)
+                && state.board.enemy_can_move(position, direction)
+            {
+                dir = direction;
+            } else {
+                return;
+            }
+        }
+
+        let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         this.position += dir;
         if this.position == this.move_target.unwrap() {
             this.move_target = None;

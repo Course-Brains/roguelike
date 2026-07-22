@@ -2,18 +2,17 @@
 mod board;
 mod enemy;
 mod input;
+mod math;
+mod player;
 mod random;
 mod state;
-mod vector;
-
-use std::io::Write;
 
 use board::AxisLength;
 use input::Input;
 use input::normalize;
 use input::weirdify;
-use vector::Vector;
-use vector::Zone;
+use math::Vector;
+use math::Zone;
 
 fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
@@ -32,34 +31,38 @@ fn run() {
             Vector::new(desired_width, desired_height),
         )
         .unwrap(),
+        player::Player::new(Vector::new(1, 1)),
     );
 
-    let mut position = Vector::new(10, 10);
     weirdify().unwrap();
-    state.board.render(position);
     loop {
-        state.board.render(position);
-        print!("\x1b[{};{}H", position.y, position.x);
-        std::io::stdout().flush().unwrap();
-        match input::Input::get() {
-            input::Input::Direction(direction) => {
-                position += direction;
+        state.render();
+        match Input::get() {
+            Input::Walk(direction) => {
+                player::Player::handle_walk_input(&mut state, direction);
             }
-            input::Input::Space => {
+            Input::MoveSelector(direction) => {
+                player::Player::handle_move_selector_input(&mut state, direction);
+            }
+            Input::ChangeRenderTarget => {
+                player::Player::handle_change_render_target_input(&mut state);
+            }
+            Input::Space => {
                 board::Board::pathfind(&mut state);
             }
-            input::Input::Enter => {
+            Input::Select => {
                 if state.board.count_enemies() == 0 {
-                    state
-                        .board
-                        .add_enemy(enemy::Enemy::new(&enemy::dummy::VTABLE, position));
+                    state.board.add_enemy(enemy::Enemy::new(
+                        &enemy::dummy::VTABLE,
+                        state.player.selector,
+                    ));
                 } else {
                     state
                         .board
                         .get_enemy_mut(board::EnemyID(0))
                         .as_mut()
                         .unwrap()
-                        .move_target = Some(position);
+                        .move_target = Some(state.player.selector);
                 }
             }
         }

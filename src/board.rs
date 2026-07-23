@@ -5,6 +5,7 @@ pub mod map_gen;
 mod room;
 use room::Room;
 use room::RoomID;
+use room::RoomIDFlagged;
 
 use crate::Vector;
 use crate::Zone;
@@ -31,6 +32,9 @@ pub struct Board {
     ///
     /// Do NOT change the length of this array. Seriously, DON'T.
     tiles: Vec<Option<Tile>>,
+    /// This is used to get which room the interior coordinate is a part of. This does not include
+    /// walls or doors. This also has the same restrictions as tiles
+    room_map: Vec<RoomIDFlagged>,
     /// The length of each axis of the map
     axis_length: AxisLength,
     /// The size of the viewport, the center will tend towards the top left
@@ -53,6 +57,10 @@ impl Board {
     pub fn new(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Result<Board> {
         Ok(Board {
             tiles: Board::create_blank_tile_array(axis_length)?,
+            room_map: vec![
+                RoomIDFlagged::new(None);
+                axis_length.to_inner() * axis_length.to_inner()
+            ],
             axis_length,
             viewport_size: desired_viewport
                 .min(Vector::new(axis_length.to_inner(), axis_length.to_inner())),
@@ -155,6 +163,8 @@ impl Board {
 impl Board {
     /// ALWAYS ensure this matches the implementations for indexing into the tiles.
     /// This is the maximum length of each axis for the board.
+    ///
+    /// This is an exclusive bounds when referring to indices
     const MAX_AXIS_LENGTH: usize = 0b1 << Board::MAX_AXIS_BITS; // 1024
     /// The maximum number of bits in an axis of an index.
     /// This must be less than or equal to half of the length of usize
@@ -209,6 +219,9 @@ impl Board {
         self.is_move_on_board(start, direction)
             && self[start + direction].is_none_or(|tile| !tile.is_player_collidable())
             && !self.is_enemy_at_position(start + direction)
+    }
+    pub fn get_room_id_of_coord(&self, position: Vector<usize>) -> Option<RoomID> {
+        self.room_map[convert_z_order_index(position, self.axis_length).unwrap()].get_id()
     }
 }
 
@@ -324,6 +337,12 @@ fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Resul
     // 3 3 2 2 1 1 0 0
 
     Ok(true_index)
+}
+impl std::ops::Index<RoomID> for Board {
+    type Output = Room;
+    fn index(&self, index: RoomID) -> &Self::Output {
+        &self.rooms[index.get_inner() as usize]
+    }
 }
 #[cfg(test)]
 #[test]

@@ -312,6 +312,12 @@ impl<T: Number> Zone<T> {
             && self.top <= position.y
             && self.bottom >= position.y
     }
+    pub fn contains_exclusive(&self, position: Vector<T>) -> bool {
+        self.left < position.x
+            && self.right > position.x
+            && self.top < position.y
+            && self.bottom > position.y
+    }
     pub fn from_vectors(first: Vector<T>, second: Vector<T>) -> Zone<T> {
         let left = if first.x < second.x {
             first.x

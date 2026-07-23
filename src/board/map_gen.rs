@@ -43,6 +43,8 @@ pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Res
     board.tiles = tiles;
     Room::create_counterparts(&mut rooms, 0, &mut board);
     Room::fill_counterpart_adjacencies(&mut board);
+    Room::set_room_map(&mut board);
+    validate(&board);
     Ok(board)
 }
 struct Room {
@@ -201,55 +203,80 @@ impl Room {
                 if first_index == second_index {
                     continue;
                 }
+                let first = &board.rooms[first_index];
+                let second = &board.rooms[second_index];
+                let first_bounds = first.get_bounds();
+                let second_bounds = second.get_bounds();
+
                 // If the left side of first and the right side of second are touching
-                if board.rooms[first_index].get_bounds().left()
-                    == board.rooms[second_index].get_bounds().right()
-                    && (board.rooms[first_index].get_bounds().top() + 1
-                        < board.rooms[second_index].get_bounds().bottom() - 1
-                        || board.rooms[second_index].get_bounds().top() + 1
-                            > board.rooms[first_index].get_bounds().bottom() - 1)
+                if first_bounds.left() == second_bounds.right()
+                    && first_bounds.top() + 1 < second_bounds.bottom() - 1
+                    && second_bounds.top() + 1 < first_bounds.bottom() - 1
                 {
                     // We get the top and bottom of the overlapping section of wall
-                    let top = board.rooms[first_index]
-                        .get_bounds()
-                        .top()
-                        .max(board.rooms[second_index].get_bounds().top());
-                    let bottom = board.rooms[first_index]
-                        .get_bounds()
-                        .bottom()
-                        .min(board.rooms[second_index].get_bounds().bottom());
+                    let top = first_bounds.top().max(second_bounds.top());
+                    let bottom = first_bounds.bottom().min(second_bounds.bottom());
 
                     // And we get the middle of where they are touching
                     let mid = top.midpoint(bottom);
 
                     // Then we place the door and mark the adjacency
                     let door_pos = Vector::new(board.rooms[first_index].get_bounds().left(), mid);
-                    board[door_pos] = Some(Tile::Door { open: false });
+                    if !(first_bounds.contains(door_pos) && second_bounds.contains(door_pos)) {
+                        panic!(
+                            "First:\n\
+                            index: {first_index}\n\
+                            bounds: {first_bounds:?}\n\
+                            debug: {first:#?}\n\
+                            \n\
+                            Second:\n\
+                            index: {second_index}\n\
+                            bounds: {second_bounds:?}\n\
+                            debug: {second:#?}\n\
+                            \n\
+                            top of connected area: {top}\n\
+                            bottom of connected area: {bottom}\n\
+                            midpoint of connected area: {mid}\n\
+                            calculated door position: {door_pos}\n\
+                            result of if first contains door pos: {}\n\
+                            result of if second contains door pos: {}",
+                            first_bounds.contains(door_pos),
+                            second_bounds.contains(door_pos)
+                        );
+                    }
+
+                    board[door_pos] = Some(Tile::Door {
+                        open: false,
+                        rooms: [
+                            super::room::room_id(first_index as u16),
+                            super::room::room_id(second_index as u16),
+                        ],
+                    });
                     board.rooms[first_index]
                         .add_connection(door_pos, super::room::room_id(second_index));
                     board.rooms[second_index]
                         .add_connection(door_pos, super::room::room_id(first_index));
                 }
                 // If the top side of first and the bottom side of second are touching
-                else if board.rooms[first_index].get_bounds().top()
-                    == board.rooms[second_index].get_bounds().bottom()
-                    && (board.rooms[first_index].get_bounds().left() + 1
-                        < board.rooms[second_index].get_bounds().right() - 1
-                        || board.rooms[second_index].get_bounds().left() + 1
-                            < board.rooms[first_index].get_bounds().right() - 1)
+                else if first_bounds.top() == second_bounds.bottom()
+                    && first_bounds.left() + 1 < second_bounds.right() - 1
+                    && second_bounds.left() + 1 < first_bounds.right() - 1
                 {
                     // Second verse same as the first
-                    let left = board.rooms[first_index]
-                        .get_bounds()
-                        .left()
-                        .max(board.rooms[second_index].get_bounds().left());
-                    let right = board.rooms[first_index]
-                        .get_bounds()
-                        .right()
-                        .min(board.rooms[second_index].get_bounds().right());
+                    let left = first_bounds.left().max(second_bounds.left());
+                    let right = first_bounds.right().min(second_bounds.right());
                     let mid = left.midpoint(right);
-                    let door_pos = Vector::new(mid, board.rooms[first_index].get_bounds().top());
-                    board[door_pos] = Some(Tile::Door { open: false });
+                    let door_pos = Vector::new(mid, first_bounds.top());
+                    assert!(first_bounds.contains(door_pos));
+                    assert!(second_bounds.contains(door_pos));
+
+                    board[door_pos] = Some(Tile::Door {
+                        open: false,
+                        rooms: [
+                            super::room::room_id(first_index as u16),
+                            super::room::room_id(second_index as u16),
+                        ],
+                    });
                     board.rooms[first_index]
                         .add_connection(door_pos, super::room::room_id(second_index));
                     board.rooms[second_index]
@@ -259,6 +286,113 @@ impl Room {
                 // We don't need to account for the other 2 sides because eventually second_index
                 // and first_index will be swapped
             }
+        }
+    }
+    fn set_room_map(board: &mut Board) {
+        for (id, room) in board.rooms.iter().enumerate() {
+            let bounds = room.get_bounds();
+            let interior_bounds = Zone::new(
+                bounds.left() + 1,
+                bounds.right() - 1,
+                bounds.top() + 1,
+                bounds.bottom() - 1,
+            )
+            .unwrap();
+            for (position, _) in interior_bounds.scanlines() {
+                board.room_map
+                    [super::convert_z_order_index(position, board.axis_length).unwrap()] =
+                    super::RoomIDFlagged::new(Some(super::room::room_id(id as u16)));
+            }
+        }
+    }
+}
+fn validate(board: &Board) {
+    for first_index in 0..board.rooms.len() {
+        for second_index in 0..board.rooms.len() {
+            if first_index == second_index {
+                continue;
+            }
+            let first = &board.rooms[first_index];
+            let second = &board.rooms[second_index];
+
+            let first_bounds = first.get_bounds();
+            let second_bounds = second.get_bounds();
+
+            // Check if any rooms are subsets of others
+            if first_bounds.contains(second_bounds.top_left())
+                && first_bounds.contains(second_bounds.bottom_right())
+            {
+                panic!("Two fully overlapping rooms: {first_bounds:?} and {second_bounds:?}");
+            }
+
+            // Check that there are no out of bounds rooms
+            // We only need to check overbounds because underbounds would panic
+            if board.axis_length.to_inner() <= first_bounds.bottom_right().x {
+                panic!(
+                    "Room was out of bounds in x: {first_bounds:?} when limit is {}",
+                    board.axis_length.to_inner()
+                );
+            }
+            if board.axis_length.to_inner() <= first_bounds.bottom_right().y {
+                panic!(
+                    "Room was out of bounds in y: {first_bounds:?} when limit is {}",
+                    board.axis_length.to_inner()
+                );
+            }
+        }
+    }
+    // Count and log both the number of doors and the number of connections
+    // It should be 2*connections = doors
+    let mut door_count = 0;
+    for tile in board.tiles.iter() {
+        if let Some(super::Tile::Door { .. }) = tile {
+            door_count += 1;
+        }
+    }
+    let mut connection_count = 0;
+    for room in board.rooms.iter() {
+        connection_count += room.num_connections();
+    }
+    abes_nice_things::log!(
+        "After map gen, there are {door_count} doors and {connection_count} connections between rooms"
+    );
+
+    // Make sure there are only walls on the edge of the map
+    let max_index = board.axis_length.to_inner() - 1;
+    for x in 0..max_index {
+        if let Some(super::Tile::Wall) = board[Vector::new(x, 0)] {
+        } else {
+            panic!(
+                "Found {:?} on edge of map at {}",
+                board[Vector::new(x, 0)],
+                Vector::new(x, 0)
+            );
+        }
+        if let Some(super::Tile::Wall) = board[Vector::new(x, max_index)] {
+        } else {
+            panic!(
+                "Found {:?} on edge of map at {}",
+                board[Vector::new(x, max_index)],
+                Vector::new(x, max_index)
+            );
+        }
+    }
+    for y in 0..max_index {
+        if let Some(super::Tile::Wall) = board[Vector::new(0, y)] {
+        } else {
+            panic!(
+                "Found {:?} on edge of map at {}",
+                board[Vector::new(0, y)],
+                Vector::new(0, y)
+            );
+        }
+        if let Some(super::Tile::Wall) = board[Vector::new(max_index, y)] {
+        } else {
+            panic!(
+                "Found {:?} on edge of map at {}",
+                board[Vector::new(max_index, y)],
+                Vector::new(max_index, y)
+            );
         }
     }
 }

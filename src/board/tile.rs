@@ -1,4 +1,5 @@
 use super::Board;
+use super::RoomID;
 use crate::Vector;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
@@ -12,6 +13,7 @@ pub enum Tile {
     /// Like a wall, but you can make it pretend it doesn't exist. For a while anyway.
     Door {
         open: bool,
+        rooms: [RoomID; 2],
     },
     Marker,
 }
@@ -20,8 +22,10 @@ impl Tile {
     pub fn render(&self, board: &Board, position: Vector<usize>) -> (char, Option<Style>) {
         match self {
             Tile::Wall => (get_wall_char(board, position), None),
-            Tile::Door { open: false } => (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE)),
-            Tile::Door { open: true } => OPEN_DOOR,
+            Tile::Door { open: false, .. } => {
+                (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE))
+            }
+            Tile::Door { open: true, .. } => OPEN_DOOR,
             Tile::Marker => ('X', Some(*Style::new().purple().background_green())),
         }
     }
@@ -29,7 +33,7 @@ impl Tile {
     pub fn is_player_collidable(&self) -> bool {
         match self {
             Tile::Wall => true,
-            Tile::Door { open } => !open,
+            Tile::Door { open, .. } => !open,
             Tile::Marker => false,
         }
     }

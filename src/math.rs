@@ -88,6 +88,15 @@ impl<T: Number> Vector<T> {
         }
         self
     }
+    pub fn abs_diff(self, other: Vector<T>) -> Vector<T> {
+        Vector {
+            x: self.x.abs_diff(other.x),
+            y: self.y.abs_diff(other.y),
+        }
+    }
+    pub fn sum_axes(self) -> T {
+        self.x + self.y
+    }
 }
 impl<T: Integer> Vector<T> {
     /// Diagonals do not count

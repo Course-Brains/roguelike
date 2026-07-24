@@ -71,7 +71,12 @@ impl Room {
         };
 
         // Room is too small to divide
-        if smallest_axis_length <= Room::MINIMUM_AXIS {
+        if rooms[index]
+            .bounds
+            .height()
+            .max(rooms[index].bounds.width())
+            <= Room::MINIMUM_AXIS
+        {
             return;
         }
 
@@ -85,13 +90,14 @@ impl Room {
 
         // We are going to subdivide
 
-        // deciding the axis for division
+        // Deciding the axis for division
         // 1 in 4 chance of dividing the smallest axis instead of the bigger one
-        let division_axis = if (u8::random() & 0b11) == 0 {
-            smallest_axis
-        } else {
-            !smallest_axis
-        };
+        let division_axis =
+            if (u8::random() & 0b11) == 0 && smallest_axis_length > Room::MINIMUM_AXIS {
+                smallest_axis
+            } else {
+                !smallest_axis
+            };
 
         // Getting the bounds of the to be divided axis
         let (range_start, range_end) = match division_axis {
@@ -340,23 +346,22 @@ fn validate(board: &Board) {
                 );
             }
         }
-    }
-    // Count and log both the number of doors and the number of connections
-    // It should be 2*connections = doors
-    let mut door_count = 0;
-    for tile in board.tiles.iter() {
-        if let Some(super::Tile::Door { .. }) = tile {
-            door_count += 1;
+        // Ensure each connection has a door
+        for (position, _) in board.rooms[first_index].connections.iter() {
+            if let Some(super::Tile::Door { .. }) = board[*position] {
+            } else {
+                panic!("There was a connection without a door at {position}");
+            }
+        }
+        // Ensure each connection is mutual
+        for (position, connectee) in board.rooms[first_index].connections.iter() {
+            assert!(
+                board[*connectee]
+                    .connections
+                    .contains(&(*position, super::room::room_id(first_index)))
+            );
         }
     }
-    let mut connection_count = 0;
-    for room in board.rooms.iter() {
-        connection_count += room.num_connections();
-    }
-    abes_nice_things::log!(
-        "After map gen, there are {door_count} doors and {connection_count} connections between rooms"
-    );
-
     // Make sure there are only walls on the edge of the map
     let max_index = board.axis_length.to_inner() - 1;
     for x in 0..max_index {

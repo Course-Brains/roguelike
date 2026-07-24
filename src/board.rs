@@ -3,6 +3,7 @@ pub mod tile;
 pub use axis_length::AxisLength;
 pub mod map_gen;
 mod room;
+use crate::random::Random;
 use room::Room;
 use room::RoomID;
 use room::RoomIDFlagged;
@@ -15,6 +16,9 @@ use crate::state::State;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use anyhow::{Context, Result, bail};
+use std::collections::BinaryHeap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use tile::Tile;
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
@@ -75,6 +79,14 @@ impl Board {
     fn add_room(&mut self, room: Room) -> RoomID {
         self.rooms.push(room);
         room::room_id(self.rooms.len() - 1)
+    }
+    /// First we run the thinkers
+    ///
+    /// Then we pathfind
+    pub fn increment(state: &mut State) {
+        state.board.local_turns += 1;
+        Board::run_thinkers(state);
+        Board::pathfind(state);
     }
 }
 // RENDERING
@@ -223,6 +235,15 @@ impl Board {
     pub fn get_room_id_of_coord(&self, position: Vector<usize>) -> Option<RoomID> {
         self.room_map[convert_z_order_index(position, self.axis_length).unwrap()].get_id()
     }
+    pub fn get_possible_room_ids_at_position(&self, position: Vector<usize>) -> Vec<RoomID> {
+        if let Some(room) = self.get_room_id_of_coord(position) {
+            vec![room]
+        } else if let Some(Tile::Door { rooms, .. }) = self[position] {
+            rooms.to_vec()
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 // ENEMIES
@@ -252,9 +273,188 @@ impl Board {
     }
     /// This requires mutable access to all enemies
     pub fn pathfind(state: &mut State) {
+        Board::inter_room_pathfind(state);
+        Board::intra_room_pathfind(state);
+    }
+    fn intra_room_pathfind(state: &mut State) {
         for index in 0..state.board.enemies.len() {
             if state.board.enemies[index].is_some() {
                 Enemy::intra_room_pathfind(state, EnemyID(index));
+            }
+        }
+    }
+    /// Inter room pathfinding implemented as A* considering only the rooms
+    fn inter_room_pathfind(state: &mut State) {
+        for id in 0..state.board.enemies.len() {
+            // Figuring out if we need to do anything
+            // If there is no enemy then we can't pathfind
+            if state.board.enemies[id].is_none() {
+                continue;
+            }
+
+            // If we are still walking then keep walking
+            if let Some(walk_time) = state.board.enemies[id].as_ref().unwrap().walk_time {
+                state.board.enemies[id].as_mut().unwrap().walk_time =
+                    std::num::NonZeroUsize::new(walk_time.get() - 1);
+                continue;
+            }
+            let enemy = state.board.enemies[id].as_ref().unwrap();
+            // If the enemy doesn't want to go anywhere or already knows where to go or is asleep
+            // then we don't need to do anything
+            if enemy.end_goal.is_none() || !enemy.flags.is_awake() {
+                continue;
+            }
+
+            let possible_end_goal_rooms = state
+                .board
+                .get_possible_room_ids_at_position(enemy.end_goal.unwrap());
+            let possible_start_rooms = state
+                .board
+                .get_possible_room_ids_at_position(enemy.position);
+            // Enemies MUST always be either within a room or on a door
+            assert!(!possible_end_goal_rooms.is_empty());
+            assert!(!possible_start_rooms.is_empty());
+            // If it is already in the room it needs to be in then we don't have to do anything
+            if possible_start_rooms
+                .iter()
+                .any(|start| possible_end_goal_rooms.contains(start))
+            {
+                state.board.enemies[id].as_mut().unwrap().move_target = enemy.end_goal;
+                continue;
+            }
+
+            // Sadly we have to actually do our job, ew
+            struct Heuristic {
+                /// The estimate at the remaining travel cost from this position
+                remaining_heuristic: usize,
+                /// The known travel cost to this position
+                known_cost: usize,
+                /// The position
+                position: Vector<usize>,
+                /// The room it is entering
+                room: RoomID,
+                /// The room which was the previous room in the path taken
+                backpath: Option<RoomID>,
+            }
+            impl Heuristic {
+                fn new(
+                    position: Vector<usize>,
+                    goal: Vector<usize>,
+                    known_cost: usize,
+                    room: RoomID,
+                    backpath: Option<RoomID>,
+                ) -> Self {
+                    Heuristic {
+                        remaining_heuristic: position.abs_diff(goal).sum_axes(),
+                        known_cost,
+                        position,
+                        room,
+                        backpath,
+                    }
+                }
+            }
+            impl PartialEq for Heuristic {
+                fn eq(&self, other: &Self) -> bool {
+                    self.remaining_heuristic + self.known_cost
+                        == other.remaining_heuristic + other.known_cost
+                }
+            }
+            impl Eq for Heuristic {}
+            impl PartialOrd for Heuristic {
+                fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                    // Yes this ordering is intentional
+                    (other.remaining_heuristic + other.known_cost)
+                        .partial_cmp(&(self.remaining_heuristic + self.known_cost))
+                }
+            }
+            impl Ord for Heuristic {
+                fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                    self.partial_cmp(other).unwrap()
+                }
+            }
+            // Setup
+            let mut visited = HashSet::new();
+            let mut to_visit = BinaryHeap::new();
+            let mut backpath = HashMap::new();
+            // Because we have ensured that inter room pathfinding must be done, the last room will
+            // never be the same as the start room and the only way for this to be the same as the
+            // start room is for the start and target to be in the same room, we know this will not
+            // be None when we are done traversing the rooms
+            let mut last_room = None;
+            for start_room in possible_start_rooms.iter() {
+                to_visit.push(Heuristic::new(
+                    enemy.position,
+                    enemy.end_goal.unwrap(),
+                    0,
+                    *start_room,
+                    None,
+                ));
+            }
+
+            // Traversing the rooms
+            while let Some(current) = to_visit.pop() {
+                if !visited.insert(current.room) {
+                    continue;
+                }
+                if let Some(backpath_id) = current.backpath {
+                    backpath.insert(current.room, backpath_id);
+                }
+                last_room = Some(current.room);
+
+                let room = &state.board[current.room];
+                for (position, connectee) in room.connections.iter() {
+                    if visited.contains(connectee) {
+                        continue;
+                    }
+                    // If the door is closed then it can't walk through it
+                    if let Some(Tile::Door { open: true, .. }) = state.board[*position] {
+                    } else {
+                        continue;
+                    }
+                    // If the doors share a wall then we have to add two because it has to walk
+                    // into the room then back out instead of travelling through the wall
+                    let additional =
+                        if current.position.x == position.x || current.position.y == position.y {
+                            2
+                        } else {
+                            0
+                        };
+
+                    to_visit.push(Heuristic::new(
+                        *position,
+                        enemy.end_goal.unwrap(),
+                        current.known_cost
+                            + current.position.abs_diff(*position).sum_axes()
+                            + additional,
+                        *connectee,
+                        Some(current.room),
+                    ));
+                }
+            }
+            // See above
+            assert!(last_room.is_some());
+
+            // Following the path back
+            // If this ever breaks early due to the loop condition failing then pathfinding has
+            // failed and it won't move even though it is trying to
+            while let Some(next) = backpath.get(&last_room.unwrap()) {
+                // We have found the room to go to
+                if possible_start_rooms.contains(next) {
+                    // We don't need to worry about if the condition in this loop won't be met
+                    // because board validation ensures each connection is mutual
+                    for (position, connection) in state.board[*next].connections.clone().into_iter()
+                    {
+                        // We have found the specific door to walk to
+                        if possible_start_rooms.contains(&connection) {
+                            let enemy = state.board.enemies[id].as_mut().unwrap();
+                            enemy.move_target = Some(position);
+                            enemy.walk_time =
+                                std::num::NonZeroUsize::new((u8::random() & 0b11) as usize + 4);
+                            break;
+                        }
+                    }
+                    break;
+                }
             }
         }
     }
@@ -286,6 +486,16 @@ impl Board {
     pub fn count_enemies(&self) -> usize {
         self.enemies.len()
     }
+    pub fn get_enemy_at_position(&self, position: Vector<usize>) -> Option<EnemyID> {
+        for (id, enemy) in self.enemies.iter().enumerate() {
+            if let Some(enemy) = enemy
+                && enemy.position == position
+            {
+                return Some(EnemyID(id));
+            }
+        }
+        None
+    }
 }
 
 // INDEXING
@@ -312,6 +522,17 @@ impl std::ops::IndexMut<Vector<usize>> for Board {
             .context("While tile indexing")
             .unwrap();
         &mut self.tiles[true_index]
+    }
+}
+impl std::ops::Index<EnemyID> for Board {
+    type Output = Option<Enemy>;
+    fn index(&self, index: EnemyID) -> &Self::Output {
+        self.get_enemy(index)
+    }
+}
+impl std::ops::IndexMut<EnemyID> for Board {
+    fn index_mut(&mut self, index: EnemyID) -> &mut Self::Output {
+        self.get_enemy_mut(index)
     }
 }
 fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Result<usize> {

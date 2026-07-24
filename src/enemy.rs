@@ -8,6 +8,7 @@ use crate::state::State;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use std::any::Any;
+use std::num::NonZeroUsize;
 
 pub struct Enemy {
     /// The state which the logic can read and write to
@@ -18,10 +19,15 @@ pub struct Enemy {
     pub position: Vector<usize>,
     /// Where the enemy is currently pathing towards
     pub move_target: Option<Vector<usize>>,
+    /// The end goal of the inter room pathing. This is where the enemy eventually wants to end up
+    pub end_goal: Option<Vector<usize>>,
+    /// How long will it continue walking towards this move target before recalculating.
+    /// This is not used when in the same room as the target
+    pub walk_time: Option<NonZeroUsize>,
     /// The vtable holding function pointers to the logic and enemy type specific constants
     vtable: &'static VTable,
     /// Various pieces of data which are tied to this specific instance and can spply to any enemy
-    flags: Flags,
+    pub flags: Flags,
     /// The position used in intra room pathfinding
     logical_position: Vector<f64>,
 }
@@ -32,6 +38,8 @@ impl Enemy {
             health: vtable.starting_health,
             position,
             move_target: None,
+            end_goal: None,
+            walk_time: None,
             vtable: vtable,
             flags: Flags::new(),
             logical_position: position.prim_as() + 0.5,
@@ -192,7 +200,7 @@ impl VTable {
     };
 }
 
-struct Flags(u8);
+pub struct Flags(u8);
 // 0b0000_0000
 //   |||| |||+- Whether or not it is awake
 //   |||| |++-- WindupState

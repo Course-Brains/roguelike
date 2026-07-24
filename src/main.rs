@@ -48,7 +48,8 @@ fn run() {
                 board::Board::pathfind(&mut state);
             }
             Input::Select => {
-                if state.board.count_enemies() == 0 {
+                state.handle_select_input();
+                /*if state.board.count_enemies() == 0 {
                     state.board.add_enemy(enemy::Enemy::new(
                         &enemy::dummy::VTABLE,
                         state.player.selector,
@@ -60,7 +61,7 @@ fn run() {
                         .as_mut()
                         .unwrap()
                         .move_target = Some(state.player.selector);
-                }
+                }*/
             }
         }
     }

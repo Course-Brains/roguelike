@@ -3,7 +3,7 @@ use crate::math::Zone;
 use abes_nice_things::PrimAs;
 use std::num::NonZeroU16;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct RoomID(u16);
 impl RoomID {
     pub fn get_inner(self) -> u16 {
@@ -14,9 +14,10 @@ pub fn room_id<T: PrimAs<u16>>(internal: T) -> RoomID {
     RoomID(internal.prim_as())
 }
 #[derive(Clone, Debug, PartialEq)]
+/// Change what this stores at your own risk
 pub struct Room {
-    connections: Vec<(Vector<usize>, RoomID)>,
-    bounds: Zone<usize>,
+    pub connections: Vec<(Vector<usize>, RoomID)>,
+    pub bounds: Zone<usize>,
 }
 impl Room {
     pub fn new(bounds: Zone<usize>) -> Room {
@@ -30,9 +31,6 @@ impl Room {
     }
     pub fn get_bounds(&self) -> Zone<usize> {
         self.bounds
-    }
-    pub fn num_connections(&self) -> usize {
-        self.connections.len()
     }
 }
 

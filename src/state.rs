@@ -26,4 +26,38 @@ impl State {
         self.player.position_cursor(viewport);
         std::io::stdout().flush().unwrap();
     }
+    /// Handles the select input (enter) and returns if the turn should be incremented
+    pub fn handle_select_input(&mut self) -> bool {
+        const INTERACT_RANGE: usize = 3;
+        const SMACK_RANGE: usize = 1;
+        if !self
+            .player
+            .position
+            .is_near(self.player.selector, INTERACT_RANGE)
+        {
+            return false;
+        }
+
+        // TODO: Make it so that players can decide what to interact with on conflict
+        if let Some(id) = self.board.get_enemy_at_position(self.player.selector)
+            && self
+                .player
+                .position
+                .is_near(self.player.selector, SMACK_RANGE)
+        {
+            Player::attack(self, id);
+        } else if let Some(crate::board::tile::Tile::Door { open, .. }) =
+            &mut self.board[self.player.selector]
+            && self.player.position != self.player.selector
+        {
+            *open = !*open;
+        } else {
+            return false;
+        }
+        true
+    }
+    pub fn increment(&mut self) {
+        self.total_turns += 1;
+        Board::increment(self);
+    }
 }

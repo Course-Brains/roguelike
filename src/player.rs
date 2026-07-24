@@ -29,11 +29,22 @@ impl Player {
     /// Tries to move in the given direction, returns true if the turn should be incremented
     pub fn handle_walk_input(state: &mut State, move_dir: Direction) -> bool {
         if !state.board.player_can_move(state.player.position, move_dir) {
+            // There is something blocking movement
+            if let Some(id) = state
+                .board
+                .get_enemy_at_position(state.player.position + move_dir)
+            {
+                Player::attack(state, id);
+                return true;
+            }
             return false;
         }
 
         state.player.position += move_dir;
         true
+    }
+    pub fn attack(state: &mut State, target: crate::board::EnemyID) {
+        todo!()
     }
     pub fn handle_move_selector_input(state: &mut State, direction: Direction) {
         let viewport = state

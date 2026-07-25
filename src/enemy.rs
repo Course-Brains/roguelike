@@ -1,4 +1,5 @@
 // Place mod for enemies here
+pub mod basic;
 pub mod dummy;
 // CONSIDER STATIC VTABLE ARRAY TO ALLOW SAVE/LOAD OF ENEMIES AND MORE COMPACT DATA
 use crate::Vector;
@@ -30,6 +31,7 @@ pub struct Enemy {
     pub flags: Flags,
     /// The position used in intra room pathfinding
     logical_position: Vector<f64>,
+    windup_time: usize,
 }
 impl Enemy {
     pub fn new(vtable: &'static VTable, position: Vector<usize>) -> Enemy {
@@ -43,6 +45,7 @@ impl Enemy {
             vtable: vtable,
             flags: Flags::new(),
             logical_position: position.prim_as() + 0.5,
+            windup_time: 0,
         }
     }
     pub fn render(&self) -> (char, Style) {
@@ -84,52 +87,29 @@ impl Enemy {
 
         // If we are close then let's do the cheaper but less pretty pathfinding
         // Additionally do the cheap one if it is a straight line to the target
-        if this.position.is_near(this.move_target.unwrap(), 3)
+        let mut dir = if this.position.is_near(this.move_target.unwrap(), 3)
             || this.position.x == this.move_target.unwrap().x
             || this.position.y == this.move_target.unwrap().y
         {
-            this.flags.set_windup(WindupState::Physical);
-            let mut move_dir = Direction::from_vector(diff).unwrap();
-            let position = this.position;
+            Direction::from_vector(diff).unwrap()
+        } else {
+            // We can't do the cheap pathfinding :(
 
-            // Fallback direction calculation
-            if !state.board.enemy_can_move(position, move_dir) {
-                // Getting next best direction
-                let remaining = *diff.clone().zero_axis(move_dir.axis());
-                if let Some(direction) = Direction::from_vector(remaining)
-                    && state.board.enemy_can_move(position, direction)
-                {
-                    move_dir = direction;
-                } else {
-                    return;
-                }
-            }
+            let target = Vector::new(
+                (this.logical_position.x + (diff.x.signum() / 2.0)).round(),
+                (this.logical_position.y + (diff.y.signum() / 2.0)).round(),
+            );
 
-            // Yes this is needed
-            let this = state.board.get_enemy_mut(id).as_mut().unwrap();
-            // Actually moving
-            this.position += move_dir;
-            if this.position == this.move_target.unwrap() {
-                this.move_target = None;
-            }
-            return;
-        }
-        this.flags.set_windup(WindupState::Magical);
+            let dist_to_target = target - this.logical_position;
 
-        // We can't do the cheap pathfinding :(
+            let effective_dist_to_target = dist_to_target / diff;
+            assert!(
+                effective_dist_to_target.x.is_sign_positive() || effective_dist_to_target.x == 0.0
+            );
+            assert!(
+                effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0
+            );
 
-        let target = Vector::new(
-            (this.logical_position.x + (diff.x.signum() / 2.0)).round(),
-            (this.logical_position.y + (diff.y.signum() / 2.0)).round(),
-        );
-
-        let dist_to_target = target - this.logical_position;
-
-        let effective_dist_to_target = dist_to_target / diff;
-        assert!(effective_dist_to_target.x.is_sign_positive() || effective_dist_to_target.x == 0.0);
-        assert!(effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0);
-
-        let mut dir =
             // Horizontal movement
             if effective_dist_to_target.x < effective_dist_to_target.y {
                 this.logical_position.x = target.x;
@@ -149,19 +129,54 @@ impl Enemy {
                 } else {
                     Direction::Up
                 }
-            };
+            }
+        };
 
         // Handling backup move direction
-        let position = this.position;
+        // Yes this will cause desync between the logical and actual position, I do not care (it
+        // fixes itself immediately)
+        let position = state.board[id].as_ref().unwrap().position;
+        // Fallback direction calculation
         if !state.board.enemy_can_move(position, dir) {
             // Getting next best direction
             let remaining = *diff.clone().zero_axis(dir.axis());
-            if let Some(direction) = Direction::from_vector(remaining)
+            let new_dir = Direction::from_vector(remaining);
+            if let Some(direction) = new_dir
                 && state.board.enemy_can_move(position, direction)
             {
                 dir = direction;
+            // The only case where the previous check will fail is if it is a straight line to
+            // the target but it is blocked, so we are going to move around it hopefully
             } else {
-                return;
+                let valid_rooms = state.board.get_possible_room_ids_at_position(
+                    state.board[id].as_ref().unwrap().move_target.unwrap(),
+                );
+                if let Some(new_dir) = [
+                    Direction::Up,
+                    Direction::Down,
+                    Direction::Left,
+                    Direction::Right,
+                ]
+                .into_iter()
+                .filter(|possible_direction| {
+                    *possible_direction != dir
+                        && *possible_direction != !dir
+                        && Some(*possible_direction) != new_dir
+                        && state
+                            .board
+                            .get_room_id_of_coord(position + *possible_direction)
+                            .is_some_and(|room_id| valid_rooms.contains(&room_id))
+                        && state.board.enemy_can_move(position, *possible_direction)
+                })
+                .next()
+                {
+                    dir = new_dir;
+                } else {
+                    // We couldn't find a new direction to move so we will give up
+                    // ...
+                    // for now
+                    return;
+                }
             }
         }
 
@@ -195,6 +210,7 @@ impl VTable {
         if damage >= this.health {
             return true;
         }
+        this.flags.wake();
         this.health -= damage;
         false
     };

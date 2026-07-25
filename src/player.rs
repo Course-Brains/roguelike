@@ -44,7 +44,7 @@ impl Player {
         true
     }
     pub fn attack(state: &mut State, target: crate::board::EnemyID) {
-        todo!()
+        (state.board[target].as_ref().unwrap().get_vtable().damage)(state, target, 1);
     }
     pub fn handle_move_selector_input(state: &mut State, direction: Direction) {
         let viewport = state

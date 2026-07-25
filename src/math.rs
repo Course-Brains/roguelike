@@ -7,7 +7,7 @@ use abes_nice_things::PrimFrom;
 // Vector //
 ////////////
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Vector<T: Number> {
     pub x: T,
     pub y: T,
@@ -182,7 +182,7 @@ impl<T: Number> std::ops::AddAssign<Direction> for Vector<T> {
 // Direction //
 ///////////////
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Direction {
     Up,
     Down,
@@ -275,6 +275,7 @@ impl std::ops::Not for Direction {
 // Axis //
 //////////
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Axis {
     Horizontal,
     Vertical,
@@ -294,7 +295,7 @@ impl std::ops::Not for Axis {
 //////////
 
 /// A 2 dimensional area with INCLUSIVE BOUNDS
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Zone<T: Number> {
     left: T,
     right: T,

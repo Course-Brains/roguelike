@@ -34,21 +34,24 @@ fn run() {
     weirdify().unwrap();
     loop {
         state.render();
-        match Input::get() {
+        if match Input::get() {
             Input::Walk(direction) => {
-                player::Player::handle_walk_input(&mut state, direction);
+                player::Player::handle_walk_input(&mut state, direction)
             }
             Input::MoveSelector(direction) => {
                 player::Player::handle_move_selector_input(&mut state, direction);
+                false
             }
             Input::ChangeRenderTarget => {
                 player::Player::handle_change_render_target_input(&mut state);
+                false
             }
             Input::Space => {
                 board::Board::pathfind(&mut state);
+                false
             }
             Input::Select => {
-                state.handle_select_input();
+                state.handle_select_input()
                 /*if state.board.count_enemies() == 0 {
                     state.board.add_enemy(enemy::Enemy::new(
                         &enemy::dummy::VTABLE,
@@ -63,6 +66,8 @@ fn run() {
                         .move_target = Some(state.player.selector);
                 }*/
             }
+        } {
+            state.increment();
         }
     }
     //normalize().unwrap();
@@ -94,10 +99,6 @@ fn calc_desired_dimensions() -> (usize, usize) {
         panic!("terminal is under height")
     }
     (width, height)
-}
-enum MapObject {
-    Player,
-    Enemy(board::EnemyID),
 }
 /// Gets the size of the terminal in width, height.
 ///

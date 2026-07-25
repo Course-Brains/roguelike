@@ -247,7 +247,7 @@ impl Board {
 }
 
 // ENEMIES
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EnemyID(pub usize);
 impl Board {
     pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
@@ -343,9 +343,14 @@ impl Board {
                     known_cost: usize,
                     room: RoomID,
                     backpath: Option<RoomID>,
+                    same_wall: bool,
                 ) -> Self {
+                    let mut heuristic = position.abs_diff(goal).sum_axes();
+                    if same_wall {
+                        heuristic += 2;
+                    }
                     Heuristic {
-                        remaining_heuristic: position.abs_diff(goal).sum_axes(),
+                        remaining_heuristic: heuristic,
                         known_cost,
                         position,
                         room,
@@ -388,6 +393,7 @@ impl Board {
                     0,
                     *start_room,
                     None,
+                    false,
                 ));
             }
 
@@ -428,6 +434,7 @@ impl Board {
                             + additional,
                         *connectee,
                         Some(current.room),
+                        position.x == current.position.x || position.y == current.position.y,
                     ));
                 }
             }

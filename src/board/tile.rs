@@ -38,10 +38,13 @@ impl Tile {
         }
     }
     pub fn is_enemy_collidable(&self) -> bool {
-        self.is_player_collidable()
+        self.is_player_collidable() // for now these are aligned
     }
     pub fn is_wall_connectable(&self) -> bool {
         true // both walls and doors are always connectable
+    }
+    pub fn is_raycast_hittable(&self) -> bool {
+        self.is_player_collidable() //for now these are aligned
     }
 }
 const OPEN_DOOR: (char, Option<Style>) = (WALL_ALL_SIDES, Some(*Style::new().green()));

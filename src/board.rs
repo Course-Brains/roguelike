@@ -278,7 +278,9 @@ impl Board {
     }
     fn intra_room_pathfind(state: &mut State) {
         for index in 0..state.board.enemies.len() {
-            if state.board.enemies[index].is_some() {
+            if let Some(enemy) = state.board.enemies[index].as_ref()
+                && enemy.flags.should_path()
+            {
                 Enemy::intra_room_pathfind(state, EnemyID(index));
             }
         }
@@ -292,12 +294,6 @@ impl Board {
                 continue;
             }
 
-            // If we are still walking then keep walking
-            if let Some(walk_time) = state.board.enemies[id].as_ref().unwrap().walk_time {
-                state.board.enemies[id].as_mut().unwrap().walk_time =
-                    std::num::NonZeroUsize::new(walk_time.get() - 1);
-                continue;
-            }
             let enemy = state.board.enemies[id].as_ref().unwrap();
             // If the enemy doesn't want to go anywhere or already knows where to go or is asleep
             // then we don't need to do anything
@@ -455,8 +451,8 @@ impl Board {
                         if possible_start_rooms.contains(&connection) {
                             let enemy = state.board.enemies[id].as_mut().unwrap();
                             enemy.move_target = Some(position);
-                            enemy.walk_time =
-                                std::num::NonZeroUsize::new((u8::random() & 0b11) as usize + 4);
+                            /*enemy.walk_time =
+                            std::num::NonZeroUsize::new((u8::random() & 0b11) as usize + 4);*/
                             break;
                         }
                     }
@@ -465,19 +461,22 @@ impl Board {
             }
         }
     }
-    //TODO: Once the player is added, make this check for the player's position
-    pub fn enemy_can_move(&self, start: Vector<usize>, direction: Direction) -> bool {
+    pub fn enemy_can_move(state: &State, start: Vector<usize>, direction: Direction) -> bool {
         // Is the target location on the board?
-        if !self.is_move_on_board(start, direction) {
+        if !state.board.is_move_on_board(start, direction) {
             return false;
         }
         let new_pos = start + direction;
+        // Is the player there
+        if new_pos == state.player.position {
+            return false;
+        }
         // Is there a blocking tile?
-        if self[new_pos].is_some_and(|tile| tile.is_enemy_collidable()) {
+        if state.board[new_pos].is_some_and(|tile| tile.is_enemy_collidable()) {
             return false;
         }
         // Is there an enemy there?
-        if self.is_enemy_at_position(new_pos) {
+        if state.board.is_enemy_at_position(new_pos) {
             return false;
         }
         true

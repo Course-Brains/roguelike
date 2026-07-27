@@ -7,6 +7,7 @@ mod player;
 mod random;
 mod state;
 
+use abes_nice_things::log;
 use board::AxisLength;
 use input::Input;
 use input::normalize;
@@ -35,9 +36,7 @@ fn run() {
     loop {
         state.render();
         if match Input::get() {
-            Input::Walk(direction) => {
-                player::Player::handle_walk_input(&mut state, direction)
-            }
+            Input::Walk(direction) => player::Player::handle_walk_input(&mut state, direction),
             Input::MoveSelector(direction) => {
                 player::Player::handle_move_selector_input(&mut state, direction);
                 false
@@ -47,7 +46,10 @@ fn run() {
                 false
             }
             Input::Space => {
-                board::Board::pathfind(&mut state);
+                state.board.add_enemy(enemy::Enemy::new(
+                    &enemy::basic::VTABLE,
+                    state.player.selector,
+                ));
                 false
             }
             Input::Select => {
@@ -65,6 +67,27 @@ fn run() {
                         .unwrap()
                         .move_target = Some(state.player.selector);
                 }*/
+            }
+            Input::DebugQuery => {
+                log!("Debug query for position: {}", state.player.selector);
+                log!("  turn: {}", state.total_turns);
+                log!("  The tile is: {:?}", state.board[state.player.selector]);
+                if let Some(id) = state.board.get_enemy_at_position(state.player.selector) {
+                    log!("  There is an enemy ({}): {:#?}", id.0, state.board[id]);
+                } else {
+                    log!("  There is no enemy at that position");
+                }
+                if state.player.position == state.player.selector {
+                    log!("  The player is there");
+                }
+                log!(
+                    "  The possible rooms it is a part of are: {:?}",
+                    state
+                        .board
+                        .get_possible_room_ids_at_position(state.player.selector)
+                );
+
+                false
             }
         } {
             state.increment();

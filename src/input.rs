@@ -7,6 +7,7 @@ pub enum Input {
     Space,
     Select,
     ChangeRenderTarget,
+    DebugQuery,
 }
 impl Input {
     pub fn get() -> Input {
@@ -33,6 +34,7 @@ impl Input {
                 b' ' => Input::Space,
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
+                b'+' => Input::DebugQuery,
                 _ => continue,
             };
         }

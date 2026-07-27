@@ -3,14 +3,15 @@ pub mod basic;
 pub mod dummy;
 // CONSIDER STATIC VTABLE ARRAY TO ALLOW SAVE/LOAD OF ENEMIES AND MORE COMPACT DATA
 use crate::Vector;
+use crate::board::Board;
 use crate::board::EnemyID;
 use crate::math::Direction;
-use crate::state::State;
+use crate::state::*;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use std::any::Any;
-use std::num::NonZeroUsize;
 
+#[derive(Debug)]
 pub struct Enemy {
     /// The state which the logic can read and write to
     state: Box<dyn Any + Send>,
@@ -22,9 +23,6 @@ pub struct Enemy {
     pub move_target: Option<Vector<usize>>,
     /// The end goal of the inter room pathing. This is where the enemy eventually wants to end up
     pub end_goal: Option<Vector<usize>>,
-    /// How long will it continue walking towards this move target before recalculating.
-    /// This is not used when in the same room as the target
-    pub walk_time: Option<NonZeroUsize>,
     /// The vtable holding function pointers to the logic and enemy type specific constants
     vtable: &'static VTable,
     /// Various pieces of data which are tied to this specific instance and can spply to any enemy
@@ -41,7 +39,6 @@ impl Enemy {
             position,
             move_target: None,
             end_goal: None,
-            walk_time: None,
             vtable: vtable,
             flags: Flags::new(),
             logical_position: position.prim_as() + 0.5,
@@ -137,12 +134,12 @@ impl Enemy {
         // fixes itself immediately)
         let position = state.board[id].as_ref().unwrap().position;
         // Fallback direction calculation
-        if !state.board.enemy_can_move(position, dir) {
+        if !Board::enemy_can_move(state, position, dir) {
             // Getting next best direction
             let remaining = *diff.clone().zero_axis(dir.axis());
             let new_dir = Direction::from_vector(remaining);
             if let Some(direction) = new_dir
-                && state.board.enemy_can_move(position, direction)
+                && Board::enemy_can_move(state, position, direction)
             {
                 dir = direction;
             // The only case where the previous check will fail is if it is a straight line to
@@ -166,7 +163,7 @@ impl Enemy {
                             .board
                             .get_room_id_of_coord(position + *possible_direction)
                             .is_some_and(|room_id| valid_rooms.contains(&room_id))
-                        && state.board.enemy_can_move(position, *possible_direction)
+                        && Board::enemy_can_move(state, position, *possible_direction)
                 })
                 .next()
                 {
@@ -208,6 +205,7 @@ impl VTable {
     const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         if damage >= this.health {
+            *state.board.get_enemy_mut(id) = None;
             return true;
         }
         this.flags.wake();
@@ -216,18 +214,19 @@ impl VTable {
     };
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Flags(u8);
-// 0b0000_0000
+// 0b0000_1000
 //   |||| |||+- Whether or not it is awake
 //   |||| |++-- WindupState
-//   |||| +---- Unassigned
+//   |||| +---- Whether or not to do pathfinding
 //   |||+------ Unassigned
 //   ||+------- Unassigned
 //   |+-------- Unassigned
 //   +--------- Unassigned
 impl Flags {
     fn new() -> Flags {
-        Flags(0b0000_0000)
+        Flags(0b0000_1000)
     }
     pub fn is_awake(&self) -> bool {
         (self.0 & 0b1) != 0
@@ -247,6 +246,16 @@ impl Flags {
     /// Returns if the enemy is in ANY windup state
     pub fn is_windup(&self) -> bool {
         (self.0 & 0b0110) != 0
+    }
+    pub fn set_pathing(&mut self, should_path: bool) {
+        if should_path {
+            self.0 |= 0b0000_1000
+        } else {
+            self.0 &= 0b1111_0111
+        }
+    }
+    pub fn should_path(&self) -> bool {
+        (self.0 & 0b1000) != 0
     }
 }
 #[repr(u8)]
@@ -270,5 +279,14 @@ impl WindupState {
             }
             WindupState::None => {}
         }
+    }
+    fn is_none(&self) -> bool {
+        matches!(self, WindupState::None)
+    }
+    fn is_physical(&self) -> bool {
+        matches!(self, WindupState::Physical)
+    }
+    fn is_magical(&self) -> bool {
+        matches!(self, WindupState::Magical)
     }
 }

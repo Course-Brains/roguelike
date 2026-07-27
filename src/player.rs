@@ -7,6 +7,7 @@ pub struct Player {
     pub position: Vector<usize>,
     pub selector: Vector<usize>,
     render_target: RenderTarget,
+    health: usize,
 }
 impl Player {
     pub fn new(spawn: Vector<usize>) -> Player {
@@ -14,6 +15,7 @@ impl Player {
             position: spawn,
             selector: spawn,
             render_target: RenderTarget::Player,
+            health: 50,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>) {
@@ -77,6 +79,9 @@ impl Player {
                 Style::new().cyan().intense(true)
             )
         }
+    }
+    pub fn damage(state: &mut State, damage: usize) {
+        state.player.health = state.player.health.saturating_sub(damage);
     }
 }
 pub enum RenderTarget {

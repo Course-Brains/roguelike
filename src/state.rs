@@ -1,13 +1,13 @@
 use crate::board::Board;
 use crate::math::*;
 use crate::player::Player;
-use abes_nice_things::PrimFrom;
+use abes_nice_things::{PrimFrom, log};
 use std::io::Write;
 
 pub struct State {
     pub board: Board,
     pub player: Player,
-    total_turns: usize,
+    pub total_turns: usize,
 }
 impl State {
     pub fn new(board: Board, player: Player) -> State {
@@ -29,11 +29,15 @@ impl State {
             .stop_at_target(true)
             .record_path(true)
             .resolve(self);
-        print!("{}", abes_nice_things::Style::new().background_green());
         for position in raycast_result.1.as_ref().unwrap().iter() {
-            print!("\x1b[{};{}H ", position.y + 1, position.x + 1);
+            print!(
+                "\x1b[{};{}H{} \x1b[0m",
+                position.y + 1,
+                position.x + 1,
+                abes_nice_things::Style::new().background_green()
+            );
         }
-        print!("\x1b[0m\x1b[H{:?}", raycast_result.0);
+        print!("\x1b[H{:?}", raycast_result.0);
         self.player.position_cursor(viewport);
         std::io::stdout().flush().unwrap();
     }
@@ -148,20 +152,39 @@ impl RayCast {
             }
 
             // Figuring out which direction we need to go next
+            // figuring out possible next positions
             let next_target = Vector::new(
-                (logical_position.x + logical_diff.x.signum() / 2.0).round(),
-                (logical_position.y + logical_diff.y.signum() / 2.0).round(),
+                if logical_diff.x > 0.0 {
+                    (position.x + 1) as f64
+                } else if logical_position.x.fract().abs() > 0.0 {
+                    position.x as f64
+                } else if logical_diff.x == 0.0 {
+                    logical_position.x
+                } else {
+                    (position.x - 1) as f64
+                },
+                if logical_diff.y > 0.0 {
+                    (position.y + 1) as f64
+                } else if logical_position.y.fract().abs() > 0.0 {
+                    position.y as f64
+                } else if logical_diff.y == 0.0 {
+                    logical_position.y
+                } else {
+                    (position.y - 1) as f64
+                },
             );
 
             let effective_dist_to_target = (next_target - logical_position) / logical_diff;
-            assert!(
+            /*assert!(
                 effective_dist_to_target.x.is_sign_positive() || effective_dist_to_target.x == 0.0
             );
             assert!(
                 effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0
-            );
+            );*/
             // Incrementing everything
-            let direction = if effective_dist_to_target.x < effective_dist_to_target.y {
+            let direction = if effective_dist_to_target.x.abs() < effective_dist_to_target.y.abs()
+                && effective_dist_to_target.x.is_finite()
+            {
                 logical_position.x = next_target.x;
                 logical_position.y += logical_diff.y * effective_dist_to_target.x;
                 if logical_diff.x > 0.0 {
@@ -169,7 +192,7 @@ impl RayCast {
                 } else {
                     Direction::Left
                 }
-            } else {
+            } else if effective_dist_to_target.y.is_finite() {
                 logical_position.y = next_target.y;
                 logical_position.x += logical_diff.x * effective_dist_to_target.y;
                 if logical_diff.y > 0.0 {
@@ -177,16 +200,18 @@ impl RayCast {
                 } else {
                     Direction::Up
                 }
+            } else {
+                return (None, path);
             };
             // If moving would take us off the board, then don't
             if !state.board.is_move_on_board(position, direction) {
                 return (None, path);
             }
+            position += direction;
+            steps_taken += 1;
             if self.record_path {
                 path.as_mut().unwrap().push(position);
             }
-            position += direction;
-            steps_taken += 1;
         }
     }
     pub fn can_hit_player(&mut self, can_hit_player: bool) -> &mut Self {

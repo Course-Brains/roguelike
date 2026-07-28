@@ -3,7 +3,6 @@ pub mod tile;
 pub use axis_length::AxisLength;
 pub mod map_gen;
 mod room;
-use crate::random::Random;
 use room::Room;
 use room::RoomID;
 use room::RoomIDFlagged;
@@ -13,6 +12,7 @@ use crate::Zone;
 use crate::enemy::Enemy;
 use crate::math::Direction;
 use crate::state::State;
+use abes_nice_things::MaxVec;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use anyhow::{Context, Result, bail};
@@ -159,8 +159,8 @@ impl Board {
             .enemies
             .iter()
             .filter_map(|enemy| enemy.as_ref())
-            .filter(|enemy| viewport.contains(enemy.position))
-            .map(|enemy| (enemy.position - viewport.top_left(), enemy.render()))
+            .filter(|enemy| viewport.contains(enemy.get_position()))
+            .map(|enemy| (enemy.get_position() - viewport.top_left(), enemy.render()))
         {
             print!(
                 "\x1b[{};{}H{style}{character}\x1b[0m",
@@ -235,14 +235,18 @@ impl Board {
     pub fn get_room_id_of_coord(&self, position: Vector<usize>) -> Option<RoomID> {
         self.room_map[convert_z_order_index(position, self.axis_length).unwrap()].get_id()
     }
-    pub fn get_possible_room_ids_at_position(&self, position: Vector<usize>) -> Vec<RoomID> {
+    pub fn get_possible_room_ids_at_position(&self, position: Vector<usize>) -> MaxVec<RoomID, 3> {
         if let Some(room) = self.get_room_id_of_coord(position) {
-            vec![room]
+            MaxVec::from_array([room]).unwrap()
         } else if let Some(Tile::Door { rooms, .. }) = self[position] {
-            rooms.to_vec()
+            MaxVec::from_array(rooms).unwrap()
         } else {
-            Vec::new()
+            MaxVec::new()
         }
+    }
+    /// Chances are you don't need a mutable reference, be careful
+    pub fn get_room_mut(&mut self, room: RoomID) -> &mut Room {
+        &mut self.rooms[room.get_inner() as usize]
     }
 }
 
@@ -252,6 +256,7 @@ pub struct EnemyID(pub usize);
 impl Board {
     pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
         self.enemies.push(Some(enemy));
+        Enemy::inital_room_memoize(self, EnemyID(self.enemies.len() - 1));
         return EnemyID(self.enemies.len() - 1);
     }
     /// This requires immutable access to that specific enemy
@@ -306,7 +311,7 @@ impl Board {
                 .get_possible_room_ids_at_position(enemy.end_goal.unwrap());
             let possible_start_rooms = state
                 .board
-                .get_possible_room_ids_at_position(enemy.position);
+                .get_possible_room_ids_at_position(enemy.get_position());
             // Enemies MUST always be either within a room or on a door
             assert!(!possible_end_goal_rooms.is_empty());
             assert!(!possible_start_rooms.is_empty());
@@ -384,7 +389,7 @@ impl Board {
             let mut last_room = None;
             for start_room in possible_start_rooms.iter() {
                 to_visit.push(Heuristic::new(
-                    enemy.position,
+                    enemy.get_position(),
                     enemy.end_goal.unwrap(),
                     0,
                     *start_room,
@@ -483,21 +488,29 @@ impl Board {
     }
     /// This requires immutable access to all enemies
     pub fn is_enemy_at_position(&self, position: Vector<usize>) -> bool {
-        self.enemies.iter().any(|enemy| {
-            enemy
-                .as_ref()
-                .is_some_and(|enemy| enemy.position == position)
-        })
-    }
-    pub fn count_enemies(&self) -> usize {
-        self.enemies.len()
+        // We can just use the first element because the three cases are:
+        // normal interior: works just fine
+        // door: both rooms have the enemy
+        // wall: enemies can't be there
+        self[self.get_possible_room_ids_at_position(position)[0]]
+            .enemies
+            .iter()
+            .any(|id| {
+                self[*id]
+                    .as_ref()
+                    .is_some_and(|enemy| enemy.get_position() == position)
+            })
     }
     pub fn get_enemy_at_position(&self, position: Vector<usize>) -> Option<EnemyID> {
-        for (id, enemy) in self.enemies.iter().enumerate() {
-            if let Some(enemy) = enemy
-                && enemy.position == position
+        for id in self[self.get_possible_room_ids_at_position(position)[0]]
+            .enemies
+            .iter()
+        {
+            if self[*id]
+                .as_ref()
+                .is_some_and(|enemy| enemy.get_position() == position)
             {
-                return Some(EnemyID(id));
+                return Some(*id);
             }
         }
         None

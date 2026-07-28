@@ -1,3 +1,4 @@
+use super::EnemyID;
 use crate::math::Vector;
 use crate::math::Zone;
 use abes_nice_things::PrimAs;
@@ -18,12 +19,14 @@ pub fn room_id<T: PrimAs<u16>>(internal: T) -> RoomID {
 pub struct Room {
     pub connections: Vec<(Vector<usize>, RoomID)>,
     pub bounds: Zone<usize>,
+    pub enemies: Vec<EnemyID>,
 }
 impl Room {
     pub fn new(bounds: Zone<usize>) -> Room {
         Room {
             connections: Vec::new(),
             bounds,
+            enemies: Vec::new(),
         }
     }
     pub fn add_connection(&mut self, position: Vector<usize>, connectee: RoomID) {

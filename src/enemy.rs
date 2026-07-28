@@ -17,8 +17,8 @@ pub struct Enemy {
     state: Box<dyn Any + Send>,
     /// The number of base hits required to kill it
     health: usize,
-    /// The position of the enemy on the map
-    pub position: Vector<usize>,
+    /// The position of the enemy on the map. DO NOT INTERACT WITH THIS DIRECTLY
+    position: Vector<usize>,
     /// Where the enemy is currently pathing towards
     pub move_target: Option<Vector<usize>>,
     /// The end goal of the inter room pathing. This is where the enemy eventually wants to end up
@@ -177,11 +177,55 @@ impl Enemy {
             }
         }
 
+        Enemy::move_position(state, id, state.board[id].as_ref().unwrap().position + dir);
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
-        this.position += dir;
         if this.position == this.move_target.unwrap() {
             this.move_target = None;
         }
+    }
+    /// The proper way to move the enemy, this is needed because if you don't use it then the room
+    /// enemy memoization can desync
+    pub fn move_position(state: &mut State, id: EnemyID, new_pos: Vector<usize>) {
+        let prev_rooms = state
+            .board
+            .get_possible_room_ids_at_position(state.board[id].as_ref().unwrap().position);
+        assert!(!prev_rooms.is_empty());
+
+        state.board[id].as_mut().unwrap().position = new_pos;
+
+        let new_rooms = state
+            .board
+            .get_possible_room_ids_at_position(state.board[id].as_ref().unwrap().position);
+        assert!(!new_rooms.is_empty());
+
+        // We have to rememoize the position
+        if prev_rooms != new_rooms {
+            // First we remove all the old data
+            for prev_room in prev_rooms.iter() {
+                let prev_room = state.board.get_room_mut(*prev_room);
+                for index in 0..prev_room.enemies.len() {
+                    if prev_room.enemies[index] == id {
+                        prev_room.enemies.swap_remove(index);
+                        break;
+                    }
+                }
+            }
+            // Then we put in the new
+            for new_room in new_rooms.iter() {
+                let new_room = state.board.get_room_mut(*new_room);
+                new_room.enemies.push(id);
+            }
+        }
+    }
+    pub fn inital_room_memoize(board: &mut Board, id: EnemyID) {
+        let rooms = board.get_possible_room_ids_at_position(board[id].as_ref().unwrap().position);
+        for room in rooms.iter() {
+            let room = board.get_room_mut(*room);
+            room.enemies.push(id);
+        }
+    }
+    pub fn get_position(&self) -> Vector<usize> {
+        self.position
     }
 }
 /// Where enemy type specific logic is stored as well as some constants

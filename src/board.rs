@@ -488,24 +488,22 @@ impl Board {
     }
     /// This requires immutable access to all enemies
     pub fn is_enemy_at_position(&self, position: Vector<usize>) -> bool {
-        // We can just use the first element because the three cases are:
-        // normal interior: works just fine
-        // door: both rooms have the enemy
-        // wall: enemies can't be there
-        self[self.get_possible_room_ids_at_position(position)[0]]
-            .enemies
-            .iter()
-            .any(|id| {
-                self[*id]
-                    .as_ref()
-                    .is_some_and(|enemy| enemy.get_position() == position)
-            })
+        let possible_rooms = self.get_possible_room_ids_at_position(position);
+        if possible_rooms.is_empty() {
+            return false;
+        }
+        self[possible_rooms[0]].enemies.iter().any(|id| {
+            self[*id]
+                .as_ref()
+                .is_some_and(|enemy| enemy.get_position() == position)
+        })
     }
     pub fn get_enemy_at_position(&self, position: Vector<usize>) -> Option<EnemyID> {
-        for id in self[self.get_possible_room_ids_at_position(position)[0]]
-            .enemies
-            .iter()
-        {
+        let possible_rooms = self.get_possible_room_ids_at_position(position);
+        if possible_rooms.is_empty() {
+            return None;
+        }
+        for id in self[possible_rooms[0]].enemies.iter() {
             if self[*id]
                 .as_ref()
                 .is_some_and(|enemy| enemy.get_position() == position)

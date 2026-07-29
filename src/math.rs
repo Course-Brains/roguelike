@@ -101,7 +101,8 @@ impl<T: Number> Vector<T> {
 impl<T: Integer> Vector<T> {
     /// Diagonals do not count
     pub fn is_adjacent(self, other: Vector<T>) -> bool {
-        (self.x.abs_diff(other.x) == T::ONE) ^ (self.y.abs_diff(other.y) == T::ONE)
+        (self.x.abs_diff(other.x) == T::ONE && self.y == other.y)
+            || (self.y.abs_diff(other.y) == T::ONE && self.x == other.x)
     }
 }
 impl<T: Number> std::ops::Sub for Vector<T> {

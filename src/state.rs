@@ -153,38 +153,53 @@ impl RayCast {
 
             // Figuring out which direction we need to go next
             // figuring out possible next positions
-            let next_target = Vector::new(
-                // Going + is easy
-                if logical_diff.x > 0.0 {
-                    x_style.background_red();
-                    (position.x + 1) as f64
-                // going - and we are part of the way through a position
-                } else if logical_position.x.fract().abs() > 0.0 {
-                    x_style.background_blue();
-                    position.x as f64
-                // We aren't moving in that direction
-                } else if logical_diff.x == 0.0 {
+            // Figuring out which direction we need to go next
+            // figuring out possible next positions
+            let diff_x = logical_diff.x; // pure sugar
+            let next_target_x = match diff_x {
+                // right is positive x
+                _right if diff_x > 0_f64 => {
                     x_style.background_green();
+                    // move towards the next integer away from 0
+                    (logical_position.x + 1_f64).floor()
+                }
+                // left is negative x
+                _left if diff_x < 0_f64 => {
+                    // move to the next integer towards 0
+                    x_style.background_blue();
+                    (logical_position.x - 1_f64).ceil()
+                }
+                _none => {
+                    // not moving on the x axis at all
+                    // logically incorrect, but expected value later
+                    x_style.background_cyan();
                     f64::INFINITY
-                // We are going - and are at the start of the position
-                } else {
-                    x_style.background_yellow();
-                    (position.x - 1) as f64
-                },
-                if logical_diff.y > 0.0 {
+                }
+            };
+            // y ayis
+            let diff_y = logical_diff.y; // pure sugar
+            let next_target_y = match diff_y {
+                // down is positive y
+                _down if diff_y > 0_f64 => {
+                    // move towards the next integer away from 0
                     y_style.background_red();
-                    (position.y + 1) as f64
-                } else if logical_position.y.fract().abs() > 0.0 {
-                    y_style.background_blue();
-                    position.y as f64
-                } else if logical_diff.y == 0.0 {
-                    y_style.background_green();
-                    f64::INFINITY
-                } else {
+                    (logical_position.y + 1_f64).floor()
+                }
+                // up is negative y
+                _up if diff_y < 0_f64 => {
+                    // move towards the next integer away from 0
                     y_style.background_yellow();
-                    (position.y - 1) as f64
-                },
-            );
+                    (logical_position.y - 1_f64).ceil()
+                }
+                _none => {
+                    // not moving on the y axis at all
+                    // logically incorrect, but expected value later
+                    y_style.background_purple();
+                    f64::INFINITY
+                }
+            };
+            // compose the vector from x and y components
+            let next_target = Vector::new(next_target_x, next_target_y);
 
             let effective_dist_to_target = (next_target - logical_position) / logical_diff;
             /*assert!(

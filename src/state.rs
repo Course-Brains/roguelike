@@ -1,7 +1,7 @@
 use crate::board::Board;
 use crate::math::*;
 use crate::player::Player;
-use abes_nice_things::{PrimFrom, log};
+use abes_nice_things::{PrimAs, PrimFrom};
 use std::io::Write;
 
 pub struct State {
@@ -29,14 +29,6 @@ impl State {
             .stop_at_target(true)
             .record_path(true)
             .resolve(self);
-        for position in raycast_result.1.as_ref().unwrap().iter() {
-            print!(
-                "\x1b[{};{}H{} \x1b[0m",
-                position.y + 1,
-                position.x + 1,
-                abes_nice_things::Style::new().background_green()
-            );
-        }
         print!("\x1b[H{:?}", raycast_result.0);
         self.player.position_cursor(viewport);
         std::io::stdout().flush().unwrap();
@@ -113,8 +105,8 @@ impl RayCast {
         let mut logical_position = Vector::<f64>::prim_from(self.start) + 0.5;
         let mut position = self.start;
         let logical_target = Vector::<f64>::prim_from(self.target) + 0.5;
+        let initial_direction = logical_target - logical_position;
 
-        let logical_diff = logical_target - logical_position;
         let mut steps_taken = 0;
         let mut path = if self.record_path {
             Some(Vec::new())
@@ -123,6 +115,11 @@ impl RayCast {
         };
 
         loop {
+            let logical_diff = if steps_taken >= self.start.abs_diff(self.target).sum_axes() {
+                initial_direction
+            } else {
+                logical_target - (position.prim_as() + 0.5)
+            };
             // Check stop conditions
             // Hitting a player
             if self.can_hit_player && position == state.player.position {
@@ -148,28 +145,43 @@ impl RayCast {
             }
             // Hitting the target
             if self.stop_at_target && self.target == position {
+                assert_eq!(steps_taken, self.start.abs_diff(self.target).sum_axes());
                 return (None, path);
             }
+            let mut x_style = abes_nice_things::Style::new();
+            let mut y_style = x_style.clone();
 
             // Figuring out which direction we need to go next
             // figuring out possible next positions
             let next_target = Vector::new(
+                // Going + is easy
                 if logical_diff.x > 0.0 {
+                    x_style.background_red();
                     (position.x + 1) as f64
+                // going - and we are part of the way through a position
                 } else if logical_position.x.fract().abs() > 0.0 {
+                    x_style.background_blue();
                     position.x as f64
+                // We aren't moving in that direction
                 } else if logical_diff.x == 0.0 {
-                    logical_position.x
+                    x_style.background_green();
+                    f64::INFINITY
+                // We are going - and are at the start of the position
                 } else {
+                    x_style.background_yellow();
                     (position.x - 1) as f64
                 },
                 if logical_diff.y > 0.0 {
+                    y_style.background_red();
                     (position.y + 1) as f64
                 } else if logical_position.y.fract().abs() > 0.0 {
+                    y_style.background_blue();
                     position.y as f64
                 } else if logical_diff.y == 0.0 {
-                    logical_position.y
+                    y_style.background_green();
+                    f64::INFINITY
                 } else {
+                    y_style.background_yellow();
                     (position.y - 1) as f64
                 },
             );
@@ -182,35 +194,81 @@ impl RayCast {
                 effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0
             );*/
             // Incrementing everything
-            let direction = if effective_dist_to_target.x.abs() < effective_dist_to_target.y.abs()
-                && effective_dist_to_target.x.is_finite()
-            {
-                logical_position.x = next_target.x;
-                logical_position.y += logical_diff.y * effective_dist_to_target.x;
-                if logical_diff.x > 0.0 {
-                    Direction::Right
-                } else {
+            if position.is_adjacent(self.target) {
+                let direction = if position.x > self.target.x {
                     Direction::Left
-                }
-            } else if effective_dist_to_target.y.is_finite() {
-                logical_position.y = next_target.y;
-                logical_position.x += logical_diff.x * effective_dist_to_target.y;
-                if logical_diff.y > 0.0 {
+                } else if position.x < self.target.x {
+                    Direction::Right
+                } else if position.y > self.target.y {
+                    Direction::Up
+                } else if position.y < self.target.y {
                     Direction::Down
                 } else {
-                    Direction::Up
+                    unreachable!("We are already at the target")
+                };
+                print!(
+                    "\x1b[{};{}H{} \x1b[0m",
+                    position.y + 1,
+                    position.x + 1,
+                    abes_nice_things::Style::new().background_purple()
+                );
+                position += direction;
+                steps_taken += 1;
+                if self.record_path {
+                    path.as_mut().unwrap().push(position)
                 }
+                assert_eq!(position, self.target)
             } else {
-                return (None, path);
-            };
-            // If moving would take us off the board, then don't
-            if !state.board.is_move_on_board(position, direction) {
-                return (None, path);
-            }
-            position += direction;
-            steps_taken += 1;
-            if self.record_path {
-                path.as_mut().unwrap().push(position);
+                let direction = if effective_dist_to_target.x.abs()
+                    < effective_dist_to_target.y.abs()
+                    && effective_dist_to_target.x.is_finite()
+                {
+                    logical_position.x = next_target.x;
+                    logical_position.y += logical_diff.y * effective_dist_to_target.x;
+                    if logical_diff.x > 0.0 {
+                        Direction::Right
+                    } else {
+                        Direction::Left
+                    }
+                } else if effective_dist_to_target.y.is_finite() {
+                    logical_position.y = next_target.y;
+                    logical_position.x += logical_diff.x * effective_dist_to_target.y;
+                    if logical_diff.y > 0.0 {
+                        Direction::Down
+                    } else {
+                        Direction::Up
+                    }
+                } else {
+                    return (None, path);
+                };
+
+                // If moving would take us off the board, then don't
+                if !state.board.is_move_on_board(position, direction) {
+                    return (None, path);
+                }
+                position += direction;
+                match direction.axis() {
+                    Axis::Horizontal => {
+                        print!(
+                            "\x1b[{};{}H{} \x1b[0m",
+                            position.y + 1,
+                            position.x + 1,
+                            x_style
+                        )
+                    }
+                    Axis::Vertical => {
+                        print!(
+                            "\x1b[{};{}H{} \x1b[0m",
+                            position.y + 1,
+                            position.x + 1,
+                            y_style
+                        )
+                    }
+                }
+                steps_taken += 1;
+                if self.record_path {
+                    path.as_mut().unwrap().push(position);
+                }
             }
         }
     }

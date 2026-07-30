@@ -1,6 +1,7 @@
 // Place mod for enemies here
 pub mod basic;
 pub mod dummy;
+// Put the vtable here
 static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
 
 use crate::Vector;
@@ -337,4 +338,4 @@ impl WindupState {
     }
 }
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-struct VTableID(u8);
+pub struct VTableID(u8);

@@ -152,8 +152,7 @@ impl RayCast {
             let mut y_style = x_style.clone();
 
             // Figuring out which direction we need to go next
-            // figuring out possible next positions
-            // Figuring out which direction we need to go next
+
             // figuring out possible next positions
             let diff_x = logical_diff.x; // pure sugar
             let next_target_x = match diff_x {

@@ -1,7 +1,8 @@
 // Place mod for enemies here
 pub mod basic;
 pub mod dummy;
-// CONSIDER STATIC VTABLE ARRAY TO ALLOW SAVE/LOAD OF ENEMIES AND MORE COMPACT DATA
+static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
+
 use crate::Vector;
 use crate::board::Board;
 use crate::board::EnemyID;
@@ -24,7 +25,7 @@ pub struct Enemy {
     /// The end goal of the inter room pathing. This is where the enemy eventually wants to end up
     pub end_goal: Option<Vector<usize>>,
     /// The vtable holding function pointers to the logic and enemy type specific constants
-    vtable: &'static VTable,
+    vtable_id: VTableID,
     /// Various pieces of data which are tied to this specific instance and can spply to any enemy
     pub flags: Flags,
     /// The position used in intra room pathfinding
@@ -32,14 +33,15 @@ pub struct Enemy {
     windup_time: usize,
 }
 impl Enemy {
-    pub fn new(vtable: &'static VTable, position: Vector<usize>) -> Enemy {
+    pub fn new(vtable_id: VTableID, position: Vector<usize>) -> Enemy {
+        let vtable = &VTABLES[vtable_id.0 as usize];
         Enemy {
             state: (vtable.init)(),
             health: vtable.starting_health,
             position,
             move_target: None,
             end_goal: None,
-            vtable: vtable,
+            vtable_id,
             flags: Flags::new(),
             logical_position: position.prim_as() + 0.5,
             windup_time: 0,
@@ -51,7 +53,7 @@ impl Enemy {
         // Foreground
 
         // These are mutually exclusive because bosses skip detection checks and are always awake
-        if self.vtable.is_boss {
+        if self.get_vtable().is_boss {
             // Bosses are blue
             style.blue();
         } else if self.flags.is_awake() {
@@ -62,10 +64,10 @@ impl Enemy {
         // Background
         self.flags.get_windup().get_style(&mut style);
 
-        (self.vtable.render_char, style)
+        (self.get_vtable().render_char, style)
     }
     pub fn get_vtable(&self) -> &'static VTable {
-        self.vtable
+        &VTABLES[self.vtable_id.0 as usize]
     }
     pub fn intra_room_pathfind(state: &mut State, id: EnemyID) {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
@@ -334,3 +336,5 @@ impl WindupState {
         matches!(self, WindupState::Magical)
     }
 }
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct VTableID(u8);

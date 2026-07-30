@@ -45,13 +45,7 @@ fn run() {
                 player::Player::handle_change_render_target_input(&mut state);
                 false
             }
-            Input::Space => {
-                state.board.add_enemy(enemy::Enemy::new(
-                    &enemy::basic::VTABLE,
-                    state.player.selector,
-                ));
-                false
-            }
+            Input::Space => false,
             Input::Select => {
                 state.handle_select_input()
                 /*if state.board.count_enemies() == 0 {

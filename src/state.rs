@@ -150,14 +150,7 @@ impl RayCast {
             }
             let mut x_style = abes_nice_things::Style::new();
             let mut y_style = x_style.clone();
-<<<<<<< HEAD
-
             // Figuring out which direction we need to go next
-
-=======
-            
-            // Figuring out which direction we need to go next
->>>>>>> c81bb10 (minor change in comments around raycasting)
             // figuring out possible next positions
             let diff_x = logical_diff.x; // pure sugar
             let next_target_x = match diff_x {
@@ -175,7 +168,7 @@ impl RayCast {
                 }
                 _none => {
                     // not moving on the x axis at all
-                    // not actually infinity, but expected value later
+                    // not actually infinity, in effect it's 0, but expected value later
                     x_style.background_cyan();
                     f64::INFINITY
                 }
@@ -197,7 +190,7 @@ impl RayCast {
                 }
                 _none => {
                     // not moving on the y axis at all
-                    // not actually infinity, but expected value later
+                    // not actually infinity, in effect it's 0 but expected value later
                     y_style.background_purple();
                     f64::INFINITY
                 }

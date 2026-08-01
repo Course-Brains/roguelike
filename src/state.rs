@@ -25,11 +25,6 @@ impl State {
         self.board.render_tiles(viewport);
         self.board.render_enemies(viewport);
         self.player.render(viewport);
-        let raycast_result = RayCast::new(self.player.position, self.player.selector)
-            .stop_at_target(true)
-            .record_path(true)
-            .resolve(self);
-        print!("\x1b[H{:?}", raycast_result.0);
         self.player.position_cursor(viewport);
         std::io::stdout().flush().unwrap();
     }

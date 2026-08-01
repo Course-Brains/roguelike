@@ -55,7 +55,7 @@ pub fn generate(
     let spawn_budget = Room::remove_budget_of_spawn(&mut rooms, 0);
     Room::reallocate_spawn_budget(&mut rooms, 0, spawn_budget);
     Room::place_enemies(&mut board, &rooms, 0);
-    //validate(&board);
+    validate(&board);
     Ok(board)
 }
 struct Room {
@@ -367,16 +367,16 @@ impl Room {
         }
         let mut budget = rooms[index].budget;
         // Have to account for the walls
-        let spawn_bounds = rooms[index].bounds.shrink_by(1).unwrap();
+        let room_bounds = rooms[index].bounds.shrink_by(1).unwrap();
 
         // First we spawn few high tier centers then spawn lower tier enemies around them
-        let num_centers = (spawn_bounds.area() / 500) + 1;
+        let num_centers = (room_bounds.area() / 500) + 1;
         let mut centers = Vec::with_capacity(num_centers);
         for _ in 0..num_centers {
             // Find an empty space in the room
             // We will attempt 10 times per center
             for _ in 0..10 {
-                let position = spawn_bounds.generate();
+                let position = room_bounds.generate();
                 if board.is_enemy_at_position(position) {
                     continue;
                 }
@@ -405,7 +405,7 @@ impl Room {
                     center_pos.y + 10,
                 )
                 .unwrap()
-                .subset(&rooms[index].bounds)
+                .subset(&room_bounds)
                 .unwrap();
                 let max_tier = board[*center].as_ref().unwrap().get_vtable().tier;
                 // usual 10 attempts max

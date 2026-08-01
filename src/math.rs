@@ -399,6 +399,42 @@ impl<T: Number> Zone<T> {
             },
         }
     }
+    pub fn area(&self) -> T {
+        self.width() * self.height()
+    }
+    /// Move all bounds towards the center by amount, this means that the width and height will
+    /// shrink by two for every one in amount.
+    ///
+    /// If shrinking by that amount would create an invalid [Zone] then it returns None
+    pub fn shrink_by(self, amount: T) -> Option<Zone<T>> {
+        let out = Zone {
+            left: self.left + amount,
+            right: self.right - amount,
+            top: self.top + amount,
+            bottom: self.bottom - amount,
+        };
+        if out.left > out.right || out.top > out.bottom {
+            None
+        } else {
+            Some(out)
+        }
+    }
+    /// Creates a zone which is the largest subset of the two zones or None if it can't
+    pub fn subset(&self, other: &Zone<T>) -> Option<Zone<T>> {
+        if self.left > other.right
+            || other.left > self.right
+            || self.top > other.bottom
+            || other.top > self.bottom
+        {
+            return None;
+        }
+        Some(Zone {
+            left: self.left.max(other.left),
+            right: self.right.min(other.right),
+            top: self.top.max(other.top),
+            bottom: self.bottom.min(other.bottom),
+        })
+    }
 }
 impl<T: Number> std::ops::Add<Vector<T>> for Zone<T> {
     type Output = Zone<T>;

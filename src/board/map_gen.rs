@@ -4,16 +4,19 @@ use super::Tile;
 use super::convert_z_order_index;
 use crate::Vector;
 use crate::Zone;
+use crate::enemy::Enemy;
 use crate::math::Axis;
+use crate::random::PickRandom;
 use crate::random::Random;
 use anyhow::Result;
 
-// Start with a box defined by the axis length.
+// Start with a box defined by the axis length and budget.
 // Recursively divide the box into two in a random axis (prefering more square) and at a random
 // point along that axis in increments of 4 tiles. There is a minimum size at a room's axis can be
 // in order for it to be subdivided (if either axis is too small then it does not) and at any point
 // past the 4th round of divisions, subdivisions can stop with the chance increasing as the room
-// gets smaller.
+// gets smaller. Each subdivision gets a proportional amount of its parent's budget based on how
+// much of the parent's space it got.
 //
 // adjacent rooms get doors connecting them at the midpoint in the shared
 // section of wall
@@ -21,7 +24,11 @@ use anyhow::Result;
 // Because all of this is happening in a different thread, we do not need to care about
 // performance*
 
-pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Result<Board> {
+pub fn generate(
+    axis_length: AxisLength,
+    desired_viewport: Vector<usize>,
+    budget: usize,
+) -> Result<Board> {
     let mut rooms = Vec::new();
     rooms.push(Room {
         bounds: Zone::from_vectors(
@@ -29,6 +36,7 @@ pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Res
             Vector::new(axis_length.to_inner() - 1, axis_length.to_inner() - 1),
         ),
         children: None,
+        budget,
     });
     Room::subdivide(
         &mut rooms,
@@ -44,7 +52,10 @@ pub fn generate(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Res
     Room::create_counterparts(&mut rooms, 0, &mut board);
     Room::fill_counterpart_adjacencies(&mut board);
     Room::set_room_map(&mut board);
-    validate(&board);
+    let spawn_budget = Room::remove_budget_of_spawn(&mut rooms, 0);
+    Room::reallocate_spawn_budget(&mut rooms, 0, spawn_budget);
+    Room::place_enemies(&mut board, &rooms, 0);
+    //validate(&board);
     Ok(board)
 }
 struct Room {
@@ -53,6 +64,8 @@ struct Room {
     bounds: Zone<usize>,
     /// If this rooms has children, then it is the indices of those children
     children: Option<[usize; 2]>,
+    /// The budget for enemies in this room
+    budget: usize,
 }
 impl Room {
     const MINIMUM_AXIS: usize = 12; // 3 increments of 4
@@ -82,8 +95,7 @@ impl Room {
 
         // Random chance of stopping division based on size
         if depth > Room::MINIMUM_STOP_DEPTH
-            && (smallest_axis_length as f64)
-                < (crate::random::random() - 0.5) * 2.0 * max_early_stop
+            && (smallest_axis_length as f64) < (crate::random::random() - 1.0) * max_early_stop
         {
             return;
         }
@@ -106,16 +118,20 @@ impl Room {
         };
 
         // Picking division position
-        let split_point = ((((crate::random::random() + crate::random::random()) / 2.0) - 0.5)
-            * 2.0
+        let relative_split_point = ((((crate::random::random() + crate::random::random()) / 2.0)
+            - 1.0)
             * (range_end - range_start - 8) as f64) as usize
-            + range_start
             + 4;
+        let split_point = relative_split_point + range_start;
+        let total_budget = rooms[index].budget;
+        let budget_split_point = (relative_split_point as f64 / (range_end - range_start) as f64
+            * total_budget as f64) as usize;
 
         // Creating children
 
         // Top left child
         rooms.push(Room {
+            // Big split point, big bounds
             bounds: Zone::from_vectors(
                 rooms[index].bounds.top_left(),
                 match division_axis {
@@ -124,9 +140,11 @@ impl Room {
                 },
             ),
             children: None,
+            budget: budget_split_point,
         });
         // Bottom right child
         rooms.push(Room {
+            // Big split point, small bounds
             bounds: Zone::from_vectors(
                 match division_axis {
                     Axis::Horizontal => Vector::new(split_point, rooms[index].bounds.top()),
@@ -135,6 +153,7 @@ impl Room {
                 rooms[index].bounds.bottom_right(),
             ),
             children: None,
+            budget: total_budget - budget_split_point,
         });
 
         // Saving children indices
@@ -311,6 +330,103 @@ impl Room {
             }
         }
     }
+    /// Returns the budget to be reallocated
+    fn remove_budget_of_spawn(rooms: &mut Vec<Room>, index: usize) -> usize {
+        if let Some(children) = rooms[index].children {
+            // because of how it subdivides, the first child will always be towards the top left
+            // aka spawn
+            return Room::remove_budget_of_spawn(rooms, children[0]);
+        }
+
+        // We are at the spawn room
+        std::mem::replace(&mut rooms[index].budget, 0)
+    }
+    /// Reallocate the budget what was going to the spawn room to a random room in the bottom right
+    /// quadrant
+    fn reallocate_spawn_budget(rooms: &mut Vec<Room>, index: usize, budget: usize) {
+        if let Some(children) = rooms[index].children {
+            // Make it so that no matter what it does not go back in the spawn room
+            let recurse_child = if index == 0 {
+                1
+            } else {
+                (u8::random() & 0b1) as usize
+            };
+            Room::reallocate_spawn_budget(rooms, children[recurse_child], budget);
+            return;
+        }
+
+        // We have hit the lotto winner
+        rooms[index].budget += budget;
+    }
+    fn place_enemies(board: &mut Board, rooms: &Vec<Room>, index: usize) {
+        // 7,931,287th verse, same as the first
+        if let Some(children) = rooms[index].children {
+            Room::place_enemies(board, rooms, children[0]);
+            Room::place_enemies(board, rooms, children[1]);
+            return;
+        }
+        let mut budget = rooms[index].budget;
+        // Have to account for the walls
+        let spawn_bounds = rooms[index].bounds.shrink_by(1).unwrap();
+
+        // First we spawn few high tier centers then spawn lower tier enemies around them
+        let num_centers = (spawn_bounds.area() / 500) + 1;
+        let mut centers = Vec::with_capacity(num_centers);
+        for _ in 0..num_centers {
+            // Find an empty space in the room
+            // We will attempt 10 times per center
+            for _ in 0..10 {
+                let position = spawn_bounds.generate();
+                if board.is_enemy_at_position(position) {
+                    continue;
+                }
+                if let Some(vtable) = Enemy::pick_vtable_from_budget(&mut budget, None) {
+                    centers.push(board.add_enemy(Enemy::new(vtable, position)));
+                } else {
+                    // If it was unable to place the any enemy due to budget then there is no point
+                    // in continuing
+                    return;
+                }
+                break;
+            }
+        }
+
+        // Now that we have our centers we need to go until we run out of budget and place things
+        // near them in a round robin in a 10 radius square clamped to the edge of the room
+        while budget > 0 {
+            for center in centers.iter() {
+                let center_pos = board[*center].as_ref().unwrap().get_position();
+                // We don't need to worry about overflowing out of the board because it will be
+                // handled by the subset
+                let spawn_bounds = Zone::new(
+                    center_pos.x.saturating_sub(10),
+                    center_pos.x + 10,
+                    center_pos.y.saturating_sub(10),
+                    center_pos.y + 10,
+                )
+                .unwrap()
+                .subset(&rooms[index].bounds)
+                .unwrap();
+                let max_tier = board[*center].as_ref().unwrap().get_vtable().tier;
+                // usual 10 attempts max
+                for _ in 0..10 {
+                    let position = spawn_bounds.generate();
+                    if board.is_enemy_at_position(position) {
+                        continue;
+                    }
+                    if let Some(vtable) =
+                        Enemy::pick_vtable_from_budget(&mut budget, Some(max_tier))
+                    {
+                        board.add_enemy(Enemy::new(vtable, position));
+                        break;
+                    }
+                    // If we reach this then we ran out of budget so there is no point in
+                    // continuing
+                    return;
+                }
+            }
+        }
+    }
 }
 fn validate(board: &Board) {
     for first_index in 0..board.rooms.len() {
@@ -398,6 +514,18 @@ fn validate(board: &Board) {
                 board[Vector::new(max_index, y)],
                 Vector::new(max_index, y)
             );
+        }
+    }
+    // Ensure there are no overlapping enemies and all enemies are on empty tiles
+    for (first_index, first_enemy) in board.enemies.iter().enumerate() {
+        let first_enemy = first_enemy.as_ref().unwrap();
+        assert!(board[first_enemy.get_position()].is_none());
+        for (second_index, second_enemy) in board.enemies.iter().enumerate() {
+            if first_index == second_index {
+                continue;
+            }
+            let second_enemy = second_enemy.as_ref().unwrap();
+            assert_ne!(first_enemy.get_position(), second_enemy.get_position())
         }
     }
 }

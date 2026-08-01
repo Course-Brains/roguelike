@@ -3,6 +3,13 @@ pub mod basic;
 pub mod dummy;
 // Put the vtable here
 static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+// Register the vtable here, make sure you correctly put its index
+pub enum VTableID {
+    Dummy = 0,
+    Basic = 1,
+}
 
 use crate::Vector;
 use crate::board::Board;
@@ -35,7 +42,7 @@ pub struct Enemy {
 }
 impl Enemy {
     pub fn new(vtable_id: VTableID, position: Vector<usize>) -> Enemy {
-        let vtable = &VTABLES[vtable_id.0 as usize];
+        let vtable = vtable_id.get_vtable();
         Enemy {
             state: (vtable.init)(),
             health: vtable.starting_health,
@@ -68,7 +75,7 @@ impl Enemy {
         (self.get_vtable().render_char, style)
     }
     pub fn get_vtable(&self) -> &'static VTable {
-        &VTABLES[self.vtable_id.0 as usize]
+        self.vtable_id.get_vtable()
     }
     pub fn intra_room_pathfind(state: &mut State, id: EnemyID) {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
@@ -230,6 +237,18 @@ impl Enemy {
     pub fn get_position(&self) -> Vector<usize> {
         self.position
     }
+    /// Returns None if it was unable to figure out a possible enemy type to meet restrictions
+    pub fn pick_vtable_from_budget(
+        budget: &mut usize,
+        max_tier: Option<usize>,
+    ) -> Option<VTableID> {
+        if *budget < VTableID::Basic.get_vtable().budget_cost {
+            None
+        } else {
+            *budget -= VTableID::Basic.get_vtable().budget_cost;
+            Some(VTableID::Basic)
+        }
+    }
 }
 /// Where enemy type specific logic is stored as well as some constants
 #[derive(Clone, Copy, Debug)]
@@ -246,6 +265,8 @@ pub struct VTable {
     pub think: fn(&mut State, EnemyID),
     /// How damage is dealt to enemies. It returns if the enemy should be deleted
     pub damage: fn(&mut State, EnemyID, usize) -> bool,
+    budget_cost: usize,
+    pub tier: usize,
 }
 impl VTable {
     const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());
@@ -337,5 +358,21 @@ impl WindupState {
         matches!(self, WindupState::Magical)
     }
 }
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VTableID(u8);
+impl VTableID {
+    pub fn get_vtable(self) -> &'static VTable {
+        &VTABLES[self.to_inner() as usize]
+    }
+    fn to_inner(self) -> u8 {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+impl PartialOrd for VTableID {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.to_inner().partial_cmp(&other.to_inner())
+    }
+}
+impl Ord for VTableID {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_inner().cmp(&other.to_inner())
+    }
+}

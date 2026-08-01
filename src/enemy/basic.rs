@@ -1,4 +1,5 @@
 use super::VTable;
+use crate::RayCast;
 use crate::random::Random;
 use crate::state::*;
 pub static VTABLE: VTable = VTable {
@@ -8,6 +9,8 @@ pub static VTABLE: VTable = VTable {
     init: VTable::DEFAULT_INIT,
     think,
     damage: VTable::DEFAULT_DAMAGE,
+    budget_cost: 1,
+    tier: 0,
 };
 const SMACK_RANGE: usize = 1;
 fn think(state: &mut State, id: super::EnemyID) {

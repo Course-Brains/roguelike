@@ -6,4 +6,6 @@ pub static VTABLE: VTable = VTable {
     init: VTable::DEFAULT_INIT,
     think: |_, _| {},
     damage: VTable::DEFAULT_DAMAGE,
+    budget_cost: 0,
+    tier: 9999,
 };

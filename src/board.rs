@@ -19,7 +19,9 @@ use anyhow::{Context, Result, bail};
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io::Write;
 use tile::Tile;
+
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
 ///
@@ -124,37 +126,42 @@ impl Board {
     /// Zeros the cursor and draws the tiles onto the screen and clears the screen, this is the first layer of rendering.
     ///
     /// Additionally it draws the border of the viewport
-    pub fn render_tiles(&self, viewport: Zone<usize>) {
+    pub fn render_tiles(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
         // Putting the cursor in the top corner
-        print!("\x1b[H");
+        write!(buffer, "\x1b[H").unwrap();
         for (position, last) in viewport.scanlines() {
             if let Some(tile) = self[position] {
                 let (ch, style) = tile.render(self, position);
                 match style {
-                    Some(style) => print!("{style}{ch}\x1b[0m"),
-                    None => print!("{ch}"),
+                    Some(style) => write!(buffer, "{style}{ch}\x1b[0m").unwrap(),
+                    None => write!(buffer, "{ch}").unwrap(),
                 }
             } else {
-                print!(" ");
+                write!(buffer, " ").unwrap();
             }
             if last {
                 // erase until end of line and draw right border
-                println!("{}\x1b[0K", Board::VIEWPORT_BORDER_RIGHT);
+                writeln!(buffer, "{}\x1b[0K", Board::VIEWPORT_BORDER_RIGHT).unwrap();
             }
         }
         // erase from cursor to end of screen and draw bottom of border
-        print!(
+        write!(
+            buffer,
             "{}{}\x1b[0J",
             Board::VIEWPORT_BORDER_BOTTOM
                 .to_string()
                 .repeat(viewport.width()),
             Board::VIEWPORT_BORDER_CORNER
-        );
+        )
+        .unwrap();
     }
     /// Moves the cursor about to draw the enemies, this is the second layer of rendering.
-    pub fn render_enemies(&self, viewport: Zone<usize>) {
+    pub fn render_enemies(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
         // The weird iterator stuff ensures that we only are rendering enemies which are alive and
         // on screen on top of getting us the on screen position of that enemy
+
+        // TODO: Make it so that this is even more efficient by only checking enemies in rooms that
+        // are partially or fully visible
         for (position, (character, style)) in self
             .enemies
             .iter()
@@ -162,11 +169,13 @@ impl Board {
             .filter(|enemy| viewport.contains(enemy.get_position()))
             .map(|enemy| (enemy.get_position() - viewport.top_left(), enemy.render()))
         {
-            print!(
+            write!(
+                buffer,
                 "\x1b[{};{}H{style}{character}\x1b[0m",
                 position.y + 1,
                 position.x + 1
-            );
+            )
+            .unwrap();
         }
     }
 }

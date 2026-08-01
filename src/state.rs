@@ -1,4 +1,3 @@
-use crate::RayCast;
 use crate::board::Board;
 use crate::math::*;
 use crate::player::Player;
@@ -21,11 +20,14 @@ impl State {
     pub fn render(&self) {
         let center = self.player.get_render_target_pos();
         let viewport = self.board.calculate_viewport(center);
+        let mut buffer = Vec::new();
 
-        self.board.render_tiles(viewport);
-        self.board.render_enemies(viewport);
-        self.player.render(viewport);
-        self.player.position_cursor(viewport);
+        self.board.render_tiles(viewport, &mut buffer);
+        self.board.render_enemies(viewport, &mut buffer);
+        self.player.render(viewport, &mut buffer);
+        self.player.position_cursor(viewport, &mut buffer);
+
+        std::io::stdout().write_all(&buffer).unwrap();
         std::io::stdout().flush().unwrap();
     }
     /// Handles the select input (enter) and returns if the turn should be incremented

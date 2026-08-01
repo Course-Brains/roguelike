@@ -3,6 +3,8 @@ use crate::math::Vector;
 use crate::math::Zone;
 use crate::state::State;
 use abes_nice_things::Style;
+use std::io::Write;
+
 pub struct Player {
     pub position: Vector<usize>,
     pub selector: Vector<usize>,
@@ -18,9 +20,15 @@ impl Player {
             health: 50,
         }
     }
-    pub fn position_cursor(&self, viewport: Zone<usize>) {
+    pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
         let visual_position = viewport.clamp(self.selector) - viewport.top_left();
-        print!("\x1b[{};{}H", visual_position.y + 1, visual_position.x + 1);
+        write!(
+            buffer,
+            "\x1b[{};{}H",
+            visual_position.y + 1,
+            visual_position.x + 1
+        )
+        .unwrap();
     }
     pub fn get_render_target_pos(&self) -> Vector<usize> {
         match self.render_target {
@@ -68,16 +76,18 @@ impl Player {
             RenderTarget::Selector => RenderTarget::Player,
         };
     }
-    pub fn render(&self, viewport: Zone<usize>) {
+    pub fn render(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
         // Only draw the player if we can see the player
         if viewport.contains(self.position) {
             let visual_pos = self.position - viewport.top_left();
-            print!(
+            write!(
+                buffer,
                 "\x1b[{};{}H{}@\x1b[0m",
                 visual_pos.y + 1,
                 visual_pos.x + 1,
                 Style::new().cyan().intense(true)
             )
+            .unwrap();
         }
     }
     pub fn damage(state: &mut State, damage: usize) {

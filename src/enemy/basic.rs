@@ -16,20 +16,29 @@ const SMACK_RANGE: usize = 1;
 fn think(state: &mut State, id: super::EnemyID) {
     // If we aren't awake then try to wake up
     if !state.board[id].as_ref().unwrap().flags.is_awake() {
-        let wake_distance = (u8::random() & 0b111) as usize;
-        let (cast_result, _) = RayCast::new(
-            state.board[id].as_ref().unwrap().position,
-            state.player.position,
-        )
-        .can_hit_player(true)
-        .can_hit_enemy(true)
-        .max_range(Some(wake_distance))
-        .resolve(state);
-        // Wakey wakey
-        if let Some(MapObject::Player) = cast_result {
-            state.board[id].as_mut().unwrap().flags.wake();
-        } else {
-            return;
+        let mut wake_distance = (u8::random() & 0b111) as usize;
+        if !state
+            .board
+            .get_possible_room_ids_at_position(state.board[id].as_ref().unwrap().get_position())
+            .iter()
+            .any(|room_id| {
+                state
+                    .board
+                    .get_possible_room_ids_at_position(state.player.position)
+                    .contains(room_id)
+            })
+        {
+            // We are not in the same room :(
+            wake_distance /= 2;
+        }
+        if state.board[id]
+            .as_ref()
+            .unwrap()
+            .get_position()
+            .is_near(state.player.position, wake_distance)
+        {
+            // Wakey wakey
+            state.board[id].as_mut().unwrap().flags.wake()
         }
     }
 

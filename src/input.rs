@@ -4,7 +4,7 @@ use std::io::Read;
 pub enum Input {
     Walk(Direction),
     MoveSelector(Direction),
-    Space,
+    ToggleContextMenu,
     Select,
     ChangeRenderTarget,
     DebugQuery,
@@ -31,7 +31,7 @@ impl Input {
                 b's' => Input::Walk(Direction::Down),
                 b'a' => Input::Walk(Direction::Left),
                 b'd' => Input::Walk(Direction::Right),
-                b' ' => Input::Space,
+                b' ' => Input::ToggleContextMenu,
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
                 b'+' => Input::DebugQuery,

@@ -1,5 +1,6 @@
 // Modules
 mod board;
+mod context_menu;
 mod enemy;
 mod input;
 mod math;
@@ -17,6 +18,17 @@ use math::Vector;
 use math::Zone;
 use raycast::RayCast;
 
+// Visual space allocation is
+// vvvvvvvvvvvvvvvv Viewport
+// +--------------++-----+<
+// |              ||     |<
+// |              ||     |<
+// |              ||     |<
+// |              ||     |< Context menu
+// +--------------+|     |<
+// +--------------++-----+<
+// ^^^^^^^^^^^^^^^^ Bars/meta ui
+
 fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
     if let Err(error) = std::panic::catch_unwind(run) {
@@ -27,15 +39,16 @@ fn main() {
     }
 }
 fn run() {
-    let (desired_width, desired_height) = calc_desired_dimensions();
+    let terminal_size = get_terminal_size();
     let mut state = state::State::new(
         board::map_gen::generate(
             AxisLength::Full,
-            Vector::new(desired_width, desired_height),
+            calc_desired_dimensions(terminal_size),
             10000,
         )
         .unwrap(),
         player::Player::new(Vector::new(1, 1)),
+        terminal_size,
     );
 
     weirdify().unwrap();
@@ -43,15 +56,12 @@ fn run() {
         state.render();
         if match Input::get() {
             Input::Walk(direction) => player::Player::handle_walk_input(&mut state, direction),
-            Input::MoveSelector(direction) => {
-                player::Player::handle_move_selector_input(&mut state, direction);
-                false
-            }
+            Input::MoveSelector(direction) => state.handle_move_selector_input(direction),
             Input::ChangeRenderTarget => {
                 player::Player::handle_change_render_target_input(&mut state);
                 false
             }
-            Input::Space => false,
+            Input::ToggleContextMenu => state.handle_toggle_context_menu_input(),
             Input::Select => {
                 state.handle_select_input()
                 /*if state.board.count_enemies() == 0 {
@@ -101,35 +111,32 @@ fn run() {
 ///
 /// When using this to create a [Zone] for the viewport, remember to subtract 1 from the width and
 /// height first because [Zone]s are inclusive.
-fn calc_desired_dimensions() -> (usize, usize) {
-    let (mut width, mut height) = get_terminal_size();
-
+fn calc_desired_dimensions(mut screen_size: Vector<usize>) -> Vector<usize> {
     // Viewport border
-    width -= 1;
-    height -= 1;
+    screen_size -= 1;
 
     // bars
-    height -= 5;
+    screen_size.y -= 5;
 
     // Right column
-    width -= 25;
+    screen_size.x -= context_menu::COLUMNS_NEEDED;
 
     // validity checks
-    if width < 20 {
-        panic!("Terminal is under width")
+    if screen_size.x < 20 {
+        panic!("Terminal is under minimum width")
     }
-    if height < 10 {
-        panic!("terminal is under height")
+    if screen_size.y < 10 {
+        panic!("terminal is under minimum height")
     }
-    (width, height)
+    screen_size
 }
 /// Gets the size of the terminal in width, height.
 ///
 /// This takes about 10ms independant of whether it is release or debug.
-fn get_terminal_size() -> (usize, usize) {
+fn get_terminal_size() -> Vector<usize> {
     // These get the width and height respectively, the reason why they have to inherit stderr is
     // because they ask stderr what size it is
-    (
+    Vector::new(
         String::from_utf8(
             std::process::Command::new("tput")
                 .arg("cols")
@@ -141,7 +148,7 @@ fn get_terminal_size() -> (usize, usize) {
         .unwrap()
         .trim()
         .parse()
-        .unwrap_or(113),
+        .expect("This NEEDS stderr to be the terminal in order to work"),
         String::from_utf8(
             std::process::Command::new("tput")
                 .arg("lines")
@@ -153,6 +160,6 @@ fn get_terminal_size() -> (usize, usize) {
         .unwrap()
         .trim()
         .parse()
-        .unwrap_or(35),
+        .expect("This NEEDS stderr to be the terminal in order to work"),
     )
 }

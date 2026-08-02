@@ -455,6 +455,7 @@ impl Board {
             // If this ever breaks early due to the loop condition failing then pathfinding has
             // failed and it won't move even though it is trying to
             while let Some(next) = backpath.get(&last_room.unwrap()) {
+                last_room = Some(*next);
                 // We have found the room to go to
                 if possible_start_rooms.contains(next) {
                     // We don't need to worry about if the condition in this loop won't be met

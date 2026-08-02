@@ -141,6 +141,21 @@ impl<T: Number> std::ops::Add<T> for Vector<T> {
         }
     }
 }
+impl<T: Number> std::ops::Sub<T> for Vector<T> {
+    type Output = Vector<T>;
+    fn sub(self, rhs: T) -> Self::Output {
+        Vector {
+            x: self.x - rhs,
+            y: self.y - rhs,
+        }
+    }
+}
+impl<T: Number> std::ops::SubAssign<T> for Vector<T> {
+    fn sub_assign(&mut self, rhs: T) {
+        self.x -= rhs;
+        self.y -= rhs;
+    }
+}
 impl<T: Number> std::fmt::Display for Vector<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}, {})", self.x, self.y)

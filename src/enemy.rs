@@ -98,6 +98,7 @@ impl Enemy {
             || this.position.x == this.move_target.unwrap().x
             || this.position.y == this.move_target.unwrap().y
         {
+            // If this panics then we tried to move to a position where we already are
             Direction::from_vector(diff).unwrap()
         } else {
             // We can't do the cheap pathfinding :(

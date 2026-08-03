@@ -90,6 +90,12 @@ impl Board {
         Board::run_thinkers(state);
         Board::pathfind(state);
     }
+    pub fn get_viewport_size(&self) -> Vector<usize> {
+        self.viewport_size
+    }
+    pub fn get_local_turn(&self) -> usize {
+        self.local_turns
+    }
 }
 // RENDERING
 impl Board {
@@ -557,9 +563,20 @@ impl std::ops::Index<EnemyID> for Board {
         self.get_enemy(index)
     }
 }
+impl std::ops::Index<&EnemyID> for Board {
+    type Output = Option<Enemy>;
+    fn index(&self, index: &EnemyID) -> &Self::Output {
+        self.get_enemy(*index)
+    }
+}
 impl std::ops::IndexMut<EnemyID> for Board {
     fn index_mut(&mut self, index: EnemyID) -> &mut Self::Output {
         self.get_enemy_mut(index)
+    }
+}
+impl std::ops::IndexMut<&EnemyID> for Board {
+    fn index_mut(&mut self, index: &EnemyID) -> &mut Self::Output {
+        self.get_enemy_mut(*index)
     }
 }
 fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Result<usize> {

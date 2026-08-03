@@ -19,6 +19,7 @@ use crate::state::*;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use std::any::Any;
+use std::io::Write;
 
 #[derive(Debug)]
 pub struct Enemy {
@@ -39,6 +40,8 @@ pub struct Enemy {
     /// The position used in intra room pathfinding
     logical_position: Vector<f64>,
     windup_time: usize,
+    /// The file for enemy specific logging
+    log: Option<std::fs::File>,
 }
 impl Enemy {
     pub fn new(vtable_id: VTableID, position: Vector<usize>) -> Enemy {
@@ -53,6 +56,7 @@ impl Enemy {
             flags: Flags::new(),
             logical_position: position.prim_as() + 0.5,
             windup_time: 0,
+            log: None,
         }
     }
     pub fn render(&self) -> (char, Style) {
@@ -250,6 +254,21 @@ impl Enemy {
             Some(VTableID::Basic)
         }
     }
+    /// Returns if enemy specific logging is enabled for this enemy
+    pub fn should_log(&self) -> bool {
+        self.log.is_some()
+    }
+    pub fn log(&mut self, message: String) {
+        if let Some(log) = self.log.as_mut() {
+            log.write_all(message.as_bytes()).unwrap();
+        }
+    }
+    pub fn enable_logging(&mut self, log: std::fs::File) {
+        self.log = Some(log);
+    }
+    pub fn disable_logging(&mut self) {
+        self.log = None;
+    }
 }
 /// Where enemy type specific logic is stored as well as some constants
 #[derive(Clone, Copy, Debug)]
@@ -274,11 +293,24 @@ impl VTable {
     const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         if damage >= this.health {
+            if this.should_log() {
+                this.log(format!(
+                    "Took {damage} damage and died (was at {} health)",
+                    this.health
+                ));
+            }
             *state.board.get_enemy_mut(id) = None;
             return true;
         }
+        let prev_health = this.health;
         this.flags.wake();
         this.health -= damage;
+        if this.should_log() {
+            this.log(format!(
+                "Took {damage} damage and lost health ({prev_health} -> {})",
+                this.health
+            ));
+        }
         false
     };
 }

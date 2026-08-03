@@ -15,6 +15,7 @@ pub struct State {
     context_menu: ContextMenuID,
     /// Whether or not the player is controlling th context menu
     pub context_menu_inputs: bool,
+    pub feedback: String,
 }
 impl State {
     pub fn new(board: Board, player: Player, screen_size: Vector<usize>) -> State {
@@ -27,6 +28,7 @@ impl State {
             context_menu_selector: 0,
             context_menu: ContextMenuID::default(),
             context_menu_inputs: false,
+            feedback: String::new(),
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything
@@ -38,6 +40,7 @@ impl State {
         self.board.render_tiles(viewport, &mut buffer);
         self.board.render_enemies(viewport, &mut buffer);
         self.player.render(viewport, &mut buffer);
+        self.render_meta_ui(&mut buffer);
         crate::context_menu::ContextMenu::render(self, &mut buffer);
 
         self.player.position_cursor(viewport, &mut buffer);
@@ -47,36 +50,56 @@ impl State {
     }
     /// Handles the select input (enter) and returns if the turn should be incremented
     pub fn handle_select_input(&mut self) -> bool {
-        const INTERACT_RANGE: usize = 3;
-        const SMACK_RANGE: usize = 1;
-        if !self
-            .player
-            .position
-            .is_near(self.player.selector, INTERACT_RANGE)
-        {
-            return false;
-        }
-
-        // TODO: Make it so that players can decide what to interact with on conflict
-        let enemy_at_selector = self.board.get_enemy_at_position(self.player.selector);
-        if let Some(id) = enemy_at_selector
-            && self
+        if self.context_menu_inputs {
+            let options = (self.get_context_menu().get_options)(self);
+            if options.len() == 0 {
+                return false;
+            }
+            if self.context_menu_selector >= options.len() {
+                self.context_menu_selector = 0;
+                return false;
+            }
+            match options[self.context_menu_selector].1 {
+                crate::context_menu::Choice::Recurse(child, argument_generator) => {
+                    let argument = (argument_generator)(self);
+                    self.context_menu_stack.push(argument);
+                    self.context_menu = ContextMenuID::new_unchecked(child)
+                }
+                crate::context_menu::Choice::Act(action) => (action)(self),
+            }
+            false
+        } else {
+            const INTERACT_RANGE: usize = 3;
+            const SMACK_RANGE: usize = 1;
+            if !self
                 .player
                 .position
-                .is_near(self.player.selector, SMACK_RANGE)
-        {
-            Player::attack(self, id);
-        // Importantly, you must not be able to close a door while an enemy is on it
-        } else if let Some(crate::board::tile::Tile::Door { open, .. }) =
-            &mut self.board[self.player.selector]
-            && self.player.position != self.player.selector
-            && enemy_at_selector.is_none()
-        {
-            *open = !*open;
-        } else {
-            return false;
+                .is_near(self.player.selector, INTERACT_RANGE)
+            {
+                return false;
+            }
+
+            // TODO: Make it so that players can decide what to interact with on conflict
+            let enemy_at_selector = self.board.get_enemy_at_position(self.player.selector);
+            if let Some(id) = enemy_at_selector
+                && self
+                    .player
+                    .position
+                    .is_near(self.player.selector, SMACK_RANGE)
+            {
+                Player::attack(self, id);
+            // Importantly, you must not be able to close a door while an enemy is on it
+            } else if let Some(crate::board::tile::Tile::Door { open, .. }) =
+                &mut self.board[self.player.selector]
+                && self.player.position != self.player.selector
+                && enemy_at_selector.is_none()
+            {
+                *open = !*open;
+            } else {
+                return false;
+            }
+            true
         }
-        true
     }
     pub fn handle_toggle_context_menu_input(&mut self) -> bool {
         self.context_menu_inputs ^= true;
@@ -148,6 +171,74 @@ impl State {
     }
     pub fn get_current_context_menu_argument(&self) -> Option<&crate::context_menu::Argument> {
         self.context_menu_stack.last()
+    }
+    pub fn render_meta_ui(&self, buffer: &mut impl Write) {
+        // all meta ui positions are based on the viewport's height and so are given as offsets
+        // 1: feedback
+        // 2: health bar
+        // 3: energy bar
+        // 4: meta info
+        // 5: input
+        //
+        // We don't need to clear this section of screen because drawing the tiles already does
+        let base_height = self.board.get_viewport_size().y;
+        // feedback
+        writeln!(buffer, "\x1b[{};0H{}", base_height + 1, self.feedback).unwrap();
+
+        // health bar
+        abes_nice_things::ProgressBar::new(
+            self.player.health,
+            self.player.max_health,
+            (self.board.get_viewport_size().x - 20).min(self.player.max_health),
+        )
+        .amount_done(true)
+        .done_char('#')
+        .header_char('#')
+        .done_style(*abes_nice_things::Style::new().green().intense(true))
+        .draw_to(buffer)
+        .unwrap();
+        writeln!(buffer).unwrap();
+
+        // energy bar
+        abes_nice_things::ProgressBar::new(
+            self.player.energy,
+            self.player.max_energy,
+            (self.board.get_viewport_size().x - 20).min(self.player.max_energy * 5),
+        )
+        .amount_done(true)
+        .done_char('#')
+        .header_char('#')
+        .done_style(*abes_nice_things::Style::new().cyan().intense(true))
+        .draw_to(buffer)
+        .unwrap();
+        writeln!(buffer).unwrap();
+
+        // meta info
+        write!(
+            buffer,
+            "Turn: {}, Local turn: {}",
+            self.total_turns,
+            self.board.get_local_turn()
+        )
+        .unwrap();
+    }
+    pub fn get_input(&self, prompt: String) -> String {
+        // First we move to the input row and show the prompt
+        print!("\x1b[{};0H{prompt}", self.board.get_viewport_size().y + 5);
+        // Then we make the terminal go back to normal
+        crate::input::normalize().unwrap();
+        // Make sure everything sends
+        std::io::stdout().flush().unwrap();
+        // Then we get what they typed
+        let mut buf = String::new();
+        std::io::stdin().read_line(&mut buf).unwrap();
+        // Then we make it weird again
+        crate::input::weirdify().unwrap();
+        // Fuck windows
+        buf.pop();
+        abes_nice_things::windows!(buf.pop());
+        // And return!
+        buf
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

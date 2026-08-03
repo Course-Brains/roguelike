@@ -1,6 +1,7 @@
 use crate::state::State;
 use std::any::Any;
 use std::io::Write;
+use std::ops::Deref;
 
 pub const COLUMNS_NEEDED: usize = 25;
 
@@ -59,10 +60,10 @@ impl ContextMenu {
             let row = row + 2; // 1 because visuals start at 1 and 1 becausse of title
             let mut style = style_base.clone();
             if index == state.context_menu_selector {
-                style.background_red().intense_background(true);
+                style.background_red();
             }
             if let Choice::Act(_) = options[index].1 {
-                style.purple();
+                style.purple().intense(true);
             }
 
             write!(
@@ -106,10 +107,19 @@ impl Default for ContextMenuID {
         ContextMenuID(MAIN_MENU)
     }
 }
+fn get_argument<T: 'static>(state: &State) -> Option<&T> {
+    state
+        .get_current_context_menu_argument()
+        .as_ref()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .downcast_ref()
+}
 
 const MAIN_MENU: usize = 0;
 const DEBUG_MAIN: usize = 1;
-const CHEAT_MAIN: usize = 2;
+const SPECIFIC_ENEMY_DEBUG: usize = 2;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -117,25 +127,75 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     ContextMenu {
         title: "MAIN MENU:",
         parent: None,
-        get_options: |_| {
-            vec![
-                ("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, |_| None)),
-                ("Cheats".to_string(), Choice::Recurse(CHEAT_MAIN, |_| None)),
-            ]
-        },
+        get_options: |_| vec![("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, |_| None))],
     },
     // 1: main debug menu
     // no argument
     ContextMenu {
         title: "DEBUG:",
         parent: Some(MAIN_MENU),
-        get_options: |_| Vec::new(),
+        get_options: |state| {
+            let mut options = Vec::new();
+            if state.board.is_enemy_at_position(state.player.selector) {
+                options.push((
+                    "Specific enemy debug".to_string(),
+                    Choice::Recurse(SPECIFIC_ENEMY_DEBUG, |state| {
+                        Some(Box::new(
+                            state
+                                .board
+                                .get_enemy_at_position(state.player.selector)
+                                .unwrap(),
+                        ))
+                    }),
+                ));
+            }
+            options
+        },
     },
-    // 2: main cheat menu
-    // no argument
+    // 2: Specific enemy debug
+    // argument of EnemyID
     ContextMenu {
-        title: "CHEATS:",
-        parent: Some(MAIN_MENU),
-        get_options: |_| Vec::new(),
+        title: "SPECIFIC ENEMY DEBUG",
+        parent: Some(DEBUG_MAIN),
+        get_options: |state| {
+            let mut options = vec![(
+                "Log debug info".to_string(),
+                Choice::Act(|state| {
+                    let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
+                    let enemy = &state.board[enemy_id];
+                    abes_nice_things::log!("Logging for enemy({enemy_id:?}): {enemy:#?}");
+                }),
+            )];
+            let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
+            let enemy = &state.board[enemy_id];
+            if let Some(enemy) = enemy.as_ref() {
+                options.push(if enemy.should_log() {
+                    (
+                        "Disable logging".to_string(),
+                        Choice::Act(|state| {
+                            let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
+                            if let Some(enemy) = &mut state.board[enemy_id] {
+                                enemy.disable_logging()
+                            }
+                        }),
+                    )
+                } else {
+                    (
+                        "Enable logging".to_string(),
+                        Choice::Act(|state| {
+                            let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
+                            if state.board[enemy_id].is_some() {
+                                let path = state.get_input("What file? ".to_string());
+                                state.board[enemy_id]
+                                    .as_mut()
+                                    .unwrap()
+                                    .enable_logging(std::fs::File::create(path).unwrap());
+                            }
+                        }),
+                    )
+                })
+            }
+            options
+        },
     },
 ];

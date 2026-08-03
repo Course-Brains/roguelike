@@ -115,7 +115,12 @@ fn calc_desired_dimensions(mut screen_size: Vector<usize>) -> Vector<usize> {
     // Viewport border
     screen_size -= 1;
 
-    // bars
+    // bars/meta ui:
+    //  feedback
+    //  health
+    //  energy
+    //  meta info
+    //  input
     screen_size.y -= 5;
 
     // Right column

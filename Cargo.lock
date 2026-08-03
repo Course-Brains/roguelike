@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "abes_nice_things"
 version = "0.2.0"
-source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=5e821ee#5e821eee0e2b7da460f045adc28167d7ffcb4636"
+source = "git+https://github.com/Course-Brains/abes_nice_things.git?rev=0e798ee#0e798eef215e93e1dd3b43772db875841dcd148a"
 
 [[package]]
 name = "anyhow"

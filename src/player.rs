@@ -9,7 +9,10 @@ pub struct Player {
     pub position: Vector<usize>,
     pub selector: Vector<usize>,
     render_target: RenderTarget,
-    health: usize,
+    pub health: usize,
+    pub max_health: usize,
+    pub energy: usize,
+    pub max_energy: usize,
 }
 impl Player {
     pub fn new(spawn: Vector<usize>) -> Player {
@@ -18,6 +21,9 @@ impl Player {
             selector: spawn,
             render_target: RenderTarget::Player,
             health: 50,
+            max_health: 100,
+            energy: 3,
+            max_energy: 5,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {

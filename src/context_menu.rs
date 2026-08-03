@@ -1,3 +1,4 @@
+use crate::board::EnemyID;
 use crate::state::State;
 use std::any::Any;
 use std::io::Write;
@@ -52,7 +53,7 @@ impl ContextMenu {
         let options = (state.get_context_menu().get_options)(state);
         // Lets make sure we hae a valid option selector position
         if state.context_menu_selector >= options.len() {
-            state.context_menu_selector = 0;
+            state.context_menu_selector = options.len() - 1;
         }
         let width = available_rows.min(options.len());
         let start_index = state
@@ -126,6 +127,7 @@ fn get_argument<T: 'static>(state: &State) -> Option<&T> {
 const MAIN_MENU: usize = 0;
 const DEBUG_MAIN: usize = 1;
 const SPECIFIC_ENEMY_DEBUG: usize = 2;
+const CHEAT_MAIN: usize = 3;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -133,7 +135,12 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     ContextMenu {
         title: "MAIN MENU:",
         parent: None,
-        get_options: |_| vec![("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, |_| None))],
+        get_options: |_| {
+            vec![
+                ("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, |_| None)),
+                ("Cheats".to_string(), Choice::Recurse(CHEAT_MAIN, |_| None)),
+            ]
+        },
     },
     // 1: main debug menu
     // no argument
@@ -175,8 +182,9 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
             let enemy = &state.board[enemy_id];
             if let Some(enemy) = enemy.as_ref() {
-                options.push(if enemy.should_log() {
-                    (
+                if enemy.has_log_file() {
+                    // Turning off logging
+                    options.push((
                         "Disable logging".to_string(),
                         Choice::Act(|state| {
                             let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
@@ -184,10 +192,38 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                                 enemy.disable_logging()
                             }
                         }),
-                    )
+                    ));
+
+                    // Turning on and off general logging
+                    options.push((
+                        format!("General log: {}", enemy.flags.should_general_log()),
+                        Choice::Act(|state| {
+                            let enemy_id = *get_argument::<EnemyID>(state).unwrap();
+                            if let Some(enemy) = &mut state.board[enemy_id] {
+                                enemy
+                                    .flags
+                                    .set_general_logging(!enemy.flags.should_general_log())
+                            };
+                        }),
+                    ));
+
+                    // Turning on and off inter room pathfind logging
+                    options.push((
+                        format!(
+                            "Inter path log: {}",
+                            enemy.flags.should_inter_pathfind_log()
+                        ),
+                        Choice::Act(|state| {
+                            let id = *get_argument::<EnemyID>(state).unwrap();
+                            if let Some(enemy) = &mut state.board[id] {
+                                enemy.flags.swap_inter_pathfind_log()
+                            }
+                        }),
+                    ));
                 } else {
-                    (
-                        "Enable logging".to_string(),
+                    // Setting up logging
+                    options.push((
+                        "Set log file".to_string(),
                         Choice::Act(|state| {
                             let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
                             if state.board[enemy_id].is_some() {
@@ -198,8 +234,50 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                                     .enable_logging(std::fs::File::create(path).unwrap());
                             }
                         }),
-                    )
-                })
+                    ))
+                }
+            }
+            options
+        },
+    },
+    // 3: main cheat menu
+    // no argument
+    ContextMenu {
+        title: "CHEATS:",
+        parent: Some(MAIN_MENU),
+        get_options: |state| {
+            let mut options = vec![
+                (
+                    format!(
+                        "No interact limit: {}",
+                        state.player.no_interact_range_limit
+                    ),
+                    Choice::Act(|state| {
+                        state.player.no_interact_range_limit ^= true;
+                    }),
+                ),
+                (
+                    "Open all doors".to_string(),
+                    Choice::Act(|state| {
+                        state.board.open_all_doors();
+                    }),
+                ),
+                (
+                    "Wake all enemies".to_string(),
+                    Choice::Act(|state| state.board.wake_all_enemies()),
+                ),
+            ];
+            if state.board.is_enemy_at_position(state.player.selector) {
+                options.push((
+                    "Wake specific enemy".to_string(),
+                    Choice::Act(|state| {
+                        let id = state
+                            .board
+                            .get_enemy_at_position(state.player.selector)
+                            .unwrap();
+                        state.board[id].as_mut().unwrap().flags.wake();
+                    }),
+                ));
             }
             options
         },

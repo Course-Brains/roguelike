@@ -13,6 +13,7 @@ pub struct Player {
     pub max_health: usize,
     pub energy: usize,
     pub max_energy: usize,
+    pub no_interact_range_limit: bool,
 }
 impl Player {
     pub fn new(spawn: Vector<usize>) -> Player {
@@ -24,6 +25,7 @@ impl Player {
             max_health: 100,
             energy: 3,
             max_energy: 5,
+            no_interact_range_limit: false,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {

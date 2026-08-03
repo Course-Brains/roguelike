@@ -254,13 +254,10 @@ impl Enemy {
             Some(VTableID::Basic)
         }
     }
-    /// Returns if enemy specific logging is enabled for this enemy
-    pub fn should_log(&self) -> bool {
-        self.log.is_some()
-    }
     pub fn log(&mut self, message: String) {
         if let Some(log) = self.log.as_mut() {
             log.write_all(message.as_bytes()).unwrap();
+            log.write_all(&[b'\n']).unwrap()
         }
     }
     pub fn enable_logging(&mut self, log: std::fs::File) {
@@ -268,6 +265,9 @@ impl Enemy {
     }
     pub fn disable_logging(&mut self) {
         self.log = None;
+    }
+    pub fn has_log_file(&self) -> bool {
+        self.log.is_some()
     }
 }
 /// Where enemy type specific logic is stored as well as some constants
@@ -293,7 +293,7 @@ impl VTable {
     const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         if damage >= this.health {
-            if this.should_log() {
+            if this.flags.should_general_log() {
                 this.log(format!(
                     "Took {damage} damage and died (was at {} health)",
                     this.health
@@ -305,7 +305,7 @@ impl VTable {
         let prev_health = this.health;
         this.flags.wake();
         this.health -= damage;
-        if this.should_log() {
+        if this.flags.should_general_log() {
             this.log(format!(
                 "Took {damage} damage and lost health ({prev_health} -> {})",
                 this.health
@@ -321,8 +321,8 @@ pub struct Flags(u8);
 //   |||| |||+- Whether or not it is awake
 //   |||| |++-- WindupState
 //   |||| +---- Whether or not to do pathfinding
-//   |||+------ Unassigned
-//   ||+------- Unassigned
+//   |||+------ Whether or not to do general logging
+//   ||+------- Whether or not to do inter room pathfind debugging
 //   |+-------- Unassigned
 //   +--------- Unassigned
 impl Flags {
@@ -335,13 +335,12 @@ impl Flags {
     pub fn wake(&mut self) {
         self.0 |= 0b1
     }
-    pub fn set_windup(&mut self, state: WindupState) {
+    fn set_windup(&mut self, state: WindupState) {
         self.0 &= !WindupState::MASK; // clear the windup bits
         self.0 |= unsafe { std::mem::transmute::<WindupState, u8>(state) };
     }
-    pub fn get_windup(&self) -> WindupState {
+    fn get_windup(&self) -> WindupState {
         let windup_bits = self.0 & WindupState::MASK;
-        debug_assert_ne!(windup_bits, 0b0110);
         unsafe { std::mem::transmute(windup_bits) }
     }
     /// Returns if the enemy is in ANY windup state
@@ -358,15 +357,29 @@ impl Flags {
     pub fn should_path(&self) -> bool {
         (self.0 & 0b1000) != 0
     }
+    pub fn set_general_logging(&mut self, value: bool) {
+        self.0 &= !0b1_0000;
+        if value {
+            self.0 |= 0b1_0000;
+        }
+    }
+    pub fn should_general_log(&self) -> bool {
+        (self.0 & 0b1_0000) != 0
+    }
+    /// Returns if it should log for inter room pathfinding
+    pub fn should_inter_pathfind_log(&self) -> bool {
+        (self.0 & 0b10_0000) != 0
+    }
+    pub fn swap_inter_pathfind_log(&mut self) {
+        self.0 ^= 0b10_0000
+    }
 }
 #[repr(u8)]
 enum WindupState {
     None = 0b0000,
     Physical = 0b0010,
     Magical = 0b0100,
-    // Unassigned = 0b0110
-    // If you decide to add a third windup state later then modify Flags::get_windup because it
-    // will panic otherwise
+    Ranged = 0b0110,
 }
 impl WindupState {
     const MASK: u8 = 0b0000_0110;
@@ -377,6 +390,9 @@ impl WindupState {
             }
             WindupState::Magical => {
                 style.background_purple();
+            }
+            WindupState::Ranged => {
+                style.background_green();
             }
             WindupState::None => {}
         }
@@ -389,6 +405,9 @@ impl WindupState {
     }
     fn is_magical(&self) -> bool {
         matches!(self, WindupState::Magical)
+    }
+    fn is_ranged(&self) -> bool {
+        matches!(self, WindupState::Ranged)
     }
 }
 impl VTableID {

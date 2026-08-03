@@ -96,6 +96,20 @@ impl Board {
     pub fn get_local_turn(&self) -> usize {
         self.local_turns
     }
+    pub fn open_all_doors(&mut self) {
+        for tile in self.tiles.iter_mut() {
+            if let Some(Tile::Door { open, .. }) = tile {
+                *open = true;
+            }
+        }
+    }
+    pub fn wake_all_enemies(&mut self) {
+        for enemy in self.enemies.iter_mut() {
+            if let Some(enemy) = enemy {
+                enemy.flags.wake()
+            }
+        }
+    }
 }
 // RENDERING
 impl Board {
@@ -327,6 +341,19 @@ impl Board {
             let possible_start_rooms = state
                 .board
                 .get_possible_room_ids_at_position(enemy.get_position());
+            let end_goal = enemy.end_goal;
+            let should_log = enemy.flags.should_inter_pathfind_log();
+            if should_log {
+                let position = enemy.get_position();
+                state.board[EnemyID(id)].as_mut().unwrap().log(format!(
+                    "Starting pathfind with end goal {} (rooms {:?}) and \
+                        current position {} (rooms {:?})",
+                    end_goal.unwrap(),
+                    possible_end_goal_rooms.as_slice(),
+                    position,
+                    possible_start_rooms.as_slice()
+                ));
+            }
             // Enemies MUST always be either within a room or on a door
             assert!(!possible_end_goal_rooms.is_empty());
             assert!(!possible_start_rooms.is_empty());
@@ -335,11 +362,18 @@ impl Board {
                 .iter()
                 .any(|start| possible_end_goal_rooms.contains(start))
             {
-                state.board.enemies[id].as_mut().unwrap().move_target = enemy.end_goal;
+                if should_log {
+                    state.board[EnemyID(id)].as_mut().unwrap().log(format!(
+                        "Already in target room \
+                            so stopping"
+                    ));
+                }
+                state.board.enemies[id].as_mut().unwrap().move_target = end_goal;
                 continue;
             }
 
             // Sadly we have to actually do our job, ew
+            #[derive(Debug)]
             struct Heuristic {
                 /// The estimate at the remaining travel cost from this position
                 remaining_heuristic: usize,
@@ -394,6 +428,7 @@ impl Board {
                 }
             }
             // Setup
+            let enemy = state.board[EnemyID(id)].as_ref().unwrap();
             let mut visited = HashSet::new();
             let mut to_visit = BinaryHeap::new();
             let mut backpath = HashMap::new();
@@ -417,6 +452,11 @@ impl Board {
             while let Some(current) = to_visit.pop() {
                 if !visited.insert(current.room) {
                     continue;
+                }
+                if should_log {
+                    state.board[EnemyID(id)].as_mut().unwrap().log(format!(
+                        "Starting visit of room with heuristic: {current:?}"
+                    ));
                 }
                 if let Some(backpath_id) = current.backpath {
                     backpath.insert(current.room, backpath_id);
@@ -444,7 +484,7 @@ impl Board {
 
                     to_visit.push(Heuristic::new(
                         *position,
-                        enemy.end_goal.unwrap(),
+                        end_goal.unwrap(),
                         current.known_cost
                             + current.position.abs_diff(*position).sum_axes()
                             + additional,

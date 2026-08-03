@@ -15,6 +15,7 @@ pub struct State {
     context_menu: ContextMenuID,
     /// Whether or not the player is controlling th context menu
     pub context_menu_inputs: bool,
+    /// Textual feedback to the player
     pub feedback: String,
 }
 impl State {
@@ -71,10 +72,12 @@ impl State {
         } else {
             const INTERACT_RANGE: usize = 3;
             const SMACK_RANGE: usize = 1;
-            if !self
-                .player
-                .position
-                .is_near(self.player.selector, INTERACT_RANGE)
+            let no_range_limit = self.player.no_interact_range_limit;
+            if !(no_range_limit
+                || self
+                    .player
+                    .position
+                    .is_near(self.player.selector, INTERACT_RANGE))
             {
                 return false;
             }
@@ -183,7 +186,7 @@ impl State {
         // We don't need to clear this section of screen because drawing the tiles already does
         let base_height = self.board.get_viewport_size().y;
         // feedback
-        writeln!(buffer, "\x1b[{};0H{}", base_height + 1, self.feedback).unwrap();
+        writeln!(buffer, "\x1b[{};0H{}", base_height + 2, self.feedback).unwrap();
 
         // health bar
         abes_nice_things::ProgressBar::new(
@@ -216,15 +219,16 @@ impl State {
         // meta info
         write!(
             buffer,
-            "Turn: {}, Local turn: {}",
+            "Selector: {}, Turn: {}, Local turn: {}",
+            self.player.selector,
             self.total_turns,
-            self.board.get_local_turn()
+            self.board.get_local_turn(),
         )
         .unwrap();
     }
     pub fn get_input(&self, prompt: String) -> String {
         // First we move to the input row and show the prompt
-        print!("\x1b[{};0H{prompt}", self.board.get_viewport_size().y + 5);
+        print!("\x1b[{};0H{prompt}", self.board.get_viewport_size().y + 6);
         // Then we make the terminal go back to normal
         crate::input::normalize().unwrap();
         // Make sure everything sends

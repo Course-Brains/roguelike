@@ -10,6 +10,21 @@ pub enum VTableID {
     Dummy = 0,
     Basic = 1,
 }
+// Add in the required logic for it
+impl Enemy {
+    /// Returns None if it was unable to figure out a possible enemy type to meet restrictions
+    pub fn pick_vtable_from_budget(
+        budget: &mut usize,
+        max_tier: Option<usize>,
+    ) -> Option<VTableID> {
+        if *budget < VTableID::Basic.get_vtable().budget_cost {
+            None
+        } else {
+            *budget -= VTableID::Basic.get_vtable().budget_cost;
+            Some(VTableID::Basic)
+        }
+    }
+}
 
 use crate::Vector;
 use crate::board::Board;
@@ -241,18 +256,6 @@ impl Enemy {
     }
     pub fn get_position(&self) -> Vector<usize> {
         self.position
-    }
-    /// Returns None if it was unable to figure out a possible enemy type to meet restrictions
-    pub fn pick_vtable_from_budget(
-        budget: &mut usize,
-        max_tier: Option<usize>,
-    ) -> Option<VTableID> {
-        if *budget < VTableID::Basic.get_vtable().budget_cost {
-            None
-        } else {
-            *budget -= VTableID::Basic.get_vtable().budget_cost;
-            Some(VTableID::Basic)
-        }
     }
     pub fn log(&mut self, message: String) {
         if let Some(log) = self.log.as_mut() {

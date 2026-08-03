@@ -53,7 +53,7 @@ impl ContextMenu {
         let options = (state.get_context_menu().get_options)(state);
         // Lets make sure we hae a valid option selector position
         if state.context_menu_selector >= options.len() {
-            state.context_menu_selector = options.len() - 1;
+            state.context_menu_selector = options.len().saturating_sub(1);
         }
         let width = available_rows.min(options.len());
         let start_index = state
@@ -67,10 +67,10 @@ impl ContextMenu {
             let row = row + 3; // 1 because visuals start at 1 and 1 becausse of title
             let mut style = style_base.clone();
             if index == state.context_menu_selector {
-                style.background_red();
+                style.background_red().intense(true);
             }
             if let Choice::Act(_) = options[index].1 {
-                style.purple().intense(true);
+                style.green();
             }
 
             write!(

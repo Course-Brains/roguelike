@@ -1,7 +1,6 @@
 use crate::state::State;
 use std::any::Any;
 use std::io::Write;
-use std::ops::Deref;
 
 pub const COLUMNS_NEEDED: usize = 25;
 
@@ -33,14 +32,21 @@ impl ContextMenu {
         // First we write the title
         write!(
             buffer,
-            "\x1b[0;{start_column}H{}{}\x1b[0m",
+            "\x1b[1;{start_column}H{}{}\x1b[0m",
             style_base.clone().yellow(),
             context_menu.title
         )
         .unwrap();
+        // Then we write the separator
+        write!(
+            buffer,
+            "\x1b[2;{start_column}H╶{}╴",
+            "─".repeat(COLUMNS_NEEDED - 2)
+        )
+        .unwrap();
 
-        // -1 for the title
-        let available_rows = state.screen_size.y - 1;
+        // -2 for the title
+        let available_rows = state.screen_size.y - 2;
 
         // Then we figure out what range of options we are going to render
         let options = (state.get_context_menu().get_options)(state);
@@ -57,7 +63,7 @@ impl ContextMenu {
         // Finally we can actually render them
         // took long enough, jeez
         for (row, index) in (start_index..(start_index + width)).enumerate() {
-            let row = row + 2; // 1 because visuals start at 1 and 1 becausse of title
+            let row = row + 3; // 1 because visuals start at 1 and 1 becausse of title
             let mut style = style_base.clone();
             if index == state.context_menu_selector {
                 style.background_red();

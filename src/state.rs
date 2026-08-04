@@ -148,9 +148,13 @@ impl State {
                     if options_len == 0 {
                         return false;
                     }
-                    if let (_, crate::context_menu::Choice::Recurse(child, argument_generator), _) =
-                        (self.get_context_menu().get_options)(self)
-                            [self.context_menu_stack.last().unwrap().1]
+                    if let (
+                        _,
+                        crate::context_menu::Choice::Recurse(child, argument_generator),
+                        active,
+                    ) = (self.get_context_menu().get_options)(self)
+                        [self.context_menu_stack.last().unwrap().1]
+                        && active
                     {
                         let argument = (argument_generator)(self);
                         self.context_menu_stack.push((argument, 0));

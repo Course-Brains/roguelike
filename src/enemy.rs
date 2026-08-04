@@ -257,6 +257,9 @@ impl Enemy {
     pub fn get_position(&self) -> Vector<usize> {
         self.position
     }
+    // cold because this is purely a debugging tool and should not be assumed to run so that
+    // efficiency is preserved
+    #[cold]
     pub fn log(&mut self, message: String) {
         if let Some(log) = self.log.as_mut() {
             log.write_all(message.as_bytes()).unwrap();
@@ -325,7 +328,7 @@ pub struct Flags(u8);
 //   |||| |++-- WindupState
 //   |||| +---- Whether or not to do pathfinding
 //   |||+------ Whether or not to do general logging
-//   ||+------- Whether or not to do inter room pathfind debugging
+//   ||+------- Whether or not to do inter room pathfind logging
 //   |+-------- Unassigned
 //   +--------- Unassigned
 impl Flags {

@@ -329,9 +329,17 @@ impl Board {
             }
 
             let enemy = state.board.enemies[id].as_ref().unwrap();
+            let should_log = enemy.flags.should_inter_pathfind_log();
             // If the enemy doesn't want to go anywhere or already knows where to go or is asleep
             // then we don't need to do anything
             if enemy.end_goal.is_none() || !enemy.flags.is_awake() {
+                if should_log {
+                    state.board.enemies[id].as_mut().unwrap().log(
+                        "Decided not to \
+                    inter room pathfind because it is either asleep or has no goal"
+                            .to_string(),
+                    );
+                }
                 continue;
             }
 
@@ -342,7 +350,6 @@ impl Board {
                 .board
                 .get_possible_room_ids_at_position(enemy.get_position());
             let end_goal = enemy.end_goal;
-            let should_log = enemy.flags.should_inter_pathfind_log();
             if should_log {
                 let position = enemy.get_position();
                 state.board[EnemyID(id)].as_mut().unwrap().log(format!(
@@ -462,6 +469,10 @@ impl Board {
                     backpath.insert(current.room, backpath_id);
                 }
                 last_room = Some(current.room);
+                // We have found our path
+                if possible_end_goal_rooms.contains(&current.room) {
+                    break;
+                }
 
                 let room = &state.board[current.room];
                 for (position, connectee) in room.connections.iter() {
@@ -496,27 +507,48 @@ impl Board {
             }
             // See above
             assert!(last_room.is_some());
+            let enemy = state.board[EnemyID(id)].as_mut().unwrap();
+
+            if should_log {
+                enemy.log("Starting path retrace".to_string());
+            }
 
             // Following the path back
             // If this ever breaks early due to the loop condition failing then pathfinding has
             // failed and it won't move even though it is trying to
-            while let Some(next) = backpath.get(&last_room.unwrap()) {
-                last_room = Some(*next);
-                // We have found the room to go to
-                if possible_start_rooms.contains(next) {
-                    // We don't need to worry about if the condition in this loop won't be met
-                    // because board validation ensures each connection is mutual
-                    for (position, connection) in state.board[*next].connections.clone().into_iter()
-                    {
-                        // We have found the specific door to walk to
-                        if possible_start_rooms.contains(&connection) {
-                            let enemy = state.board.enemies[id].as_mut().unwrap();
-                            enemy.move_target = Some(position);
-                            /*enemy.walk_time =
-                            std::num::NonZeroUsize::new((u8::random() & 0b11) as usize + 4);*/
-                            break;
-                        }
+            let mut next = last_room.unwrap();
+            loop {
+                if should_log {
+                    state.board[EnemyID(id)]
+                        .as_mut()
+                        .unwrap()
+                        .log(format!("   Checking room {next:?}"));
+                }
+                // This shenaniganily goes through the connections to other rooms and finds out if
+                // there is a connection which goes to a start room and is open and if there is
+                // then it sets the walk target
+                if let Some(position) = state.board[next]
+                    .connections
+                    .iter()
+                    .filter(|(position, connection)| {
+                        possible_start_rooms.contains(connection)
+                            && matches!(state.board[position], Some(Tile::Door { open: true, .. }))
+                            && *position
+                                != state.board[EnemyID(id)].as_ref().unwrap().get_position()
+                    })
+                    .map(|(position, _)| *position)
+                    .next()
+                {
+                    let enemy = state.board[EnemyID(id)].as_mut().unwrap();
+                    if should_log {
+                        enemy.log(format!("    Decided to walk to door at {position}"));
                     }
+                    enemy.move_target = Some(position);
+                    break;
+                }
+                if let Some(backpath) = backpath.get(&next) {
+                    next = *backpath;
+                } else {
                     break;
                 }
             }
@@ -603,20 +635,24 @@ impl std::ops::Index<EnemyID> for Board {
         self.get_enemy(index)
     }
 }
-impl std::ops::Index<&EnemyID> for Board {
-    type Output = Option<Enemy>;
-    fn index(&self, index: &EnemyID) -> &Self::Output {
-        self.get_enemy(*index)
-    }
-}
 impl std::ops::IndexMut<EnemyID> for Board {
     fn index_mut(&mut self, index: EnemyID) -> &mut Self::Output {
         self.get_enemy_mut(index)
     }
 }
-impl std::ops::IndexMut<&EnemyID> for Board {
-    fn index_mut(&mut self, index: &EnemyID) -> &mut Self::Output {
-        self.get_enemy_mut(*index)
+impl std::ops::Index<RoomID> for Board {
+    type Output = Room;
+    fn index(&self, index: RoomID) -> &Self::Output {
+        &self.rooms[index.get_inner() as usize]
+    }
+}
+impl<T: Clone> std::ops::Index<&T> for Board
+where
+    Board: std::ops::Index<T>,
+{
+    type Output = <Board as std::ops::Index<T>>::Output;
+    fn index(&self, index: &T) -> &Self::Output {
+        &self[index.clone()]
     }
 }
 fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Result<usize> {
@@ -642,12 +678,6 @@ fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Resul
     // 3 3 2 2 1 1 0 0
 
     Ok(true_index)
-}
-impl std::ops::Index<RoomID> for Board {
-    type Output = Room;
-    fn index(&self, index: RoomID) -> &Self::Output {
-        &self.rooms[index.get_inner() as usize]
-    }
 }
 #[cfg(test)]
 #[test]

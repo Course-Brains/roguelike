@@ -3,6 +3,8 @@ use crate::state::MapObject;
 use crate::state::State;
 use abes_nice_things::PrimAs;
 use abes_nice_things::PrimFrom;
+use abes_nice_things::{FromBinary, ToBinary};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RayCast {
     start: Vector<usize>,
@@ -13,6 +15,52 @@ pub struct RayCast {
     stop_at_target: bool,
     record_path: bool,
     max_range: Option<usize>,
+}
+impl ToBinary for RayCast {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        // We are storing if max range exists with the other bools because it saves space
+        self.start.to_binary(binary)?;
+        self.target.to_binary(binary)?;
+        abes_nice_things::compact([
+            self.can_hit_player,      // 0
+            self.can_hit_enemy,       // 1
+            self.can_hit_tile,        // 2
+            self.stop_at_target,      // 3
+            self.record_path,         // 4
+            self.max_range.is_some(), // 5
+            false,
+            false,
+        ])
+        .to_binary(binary)?;
+        if let Some(max_range) = self.max_range {
+            max_range.to_binary(binary)?;
+        }
+        Ok(())
+    }
+}
+impl FromBinary for RayCast {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        let start = <Vector<usize>>::from_binary(binary)?;
+        let target = <Vector<usize>>::from_binary(binary)?;
+        let bools = abes_nice_things::expand(u8::from_binary(binary)?);
+        Ok(RayCast {
+            start,
+            target,
+            can_hit_player: bools[0],
+            can_hit_enemy: bools[1],
+            can_hit_tile: bools[2],
+            stop_at_target: bools[3],
+            record_path: bools[4],
+            max_range: if bools[5] {
+                Some(usize::from_binary(binary)?)
+            } else {
+                None
+            },
+        })
+    }
 }
 impl RayCast {
     /// Creates a new raycast with some default values, specifically it will not be able to hit

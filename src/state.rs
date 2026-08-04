@@ -11,7 +11,6 @@ pub struct State {
     pub total_turns: usize,
     pub screen_size: Vector<usize>,
     context_menu_stack: crate::context_menu::Stack,
-    pub context_menu_selector: usize,
     context_menu: ContextMenuID,
     /// Whether or not the player is controlling th context menu
     pub context_menu_inputs: bool,
@@ -25,8 +24,7 @@ impl State {
             player,
             total_turns: 0,
             screen_size,
-            context_menu_stack: Vec::new(),
-            context_menu_selector: 0,
+            context_menu_stack: vec![(None, 0)],
             context_menu: ContextMenuID::default(),
             context_menu_inputs: false,
             feedback: String::new(),
@@ -56,14 +54,18 @@ impl State {
             if options.len() == 0 {
                 return false;
             }
-            if self.context_menu_selector >= options.len() {
-                self.context_menu_selector = 0;
+            let selector = &mut self.context_menu_stack.last_mut().unwrap().1;
+            if *selector >= options.len() {
+                *selector = 0;
                 return false;
             }
-            match options[self.context_menu_selector].1 {
+            if !options[*selector].2 {
+                return false;
+            }
+            match options[*selector].1 {
                 crate::context_menu::Choice::Recurse(child, argument_generator) => {
                     let argument = (argument_generator)(self);
-                    self.context_menu_stack.push(argument);
+                    self.context_menu_stack.push((argument, 0));
                     self.context_menu = ContextMenuID::new_unchecked(child)
                 }
                 crate::context_menu::Choice::Act(action) => (action)(self),
@@ -112,25 +114,26 @@ impl State {
         // Context menu shenanigans
         if self.context_menu_inputs {
             let options_len = ContextMenu::get_option_texts(self).len();
+            let selector = &mut self.context_menu_stack.last_mut().unwrap().1;
             match direction {
                 // Traverse up with overflow
                 Direction::Up => {
                     if options_len == 0 {
                         return false;
                     }
-                    if self.context_menu_selector == 0 {
-                        self.context_menu_selector = options_len;
+                    if *selector == 0 {
+                        *selector = options_len;
                     }
-                    self.context_menu_selector -= 1;
+                    *selector -= 1;
                 }
                 // Traverse down with overflow
                 Direction::Down => {
                     if options_len == 0 {
                         return false;
                     }
-                    self.context_menu_selector += 1;
-                    if self.context_menu_selector == options_len {
-                        self.context_menu_selector = 0;
+                    *selector += 1;
+                    if *selector == options_len {
+                        *selector = 0;
                     }
                 }
                 // unrecurse back up
@@ -145,11 +148,12 @@ impl State {
                     if options_len == 0 {
                         return false;
                     }
-                    if let (_, crate::context_menu::Choice::Recurse(child, argument_generator)) =
-                        (self.get_context_menu().get_options)(self)[self.context_menu_selector]
+                    if let (_, crate::context_menu::Choice::Recurse(child, argument_generator), _) =
+                        (self.get_context_menu().get_options)(self)
+                            [self.context_menu_stack.last().unwrap().1]
                     {
                         let argument = (argument_generator)(self);
-                        self.context_menu_stack.push(argument);
+                        self.context_menu_stack.push((argument, 0));
                         self.context_menu = ContextMenuID::new_unchecked(child);
                     }
                 }
@@ -172,8 +176,11 @@ impl State {
     pub fn get_context_menu(&self) -> &'static crate::context_menu::ContextMenu {
         self.context_menu.get_context_menu()
     }
-    pub fn get_current_context_menu_argument(&self) -> Option<&crate::context_menu::Argument> {
-        self.context_menu_stack.last()
+    pub fn get_current_context_menu_argument(&self) -> &crate::context_menu::Argument {
+        &self.context_menu_stack.last().unwrap().0
+    }
+    pub fn get_context_menu_selector_mut(&mut self) -> &mut usize {
+        &mut self.context_menu_stack.last_mut().unwrap().1
     }
     pub fn render_meta_ui(&self, buffer: &mut impl Write) {
         // all meta ui positions are based on the viewport's height and so are given as offsets

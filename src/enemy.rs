@@ -25,6 +25,25 @@ impl Enemy {
         }
     }
 }
+// And you're done
+
+impl ToBinary for VTableID {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.to_inner().to_binary(binary)
+    }
+}
+impl FromBinary for VTableID {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            Ok(std::mem::transmute::<u8, VTableID>(u8::from_binary(
+                binary,
+            )?))
+        }
+    }
+}
 
 use crate::Vector;
 use crate::board::Board;
@@ -33,6 +52,7 @@ use crate::math::Direction;
 use crate::state::*;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::any::Any;
 use std::io::Write;
 
@@ -56,6 +76,7 @@ pub struct Enemy {
     logical_position: Vector<f64>,
     windup_time: usize,
     /// The file for enemy specific logging
+    /// This does NOT get saved when writing to a file
     log: Option<std::fs::File>,
 }
 impl Enemy {

@@ -1,3 +1,4 @@
+use abes_nice_things::{FromBinary, ToBinary};
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisLength {
@@ -5,6 +6,20 @@ pub enum AxisLength {
     Small = 0b100_0000,
     /// A 1024 x 1024 grid
     Full = 0b100_0000_0000,
+}
+// Yes this is less efficient, I don't care
+impl ToBinary for AxisLength {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        self.to_inner().to_binary(binary)
+    }
+}
+impl FromBinary for AxisLength {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        unsafe { Ok(AxisLength::from_inner(usize::from_binary(binary)?)) }
+    }
 }
 impl AxisLength {
     pub const fn to_inner(self) -> usize {

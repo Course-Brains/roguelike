@@ -3,6 +3,7 @@ use crate::math::Vector;
 use crate::math::Zone;
 use crate::state::State;
 use abes_nice_things::Style;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Write;
 
 pub struct Player {
@@ -14,6 +15,35 @@ pub struct Player {
     pub energy: usize,
     pub max_energy: usize,
     pub no_interact_range_limit: bool,
+}
+impl ToBinary for Player {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.position.to_binary(binary)?;
+        self.selector.to_binary(binary)?;
+        self.render_target.to_binary(binary)?;
+        self.health.to_binary(binary)?;
+        self.max_health.to_binary(binary)?;
+        self.energy.to_binary(binary)?;
+        self.max_energy.to_binary(binary)?;
+        self.no_interact_range_limit.to_binary(binary)
+    }
+}
+impl FromBinary for Player {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Player {
+            position: <Vector<usize>>::from_binary(binary)?,
+            selector: <Vector<usize>>::from_binary(binary)?,
+            render_target: RenderTarget::from_binary(binary)?,
+            health: usize::from_binary(binary)?,
+            max_health: usize::from_binary(binary)?,
+            energy: usize::from_binary(binary)?,
+            max_energy: usize::from_binary(binary)?,
+            no_interact_range_limit: bool::from_binary(binary)?,
+        })
+    }
 }
 impl Player {
     pub fn new(spawn: Vector<usize>) -> Player {
@@ -105,4 +135,24 @@ impl Player {
 pub enum RenderTarget {
     Player,
     Selector,
+}
+impl ToBinary for RenderTarget {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            RenderTarget::Player => false,
+            RenderTarget::Selector => true,
+        }
+        .to_binary(binary)
+    }
+}
+impl FromBinary for RenderTarget {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match bool::from_binary(binary)? {
+            false => RenderTarget::Player,
+            true => RenderTarget::Selector,
+        })
+    }
 }

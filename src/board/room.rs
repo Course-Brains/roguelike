@@ -2,6 +2,7 @@ use super::EnemyID;
 use crate::math::Vector;
 use crate::math::Zone;
 use abes_nice_things::PrimAs;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::num::NonZeroU16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -14,6 +15,20 @@ impl RoomID {
 pub fn room_id<T: PrimAs<u16>>(internal: T) -> RoomID {
     RoomID(internal.prim_as())
 }
+impl ToBinary for RoomID {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        self.get_inner().to_binary(binary)
+    }
+}
+impl FromBinary for RoomID {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(RoomID(u16::from_binary(binary)?))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 /// Change what this stores at your own risk
 pub struct Room {
@@ -47,6 +62,23 @@ impl Room {
 /// a part of
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoomIDFlagged(Option<NonZeroU16>);
+impl ToBinary for RoomIDFlagged {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        match self.0 {
+            Some(id) => id.get(),
+            None => 0,
+        }
+        .to_binary(binary)
+    }
+}
+impl FromBinary for RoomIDFlagged {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(RoomIDFlagged(NonZeroU16::new(u16::from_binary(binary)?)))
+    }
+}
 impl RoomIDFlagged {
     pub fn new(room_id: Option<RoomID>) -> RoomIDFlagged {
         RoomIDFlagged(room_id.map(|room_id| NonZeroU16::new(room_id.get_inner() + 1).unwrap()))

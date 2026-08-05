@@ -11,7 +11,6 @@ pub struct State {
     pub total_turns: usize,
     pub screen_size: Vector<usize>,
     context_menu_stack: crate::context_menu::Stack,
-    context_menu: ContextMenuID,
     /// Whether or not the player is controlling th context menu
     pub context_menu_inputs: bool,
     /// Textual feedback to the player
@@ -26,8 +25,7 @@ impl State {
             player,
             total_turns: 0,
             screen_size,
-            context_menu_stack: vec![(None, 0)],
-            context_menu: ContextMenuID::default(),
+            context_menu_stack: vec![(None, 0, ContextMenuID::default())],
             context_menu_inputs: false,
             feedback: String::new(),
             enemy_visuals: [None; crate::enemy::VTABLES.len()],
@@ -66,11 +64,14 @@ impl State {
             if !options[*selector].2 {
                 return false;
             }
-            match options[*selector].1 {
+            match &options[*selector].1 {
                 crate::context_menu::Choice::Recurse(child, argument_generator) => {
                     let argument = (argument_generator)(self);
-                    self.context_menu_stack.push((argument, 0));
-                    self.context_menu = ContextMenuID::new_unchecked(child)
+                    self.context_menu_stack.push((
+                        argument,
+                        0,
+                        ContextMenuID::new_unchecked(*child),
+                    ));
                 }
                 crate::context_menu::Choice::Act(action) => (action)(self),
             }
@@ -142,8 +143,7 @@ impl State {
                 }
                 // unrecurse back up
                 Direction::Left => {
-                    if let Some(parent) = self.get_context_menu().get_parent() {
-                        self.context_menu = parent;
+                    if self.context_menu_stack.len() > 1 {
                         self.context_menu_stack.pop();
                     }
                 }
@@ -161,8 +161,11 @@ impl State {
                         && active
                     {
                         let argument = (argument_generator)(self);
-                        self.context_menu_stack.push((argument, 0));
-                        self.context_menu = ContextMenuID::new_unchecked(child);
+                        self.context_menu_stack.push((
+                            argument,
+                            0,
+                            ContextMenuID::new_unchecked(child),
+                        ));
                     }
                 }
             }
@@ -176,13 +179,17 @@ impl State {
     pub fn increment(&mut self) {
         self.total_turns += 1;
         Board::increment(self);
+        Player::increment(self);
     }
     pub fn is_reachable(&self, position: Vector<usize>) -> bool {
         // Make it using the rooms for memoization
         todo!()
     }
     pub fn get_context_menu(&self) -> &'static crate::context_menu::ContextMenu {
-        self.context_menu.get_context_menu()
+        self.context_menu_stack.last().unwrap().2.get_context_menu()
+    }
+    pub fn get_current_context_menu_id(&self) -> ContextMenuID {
+        self.context_menu_stack.last().unwrap().2
     }
     pub fn get_current_context_menu_argument(&self) -> &crate::context_menu::Argument {
         &self.context_menu_stack.last().unwrap().0
@@ -260,6 +267,13 @@ impl State {
         buf
     }
     pub fn get_enemy_char(&mut self, vtable_id: crate::enemy::VTableID) -> char {
+        if self
+            .player
+            .effect_tracker
+            .has(crate::effect::EffectID::Confusion)
+        {
+            return '?';
+        }
         let index = vtable_id.to_inner() as usize;
         if let Some(ch) = self.enemy_visuals[index] {
             ch
@@ -269,10 +283,25 @@ impl State {
             self.enemy_visuals[index].unwrap()
         }
     }
+    pub fn force_render_feedback(&self) {
+        print!(
+            "\x1b[{};0H{}",
+            self.board.get_viewport_size().y + 2,
+            self.feedback
+        );
+        std::io::stdout().flush().unwrap()
+    }
 }
+/// Anything on the board, specifically the player an enemy or a tile
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MapObject {
     Player,
     Enemy(crate::board::EnemyID),
     Tile(Vector<usize>),
+}
+/// Anything with logic: players and enemies
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Entity {
+    Player,
+    Enemy(crate::board::EnemyID),
 }

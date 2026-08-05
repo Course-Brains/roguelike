@@ -7,7 +7,7 @@ pub enum Input {
     ToggleContextMenu,
     Select,
     ChangeRenderTarget,
-    DebugQuery,
+    SkipTurn,
 }
 impl Input {
     pub fn get() -> Input {
@@ -34,7 +34,7 @@ impl Input {
                 b' ' => Input::ToggleContextMenu,
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
-                b'+' => Input::DebugQuery,
+                b'\t' => Input::SkipTurn,
                 _ => continue,
             };
         }

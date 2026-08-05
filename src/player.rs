@@ -15,6 +15,7 @@ pub struct Player {
     pub energy: usize,
     pub max_energy: usize,
     pub no_interact_range_limit: bool,
+    pub effect_tracker: crate::effect::EffectTracker,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
@@ -25,7 +26,8 @@ impl ToBinary for Player {
         self.max_health.to_binary(binary)?;
         self.energy.to_binary(binary)?;
         self.max_energy.to_binary(binary)?;
-        self.no_interact_range_limit.to_binary(binary)
+        self.no_interact_range_limit.to_binary(binary)?;
+        self.effect_tracker.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -42,6 +44,7 @@ impl FromBinary for Player {
             energy: usize::from_binary(binary)?,
             max_energy: usize::from_binary(binary)?,
             no_interact_range_limit: bool::from_binary(binary)?,
+            effect_tracker: crate::effect::EffectTracker::from_binary(binary)?,
         })
     }
 }
@@ -56,6 +59,7 @@ impl Player {
             energy: 3,
             max_energy: 5,
             no_interact_range_limit: false,
+            effect_tracker: crate::effect::EffectTracker::default(),
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
@@ -83,6 +87,12 @@ impl Player {
                 .get_enemy_at_position(state.player.position + move_dir)
             {
                 Player::attack(state, id);
+                return true;
+            } else if let Some(crate::board::tile::Tile::Door { open, .. }) =
+                &mut state.board[state.player.position + move_dir]
+                && !*open
+            {
+                *open = true;
                 return true;
             }
             return false;
@@ -130,6 +140,10 @@ impl Player {
     }
     pub fn damage(state: &mut State, damage: usize) {
         state.player.health = state.player.health.saturating_sub(damage);
+    }
+    pub fn increment(state: &mut State) {
+        let finished = state.player.effect_tracker.decriment();
+        crate::effect::EffectTracker::run_on_ends(state, crate::state::Entity::Player, finished);
     }
 }
 pub enum RenderTarget {

@@ -1,0 +1,135 @@
+use crate::state::Entity;
+use crate::state::State;
+use abes_nice_things::{FromBinary, ToBinary};
+
+#[derive(Clone, Copy, Debug, Hash)]
+pub struct Effect {
+    pub name: &'static str,
+    on_start: fn(&mut State, Entity),
+    on_end: fn(&mut State, Entity),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EffectTracker {
+    /// None is infinite time
+    /// 0 is not active
+    /// other is active for finite time
+    inner: [Option<usize>; EFFECTS.len()],
+}
+impl ToBinary for EffectTracker {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        self.inner
+            .each_ref()
+            .map(|time| time.as_ref())
+            .to_binary(binary)
+    }
+}
+impl FromBinary for EffectTracker {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(EffectTracker {
+            inner: <[Option<usize>; EFFECTS.len()]>::from_binary(binary)?,
+        })
+    }
+}
+impl Default for EffectTracker {
+    fn default() -> Self {
+        EffectTracker {
+            inner: [Some(0); EFFECTS.len()],
+        }
+    }
+}
+impl EffectTracker {
+    /// Decriments all effect timers and returns a list of the effects that ended
+    pub fn decriment(&mut self) -> Vec<EffectID> {
+        let mut finished = Vec::new();
+        for (id, timer) in self
+            .inner
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, time)| time.is_some())
+            .map(|(index, time)| (index, time.as_mut().unwrap()))
+        {
+            if *timer > 0 {
+                *timer -= 1;
+            }
+            if *timer == 0 {
+                finished.push(EffectID::from_raw(id as u8))
+            }
+        }
+        finished
+    }
+    pub fn run_on_ends(state: &mut State, entity: Entity, effects: Vec<EffectID>) {
+        for effect in effects.into_iter() {
+            (effect.get().on_end)(state, entity)
+        }
+    }
+    pub fn has(&self, effect: EffectID) -> bool {
+        self.inner[effect.to_raw() as usize].is_none_or(|time| time > 0)
+    }
+    pub fn set_effect_time(&mut self, effect: EffectID, time: Option<usize>) {
+        self.inner[effect.to_raw() as usize] = time
+    }
+    pub fn prompt_set_time(state: &mut State, entity: Entity, effect: EffectID) {
+        let time = loop {
+            let input = state.get_input("How many turns? ".to_string());
+            break match input.as_str() {
+                "cancel" | "c" | "quit" | "q" => return,
+                "infinty" | "infinite" | "inf" | "i" => None,
+                other => match other.parse::<usize>() {
+                    Ok(time) => Some(time),
+                    Err(error) => {
+                        state.feedback = error.to_string();
+                        state.render();
+                        continue;
+                    }
+                },
+            };
+        };
+        match entity {
+            Entity::Player => {
+                if !state.player.effect_tracker.has(effect) {
+                    (effect.get().on_start)(state, entity);
+                }
+                state.player.effect_tracker.set_effect_time(effect, time);
+            }
+            Entity::Enemy(_) => abes_nice_things::require_debug!(todo!()),
+        }
+    }
+    pub fn get(&self, effect: EffectID) -> Option<usize> {
+        self.inner[effect.to_raw() as usize]
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum EffectID {
+    Confusion = 0,
+}
+impl EffectID {
+    pub fn from_raw(raw: u8) -> EffectID {
+        if raw >= EFFECTS.len() as u8 {
+            panic!("Tried to make invalid EffectID: ({raw})")
+        }
+        unsafe { std::mem::transmute(raw) }
+    }
+    fn to_raw(self) -> u8 {
+        unsafe { std::mem::transmute(self) }
+    }
+    pub fn get(self) -> &'static Effect {
+        &EFFECTS[self.to_raw() as usize]
+    }
+}
+pub static EFFECTS: &[Effect] = &[Effect {
+    name: "Confusion",
+    on_start: |_, entity| {
+        if let Entity::Player = entity {
+            print!("\x1b(0");
+        }
+    },
+    on_end: |_, entity| {
+        if let Entity::Player = entity {
+            print!("\x1b(B");
+        }
+    },
+}];

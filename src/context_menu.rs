@@ -1,4 +1,5 @@
 use crate::board::EnemyID;
+use crate::state::Entity;
 use crate::state::State;
 use std::any::Any;
 use std::io::Write;
@@ -7,7 +8,6 @@ pub const COLUMNS_NEEDED: usize = 25;
 
 pub struct ContextMenu {
     title: &'static str,
-    parent: Option<usize>,
     /// Visual text, what to do when selected, is it active
     pub get_options: fn(&State) -> Vec<(String, Choice, bool)>,
 }
@@ -85,23 +85,22 @@ impl ContextMenu {
             .unwrap();
         }
     }
-    pub fn get_parent(&self) -> Option<ContextMenuID> {
-        self.parent.map(|index| ContextMenuID(index))
-    }
 }
 
 pub enum Choice {
     /// The context menu to recurse into and a function to create the argument of it, most of the
     /// time you just want |_| None
     Recurse(usize, fn(&mut State) -> Argument),
-    Act(fn(&mut crate::state::State)),
+    Act(Box<dyn Fn(&mut crate::state::State)>),
 }
 
 /// The argument to the context menu itself, this will not get used often
 pub type Argument = Option<Box<dyn Any>>;
 /// The stack holding the previous and current arguments for when we recurse out as well as the
-/// selection index
-pub type Stack = Vec<(Argument, usize)>;
+/// selection index and which context menu it is
+///
+/// Argument, selection index, context menu
+pub type Stack = Vec<(Argument, usize, ContextMenuID)>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ContextMenuID(usize);
@@ -111,6 +110,9 @@ impl ContextMenuID {
     }
     /// Please don't use this if you aren't certain, I don't want to have to find that bug
     pub fn new_unchecked(inner: usize) -> ContextMenuID {
+        if inner >= CONTEXT_MENUS.len() {
+            panic!("Attempted to make invalid context menu id: {inner}")
+        }
         ContextMenuID(inner)
     }
 }
@@ -131,13 +133,13 @@ const MAIN_MENU: usize = 0;
 const DEBUG_MAIN: usize = 1;
 const SPECIFIC_ENEMY_DEBUG: usize = 2;
 const CHEAT_MAIN: usize = 3;
+const EFFECT_SETTER: usize = 4;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
     // no argument
     ContextMenu {
         title: "MAIN MENU:",
-        parent: None,
         get_options: |_| {
             vec![
                 (
@@ -157,7 +159,6 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     // no argument
     ContextMenu {
         title: "DEBUG:",
-        parent: Some(MAIN_MENU),
         get_options: |state| {
             vec![(
                 "Specific enemy debug".to_string(),
@@ -177,15 +178,14 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     // argument of EnemyID
     ContextMenu {
         title: "SPECIFIC ENEMY DEBUG",
-        parent: Some(DEBUG_MAIN),
         get_options: |state| {
             let mut options = vec![(
                 "Log debug info".to_string(),
-                Choice::Act(|state| {
+                Choice::Act(Box::new(|state| {
                     let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
                     let enemy = &state.board[enemy_id];
                     abes_nice_things::log!("Logging for enemy({enemy_id:?}): {enemy:#?}");
-                }),
+                })),
                 true,
             )];
             let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
@@ -193,7 +193,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             // Setting up logging
             options.push((
                 "Set log file".to_string(),
-                Choice::Act(|state| {
+                Choice::Act(Box::new(|state| {
                     let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
                     if state.board[enemy_id].is_some() {
                         let path = state.get_input("What file? ".to_string());
@@ -202,18 +202,18 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                             .unwrap()
                             .enable_logging(std::fs::File::create(path).unwrap());
                     }
-                }),
+                })),
                 !enemy.is_some_and(|enemy| enemy.has_log_file()),
             ));
             // Turning off logging
             options.push((
                 "Disable logging".to_string(),
-                Choice::Act(|state| {
+                Choice::Act(Box::new(|state| {
                     let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
                     if let Some(enemy) = &mut state.board[enemy_id] {
                         enemy.disable_logging()
                     }
-                }),
+                })),
                 enemy.is_some_and(|enemy| enemy.has_log_file()),
             ));
 
@@ -225,14 +225,14 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         .map(|enemy| enemy.flags.should_general_log().to_string())
                         .unwrap_or("n/a".to_string())
                 ),
-                Choice::Act(|state| {
+                Choice::Act(Box::new(|state| {
                     let enemy_id = *get_argument::<EnemyID>(state).unwrap();
                     if let Some(enemy) = &mut state.board[enemy_id] {
                         enemy
                             .flags
                             .set_general_logging(!enemy.flags.should_general_log())
                     };
-                }),
+                })),
                 enemy.is_some_and(|enemy| enemy.has_log_file()),
             ));
 
@@ -244,12 +244,12 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         .map(|enemy| enemy.flags.should_inter_pathfind_log().to_string())
                         .unwrap_or("n/a".to_string())
                 ),
-                Choice::Act(|state| {
+                Choice::Act(Box::new(|state| {
                     let id = *get_argument::<EnemyID>(state).unwrap();
                     if let Some(enemy) = &mut state.board[id] {
                         enemy.flags.swap_inter_pathfind_log()
                     }
-                }),
+                })),
                 enemy.is_some_and(|enemy| enemy.has_log_file()),
             ));
             options
@@ -259,48 +259,82 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     // no argument
     ContextMenu {
         title: "CHEATS:",
-        parent: Some(MAIN_MENU),
         get_options: |state| {
             vec![
+                (
+                    "Set effects".to_string(),
+                    Choice::Recurse(EFFECT_SETTER, |_| Some(Box::new(Entity::Player))),
+                    true,
+                ),
                 (
                     format!(
                         "No interact limit: {}",
                         state.player.no_interact_range_limit
                     ),
-                    Choice::Act(|state| {
+                    Choice::Act(Box::new(|state| {
                         state.player.no_interact_range_limit ^= true;
-                    }),
+                    })),
                     true,
                 ),
                 (
                     "Open all doors".to_string(),
-                    Choice::Act(|state| {
+                    Choice::Act(Box::new(|state| {
                         state.board.open_all_doors();
-                    }),
+                    })),
                     true,
                 ),
                 (
                     "Wake all enemies".to_string(),
-                    Choice::Act(|state| state.board.wake_all_enemies()),
+                    Choice::Act(Box::new(|state| state.board.wake_all_enemies())),
                     true,
                 ),
                 (
                     "Wake specific enemy".to_string(),
-                    Choice::Act(|state| {
+                    Choice::Act(Box::new(|state| {
                         let id = state
                             .board
                             .get_enemy_at_position(state.player.selector)
                             .unwrap();
                         state.board[id].as_mut().unwrap().flags.wake();
-                    }),
+                    })),
                     state.board.is_enemy_at_position(state.player.selector),
                 ),
                 (
                     "Teleport to selector".to_string(),
-                    Choice::Act(|state| state.player.position = state.player.selector),
+                    Choice::Act(Box::new(|state| {
+                        state.player.position = state.player.selector
+                    })),
                     true,
                 ),
             ]
+        },
+    },
+    // 4: Effect setting
+    // argument of Entity for which entity's effects
+    ContextMenu {
+        title: "EFFECT SETTER",
+        get_options: |state| {
+            let mut options = Vec::new();
+            for effect in 0..crate::effect::EFFECTS.len() {
+                let effect = crate::effect::EffectID::from_raw(effect as u8);
+                let current = state.player.effect_tracker.get(effect);
+                let time = match current {
+                    Some(time) => time.to_string(),
+                    None => "inf".to_string(),
+                };
+                options.push((
+                    format!("{}: {time}", effect.get().name),
+                    Choice::Act(Box::new(move |state| {
+                        crate::effect::EffectTracker::prompt_set_time(
+                            state,
+                            Entity::Player,
+                            effect,
+                        );
+                    })),
+                    true,
+                ));
+            }
+            options
         },
     },
 ];

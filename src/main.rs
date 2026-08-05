@@ -1,6 +1,7 @@
 // Modules
 mod board;
 mod context_menu;
+mod effect;
 mod enemy;
 mod input;
 mod math;
@@ -33,6 +34,7 @@ fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
     if let Err(error) = std::panic::catch_unwind(run) {
         // Panic handling
+        print!("\x1b(B"); // reset confusion
         let _ = normalize();
 
         std::panic::panic_any(error)
@@ -78,27 +80,7 @@ fn run() {
                         .move_target = Some(state.player.selector);
                 }*/
             }
-            Input::DebugQuery => {
-                log!("Debug query for position: {}", state.player.selector);
-                log!("  turn: {}", state.total_turns);
-                log!("  The tile is: {:?}", state.board[state.player.selector]);
-                if let Some(id) = state.board.get_enemy_at_position(state.player.selector) {
-                    log!("  There is an enemy ({}): {:#?}", id.0, state.board[id]);
-                } else {
-                    log!("  There is no enemy at that position");
-                }
-                if state.player.position == state.player.selector {
-                    log!("  The player is there");
-                }
-                log!(
-                    "  The possible rooms it is a part of are: {:?}",
-                    state
-                        .board
-                        .get_possible_room_ids_at_position(state.player.selector)
-                );
-
-                false
-            }
+            Input::SkipTurn => true,
         } {
             state.increment();
         }

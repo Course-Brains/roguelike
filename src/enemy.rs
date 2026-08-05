@@ -2,7 +2,7 @@
 pub mod basic;
 pub mod dummy;
 // Put the vtable here
-static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
+pub static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 // Register the vtable here, make sure you correctly put its index
@@ -26,24 +26,6 @@ impl Enemy {
     }
 }
 // And you're done
-
-impl ToBinary for VTableID {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
-        self.to_inner().to_binary(binary)
-    }
-}
-impl FromBinary for VTableID {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
-        unsafe {
-            Ok(std::mem::transmute::<u8, VTableID>(u8::from_binary(
-                binary,
-            )?))
-        }
-    }
-}
 
 use crate::Vector;
 use crate::board::Board;
@@ -95,24 +77,25 @@ impl Enemy {
             log: None,
         }
     }
-    pub fn render(&self) -> (char, Style) {
+    pub fn render(state: &mut State, id: EnemyID) -> (char, Style) {
         let mut style = Style::new();
+        let this = state.board[id].as_ref().unwrap();
 
         // Foreground
 
         // These are mutually exclusive because bosses skip detection checks and are always awake
-        if self.get_vtable().is_boss {
+        if this.get_vtable().is_boss {
             // Bosses are blue
             style.blue();
-        } else if self.flags.is_awake() {
+        } else if this.flags.is_awake() {
             // Awake are yellow
             style.yellow();
         }
 
         // Background
-        self.flags.get_windup().get_style(&mut style);
+        this.flags.get_windup().get_style(&mut style);
 
-        (self.get_vtable().render_char, style)
+        (state.get_enemy_char(this.vtable_id), style)
     }
     pub fn get_vtable(&self) -> &'static VTable {
         self.vtable_id.get_vtable()
@@ -302,8 +285,6 @@ impl Enemy {
 pub struct VTable {
     starting_health: usize,
     /// The character used to represent this enemy type during rendering
-    render_char: char,
-    /// Whether or not to render this as a boss, this does not affect logic in any way
     is_boss: bool,
     /// The function which initializes the state of the enemy. If the enemy does not need a state
     /// then simply give it Box<()> which won't allocate anything
@@ -441,8 +422,25 @@ impl VTableID {
     pub fn get_vtable(self) -> &'static VTable {
         &VTABLES[self.to_inner() as usize]
     }
-    fn to_inner(self) -> u8 {
+    pub fn to_inner(self) -> u8 {
         unsafe { std::mem::transmute(self) }
+    }
+}
+impl ToBinary for VTableID {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.to_inner().to_binary(binary)
+    }
+}
+impl FromBinary for VTableID {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            Ok(std::mem::transmute::<u8, VTableID>(u8::from_binary(
+                binary,
+            )?))
+        }
     }
 }
 impl PartialOrd for VTableID {

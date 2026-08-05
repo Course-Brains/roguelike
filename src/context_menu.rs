@@ -261,7 +261,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "CHEATS:",
         parent: Some(MAIN_MENU),
         get_options: |state| {
-            let mut options = vec![
+            vec![
                 (
                     format!(
                         "No interact limit: {}",
@@ -284,19 +284,23 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Act(|state| state.board.wake_all_enemies()),
                     true,
                 ),
-            ];
-            options.push((
-                "Wake specific enemy".to_string(),
-                Choice::Act(|state| {
-                    let id = state
-                        .board
-                        .get_enemy_at_position(state.player.selector)
-                        .unwrap();
-                    state.board[id].as_mut().unwrap().flags.wake();
-                }),
-                state.board.is_enemy_at_position(state.player.selector),
-            ));
-            options
+                (
+                    "Wake specific enemy".to_string(),
+                    Choice::Act(|state| {
+                        let id = state
+                            .board
+                            .get_enemy_at_position(state.player.selector)
+                            .unwrap();
+                        state.board[id].as_mut().unwrap().flags.wake();
+                    }),
+                    state.board.is_enemy_at_position(state.player.selector),
+                ),
+                (
+                    "Teleport to selector".to_string(),
+                    Choice::Act(|state| state.player.position = state.player.selector),
+                    true,
+                ),
+            ]
         },
     },
 ];

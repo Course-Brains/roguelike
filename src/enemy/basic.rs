@@ -1,10 +1,8 @@
 use super::VTable;
-use crate::RayCast;
 use crate::random::Random;
 use crate::state::*;
 pub static VTABLE: VTable = VTable {
     starting_health: 3,
-    render_char: '1',
     is_boss: false,
     init: VTable::DEFAULT_INIT,
     think,

@@ -16,6 +16,8 @@ pub struct State {
     pub context_menu_inputs: bool,
     /// Textual feedback to the player
     pub feedback: String,
+    enemy_visuals: [Option<char>; crate::enemy::VTABLES.len()],
+    next_enemy_visual: u8,
 }
 impl State {
     pub fn new(board: Board, player: Player, screen_size: Vector<usize>) -> State {
@@ -28,6 +30,8 @@ impl State {
             context_menu: ContextMenuID::default(),
             context_menu_inputs: false,
             feedback: String::new(),
+            enemy_visuals: [None; crate::enemy::VTABLES.len()],
+            next_enemy_visual: 0,
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything
@@ -37,7 +41,7 @@ impl State {
         let mut buffer = Vec::new();
 
         self.board.render_tiles(viewport, &mut buffer);
-        self.board.render_enemies(viewport, &mut buffer);
+        Board::render_enemies(self, viewport, &mut buffer);
         self.player.render(viewport, &mut buffer);
         self.render_meta_ui(&mut buffer);
         crate::context_menu::ContextMenu::render(self, &mut buffer);
@@ -254,6 +258,16 @@ impl State {
         abes_nice_things::windows!(buf.pop());
         // And return!
         buf
+    }
+    pub fn get_enemy_char(&mut self, vtable_id: crate::enemy::VTableID) -> char {
+        let index = vtable_id.to_inner() as usize;
+        if let Some(ch) = self.enemy_visuals[index] {
+            ch
+        } else {
+            self.enemy_visuals[index] =
+                Some(self.next_enemy_visual.to_string().chars().next().unwrap());
+            self.enemy_visuals[index].unwrap()
+        }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -176,24 +176,24 @@ impl Board {
         .unwrap();
     }
     /// Moves the cursor about to draw the enemies, this is the second layer of rendering.
-    pub fn render_enemies(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
+    pub fn render_enemies(state: &mut State, viewport: Zone<usize>, buffer: &mut impl Write) {
         // The weird iterator stuff ensures that we only are rendering enemies which are alive and
         // on screen on top of getting us the on screen position of that enemy
 
-        // TODO: Make it so that this is even more efficient by only checking enemies in rooms that
-        // are partially or fully visible
-        for (position, (character, style)) in self
-            .enemies
-            .iter()
-            .filter_map(|enemy| enemy.as_ref())
-            .filter(|enemy| viewport.contains(enemy.get_position()))
-            .map(|enemy| (enemy.get_position() - viewport.top_left(), enemy.render()))
-        {
+        for index in 0..state.board.enemies.len() {
+            if state.board.enemies[index].is_none() {
+                continue;
+            }
+            let enemy = state.board.enemies[index].as_ref().unwrap();
+            if !viewport.contains(enemy.get_position()) {
+                continue;
+            }
+            let screen_position = enemy.get_position() - viewport.top_left() + 1;
+            let (ch, style) = Enemy::render(state, EnemyID(index));
             write!(
                 buffer,
-                "\x1b[{};{}H{style}{character}\x1b[0m",
-                position.y + 1,
-                position.x + 1
+                "\x1b[{};{}H{style}{ch}\x1b[0m",
+                screen_position.y, screen_position.x
             )
             .unwrap();
         }

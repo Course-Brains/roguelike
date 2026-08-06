@@ -1,7 +1,7 @@
 use crate::board::EnemyID;
 use crate::state::Entity;
 use crate::state::State;
-use std::any::Any;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Write;
 
 pub const COLUMNS_NEEDED: usize = 25;
@@ -90,17 +90,60 @@ impl ContextMenu {
 pub enum Choice {
     /// The context menu to recurse into and a function to create the argument of it, most of the
     /// time you just want |_| None
-    Recurse(usize, fn(&mut State) -> Argument),
+    Recurse(usize, fn(&mut State) -> Option<Argument>),
     Act(Box<dyn Fn(&mut crate::state::State)>),
 }
 
-/// The argument to the context menu itself, this will not get used often
-pub type Argument = Option<Box<dyn Any>>;
 /// The stack holding the previous and current arguments for when we recurse out as well as the
 /// selection index and which context menu it is
 ///
 /// Argument, selection index, context menu
-pub type Stack = Vec<(Argument, usize, ContextMenuID)>;
+pub type Stack = Vec<(Option<Argument>, usize, ContextMenuID)>;
+
+/// The argument to the context menu itself, this will not get used often
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Argument {
+    EnemyID(EnemyID),
+    Entity(Entity),
+}
+impl ToBinary for Argument {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Argument::EnemyID(id) => {
+                false.to_binary(binary)?;
+                id.to_binary(binary)
+            }
+            Argument::Entity(entity) => {
+                true.to_binary(binary)?;
+                entity.to_binary(binary)
+            }
+        }
+    }
+}
+impl FromBinary for Argument {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+        Ok(match bool::from_binary(binary)? {
+            false => Argument::EnemyID(EnemyID::from_binary(binary)?),
+            true => Argument::Entity(Entity::from_binary(binary)?),
+        })
+    }
+}
+impl Argument {
+    fn enemy_id(self) -> Option<EnemyID> {
+        if let Argument::EnemyID(id) = self {
+            Some(id)
+        } else {
+            None
+        }
+    }
+    fn entity(self) -> Option<Entity> {
+        if let Argument::Entity(entity) = self {
+            Some(entity)
+        } else {
+            None
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ContextMenuID(usize);
@@ -108,8 +151,7 @@ impl ContextMenuID {
     pub fn get_context_menu(self) -> &'static ContextMenu {
         &CONTEXT_MENUS[self.0]
     }
-    /// Please don't use this if you aren't certain, I don't want to have to find that bug
-    pub fn new_unchecked(inner: usize) -> ContextMenuID {
+    pub fn new(inner: usize) -> ContextMenuID {
         if inner >= CONTEXT_MENUS.len() {
             panic!("Attempted to make invalid context menu id: {inner}")
         }
@@ -121,12 +163,22 @@ impl Default for ContextMenuID {
         ContextMenuID(MAIN_MENU)
     }
 }
-fn get_argument<T: 'static>(state: &State) -> Option<&T> {
-    state
-        .get_current_context_menu_argument()
-        .as_ref()
-        .unwrap()
-        .downcast_ref()
+impl ToBinary for ContextMenuID {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.0.to_binary(binary)
+    }
+}
+impl FromBinary for ContextMenuID {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+        let inner = usize::from_binary(binary)?;
+        if inner >= CONTEXT_MENUS.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Could not load ContextMenuID from binary due to invalid inner value",
+            ));
+        }
+        Ok(ContextMenuID(inner))
+    }
 }
 
 const MAIN_MENU: usize = 0;
@@ -163,7 +215,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             vec![(
                 "Specific enemy debug".to_string(),
                 Choice::Recurse(SPECIFIC_ENEMY_DEBUG, |state| {
-                    Some(Box::new(
+                    Some(Argument::EnemyID(
                         state
                             .board
                             .get_enemy_at_position(state.player.selector)
@@ -182,19 +234,31 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             let mut options = vec![(
                 "Log debug info".to_string(),
                 Choice::Act(Box::new(|state| {
-                    let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
+                    let enemy_id = state
+                        .get_current_context_menu_argument()
+                        .unwrap()
+                        .enemy_id()
+                        .unwrap();
                     let enemy = &state.board[enemy_id];
                     abes_nice_things::log!("Logging for enemy({enemy_id:?}): {enemy:#?}");
                 })),
                 true,
             )];
-            let enemy_id = get_argument::<crate::board::EnemyID>(state).unwrap();
+            let enemy_id = state
+                .get_current_context_menu_argument()
+                .unwrap()
+                .enemy_id()
+                .unwrap();
             let enemy = state.board[enemy_id].as_ref();
             // Setting up logging
             options.push((
                 "Set log file".to_string(),
                 Choice::Act(Box::new(|state| {
-                    let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
+                    let enemy_id = state
+                        .get_current_context_menu_argument()
+                        .unwrap()
+                        .enemy_id()
+                        .unwrap();
                     if state.board[enemy_id].is_some() {
                         let path = state.get_input("What file? ".to_string());
                         state.board[enemy_id]
@@ -209,7 +273,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             options.push((
                 "Disable logging".to_string(),
                 Choice::Act(Box::new(|state| {
-                    let enemy_id = *get_argument::<crate::board::EnemyID>(state).unwrap();
+                    let enemy_id = state
+                        .get_current_context_menu_argument()
+                        .unwrap()
+                        .enemy_id()
+                        .unwrap();
                     if let Some(enemy) = &mut state.board[enemy_id] {
                         enemy.disable_logging()
                     }
@@ -226,7 +294,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         .unwrap_or("n/a".to_string())
                 ),
                 Choice::Act(Box::new(|state| {
-                    let enemy_id = *get_argument::<EnemyID>(state).unwrap();
+                    let enemy_id = state
+                        .get_current_context_menu_argument()
+                        .unwrap()
+                        .enemy_id()
+                        .unwrap();
                     if let Some(enemy) = &mut state.board[enemy_id] {
                         enemy
                             .flags
@@ -245,7 +317,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         .unwrap_or("n/a".to_string())
                 ),
                 Choice::Act(Box::new(|state| {
-                    let id = *get_argument::<EnemyID>(state).unwrap();
+                    let id = state
+                        .get_current_context_menu_argument()
+                        .unwrap()
+                        .enemy_id()
+                        .unwrap();
                     if let Some(enemy) = &mut state.board[id] {
                         enemy.flags.swap_inter_pathfind_log()
                     }
@@ -263,7 +339,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             vec![
                 (
                     "Set effects".to_string(),
-                    Choice::Recurse(EFFECT_SETTER, |_| Some(Box::new(Entity::Player))),
+                    Choice::Recurse(EFFECT_SETTER, |_| Some(Argument::Entity(Entity::Player))),
                     true,
                 ),
                 (
@@ -303,6 +379,24 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     "Teleport to selector".to_string(),
                     Choice::Act(Box::new(|state| {
                         state.player.position = state.player.selector
+                    })),
+                    true,
+                ),
+                (
+                    "Save".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        let path = state.get_input("What file?".to_string());
+                        let mut file = std::fs::File::create(path).unwrap();
+                        state.to_binary(&mut file).unwrap();
+                    })),
+                    true,
+                ),
+                (
+                    "Load".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        let path = state.get_input("What file?".to_string());
+                        let mut file = std::fs::File::open(path).unwrap();
+                        *state = State::from_binary(&mut file).unwrap();
                     })),
                     true,
                 ),

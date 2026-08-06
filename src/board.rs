@@ -26,10 +26,6 @@ use tile::Tile;
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
 ///
-/// - the [Tile]s
-/// - the [AxisLength]
-/// - the viewport's size
-///
 /// It is VERY important to note that the [Tile] [Vec] MUST not change length after the board is
 /// created and the [AxisLength] MUST not change either. They have to be tied to each other which
 /// is why you cannot change either.
@@ -44,7 +40,9 @@ pub struct Board {
     room_map: Vec<RoomIDFlagged>,
     /// The length of each axis of the map
     axis_length: AxisLength,
-    /// The size of the viewport, the center will tend towards the top left
+    /// The size of the viewport, the center will tend towards the top left.
+    ///
+    /// This will be recalculated on load
     viewport_size: Vector<usize>,
     /// Elements in this array MUST never be removed or reordered, if an enemy dies, its entry
     /// must change to None instead of removing the entry. This is to preserve index validity even
@@ -59,13 +57,13 @@ pub struct Board {
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> std::prelude::v1::Result<(), std::io::Error> {
+        self.axis_length.to_binary(binary)?;
         self.tiles.len().to_binary(binary)?;
         for tile in self.tiles.iter() {
             tile.as_ref().to_binary(binary)?;
         }
         self.room_map.to_binary(binary)?;
-        self.axis_length.to_binary(binary)?;
-        self.viewport_size.to_binary(binary)?;
+        // viewport size does not get saved
         self.enemies.len().to_binary(binary)?;
         for enemy in self.enemies.iter() {
             enemy.as_ref().to_binary(binary)?;
@@ -78,11 +76,14 @@ impl FromBinary for Board {
     fn from_binary(
         binary: &mut dyn std::io::prelude::Read,
     ) -> std::prelude::v1::Result<Self, std::io::Error> {
+        let axis_length = AxisLength::from_binary(binary)?;
         Ok(Board {
             tiles: <Vec<Option<Tile>>>::from_binary(binary)?,
             room_map: <Vec<RoomIDFlagged>>::from_binary(binary)?,
-            axis_length: AxisLength::from_binary(binary)?,
-            viewport_size: <Vector<usize>>::from_binary(binary)?,
+            axis_length,
+            // Viewport has to be recalculated on load for reasons that should be obvious
+            viewport_size: crate::calc_desired_dimensions(crate::get_terminal_size())
+                .min(Vector::equal_from_axis(axis_length.to_inner())),
             enemies: <Vec<Option<Enemy>>>::from_binary(binary)?,
             local_turns: usize::from_binary(binary)?,
             rooms: <Vec<Room>>::from_binary(binary)?,

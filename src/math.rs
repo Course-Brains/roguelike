@@ -115,6 +115,10 @@ impl<T: Number> Vector<T> {
     pub fn sum_axes(self) -> T {
         self.x + self.y
     }
+    /// Creates a [Vector] with both of its axes set to the given value
+    pub fn equal_from_axis(axis: T) -> Vector<T> {
+        Vector { x: axis, y: axis }
+    }
 }
 impl<T: Integer> Vector<T> {
     /// Diagonals do not count

@@ -18,7 +18,6 @@ use input::normalize;
 use input::weirdify;
 use math::Vector;
 use math::Zone;
-use raycast::RayCast;
 
 // Visual space allocation is
 // vvvvvvvvvvvvvvvv Viewport

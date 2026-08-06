@@ -3,6 +3,7 @@ use crate::context_menu::ContextMenu;
 use crate::context_menu::ContextMenuID;
 use crate::math::*;
 use crate::player::Player;
+use abes_nice_things::{FromBinary, ToBinary};
 use std::io::Write;
 
 pub struct State {
@@ -17,6 +18,44 @@ pub struct State {
     pub feedback: String,
     enemy_visuals: [Option<char>; crate::enemy::VTABLES.len()],
     next_enemy_visual: u8,
+}
+impl ToBinary for State {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.board.to_binary(binary)?;
+        self.player.to_binary(binary)?;
+        self.total_turns.to_binary(binary)?;
+        // Screen size cannot be usefully saved
+        self.context_menu_stack.len().to_binary(binary)?;
+        for (argument, index, menu) in self.context_menu_stack.iter() {
+            argument.as_ref().to_binary(binary)?;
+            index.to_binary(binary)?;
+            menu.to_binary(binary)?;
+        }
+        self.context_menu_inputs.to_binary(binary)?;
+        self.feedback.to_binary(binary)?;
+        self.enemy_visuals.len().to_binary(binary)?;
+        for enemy_visual in self.enemy_visuals.iter() {
+            enemy_visual.as_ref().to_binary(binary)?;
+        }
+        self.next_enemy_visual.to_binary(binary)
+    }
+}
+impl FromBinary for State {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+        let mut state = State {
+            board: Board::from_binary(binary)?,
+            player: Player::from_binary(binary)?,
+            total_turns: usize::from_binary(binary)?,
+            screen_size: crate::get_terminal_size(),
+            context_menu_stack: crate::context_menu::Stack::from_binary(binary)?,
+            context_menu_inputs: bool::from_binary(binary)?,
+            feedback: String::from_binary(binary)?,
+            enemy_visuals: <[Option<char>; crate::enemy::VTABLES.len()]>::from_binary(binary)?,
+            next_enemy_visual: u8::from_binary(binary)?,
+        };
+        state.finish_load_effects();
+        Ok(state)
+    }
 }
 impl State {
     pub fn new(board: Board, player: Player, screen_size: Vector<usize>) -> State {
@@ -67,11 +106,8 @@ impl State {
             match &options[*selector].1 {
                 crate::context_menu::Choice::Recurse(child, argument_generator) => {
                     let argument = (argument_generator)(self);
-                    self.context_menu_stack.push((
-                        argument,
-                        0,
-                        ContextMenuID::new_unchecked(*child),
-                    ));
+                    self.context_menu_stack
+                        .push((argument, 0, ContextMenuID::new(*child)));
                 }
                 crate::context_menu::Choice::Act(action) => (action)(self),
             }
@@ -161,11 +197,8 @@ impl State {
                         && active
                     {
                         let argument = (argument_generator)(self);
-                        self.context_menu_stack.push((
-                            argument,
-                            0,
-                            ContextMenuID::new_unchecked(child),
-                        ));
+                        self.context_menu_stack
+                            .push((argument, 0, ContextMenuID::new(child)));
                     }
                 }
             }
@@ -191,7 +224,7 @@ impl State {
     pub fn get_current_context_menu_id(&self) -> ContextMenuID {
         self.context_menu_stack.last().unwrap().2
     }
-    pub fn get_current_context_menu_argument(&self) -> &crate::context_menu::Argument {
+    pub fn get_current_context_menu_argument(&self) -> &Option<crate::context_menu::Argument> {
         &self.context_menu_stack.last().unwrap().0
     }
     pub fn get_context_menu_selector_mut(&mut self) -> &mut usize {
@@ -302,6 +335,7 @@ impl State {
         }
     }
 }
+
 /// Anything on the board, specifically the player an enemy or a tile
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MapObject {
@@ -309,9 +343,59 @@ pub enum MapObject {
     Enemy(crate::board::EnemyID),
     Tile(Vector<usize>),
 }
+impl ToBinary for MapObject {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            MapObject::Player => 0_u8.to_binary(binary),
+            MapObject::Enemy(id) => {
+                1_u8.to_binary(binary)?;
+                id.to_binary(binary)
+            }
+            MapObject::Tile(pos) => {
+                2_u8.to_binary(binary)?;
+                pos.to_binary(binary)
+            }
+        }
+    }
+}
+impl FromBinary for MapObject {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+        Ok(match u8::from_binary(binary)? {
+            0 => MapObject::Player,
+            1 => MapObject::Enemy(crate::board::EnemyID::from_binary(binary)?),
+            2 => MapObject::Tile(<Vector<usize>>::from_binary(binary)?),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Could not get MapObject from binary due to invalid discriminant",
+                ));
+            }
+        })
+    }
+}
+
 /// Anything with logic: players and enemies
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Entity {
     Player,
     Enemy(crate::board::EnemyID),
+}
+impl ToBinary for Entity {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        match self {
+            Entity::Player => false.to_binary(binary),
+            Entity::Enemy(id) => {
+                true.to_binary(binary)?;
+                id.to_binary(binary)
+            }
+        }
+    }
+}
+impl FromBinary for Entity {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+        Ok(match bool::from_binary(binary)? {
+            false => Entity::Player,
+            true => Entity::Enemy(crate::board::EnemyID::from_binary(binary)?),
+        })
+    }
 }

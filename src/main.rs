@@ -10,7 +10,8 @@ mod random;
 mod raycast;
 mod state;
 
-use abes_nice_things::log;
+use std::io::Write;
+
 use board::AxisLength;
 use input::Input;
 use input::normalize;
@@ -34,10 +35,17 @@ fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
     if let Err(error) = std::panic::catch_unwind(run) {
         // Panic handling
-        print!("\x1b(B"); // reset confusion
         let _ = normalize();
+        print!("\x1b(B"); // reset confusion
+        let _ = std::io::stdout().flush();
 
         std::panic::panic_any(error)
+    }
+    // Just because it didn't error doesn't mean we don't want to clean up
+    else {
+        normalize().unwrap();
+        print!("\x1b[(B");
+        std::io::stdout().flush().unwrap();
     }
 }
 fn run() {
@@ -85,7 +93,6 @@ fn run() {
             state.increment();
         }
     }
-    //normalize().unwrap();
 }
 /// Calculates the desired width, height for the viewport. It gets the terminal's size then
 /// subtracts the areas needed for other parts of the ui. If the resulting viewport would be too

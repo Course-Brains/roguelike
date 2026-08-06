@@ -291,6 +291,16 @@ impl State {
         );
         std::io::stdout().flush().unwrap()
     }
+    /// Run all on_starts for all active effects which must be reran on load
+    ///
+    /// This MUST be run on load and no other times
+    pub fn finish_load_effects(&mut self) {
+        for effect in crate::effect::EffectTracker::iter_effect_ids() {
+            if self.player.effect_tracker.has(effect) && effect.needs_on_start_rerun_on_load() {
+                effect.force_run_on_start(self, Entity::Player)
+            }
+        }
+    }
 }
 /// Anything on the board, specifically the player an enemy or a tile
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

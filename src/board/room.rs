@@ -36,6 +36,29 @@ pub struct Room {
     pub bounds: Zone<usize>,
     pub enemies: Vec<EnemyID>,
 }
+impl ToBinary for Room {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        self.connections.len().to_binary(binary)?;
+        for (position, room) in self.connections.iter() {
+            position.to_binary(binary)?;
+            room.to_binary(binary)?;
+        }
+        self.bounds.to_binary(binary)?;
+        self.enemies.to_binary(binary)
+    }
+}
+impl FromBinary for Room {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Room {
+            connections: <Vec<(Vector<usize>, RoomID)>>::from_binary(binary)?,
+            bounds: <Zone<usize>>::from_binary(binary)?,
+            enemies: <Vec<EnemyID>>::from_binary(binary)?,
+        })
+    }
+}
 impl Room {
     pub fn new(bounds: Zone<usize>) -> Room {
         Room {

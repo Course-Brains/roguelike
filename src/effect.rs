@@ -1,5 +1,6 @@
 use crate::state::Entity;
 use crate::state::State;
+use abes_nice_things::require_debug;
 use abes_nice_things::{FromBinary, ToBinary};
 
 #[derive(Clone, Copy, Debug, Hash)]
@@ -53,12 +54,10 @@ impl EffectTracker {
             .filter(|(_, time)| time.is_some())
             .map(|(index, time)| (index, time.as_mut().unwrap()))
         {
-            if *timer > 0 {
-                *timer -= 1;
-            }
-            if *timer == 0 {
+            if *timer == 1 {
                 finished.push(EffectID::from_raw(id as u8))
             }
+            *timer = timer.saturating_sub(1);
         }
         finished
     }
@@ -91,6 +90,10 @@ impl EffectTracker {
                 },
             };
         };
+        if time == Some(0) {
+            EffectTracker::clear(state, entity, effect);
+            return;
+        }
         match entity {
             Entity::Player => {
                 if !state.player.effect_tracker.has(effect) {
@@ -106,6 +109,17 @@ impl EffectTracker {
     }
     pub fn iter_effect_ids() -> impl Iterator<Item = EffectID> {
         (0..EFFECTS.len()).map(|index| EffectID::from_raw(index as u8))
+    }
+    pub fn clear(state: &mut State, entity: Entity, effect: EffectID) {
+        match entity {
+            Entity::Player => {
+                if state.player.effect_tracker.has(effect) {
+                    state.player.effect_tracker.inner[effect.to_raw() as usize] = Some(0);
+                    (effect.get().on_end)(state, entity);
+                }
+            }
+            Entity::Enemy(_) => require_debug!(todo!()),
+        }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

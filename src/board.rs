@@ -15,6 +15,7 @@ use crate::state::State;
 use abes_nice_things::MaxVec;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
+use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::{Context, Result, bail};
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
@@ -56,6 +57,39 @@ pub struct Board {
     local_turns: usize,
     rooms: Vec<Room>,
 }
+impl ToBinary for Board {
+    fn to_binary(&self, binary: &mut dyn Write) -> std::prelude::v1::Result<(), std::io::Error> {
+        self.tiles.len().to_binary(binary)?;
+        for tile in self.tiles.iter() {
+            tile.as_ref().to_binary(binary)?;
+        }
+        self.room_map.to_binary(binary)?;
+        self.axis_length.to_binary(binary)?;
+        self.viewport_size.to_binary(binary)?;
+        self.enemies.len().to_binary(binary)?;
+        for enemy in self.enemies.iter() {
+            enemy.as_ref().to_binary(binary)?;
+        }
+        self.local_turns.to_binary(binary)?;
+        self.rooms.to_binary(binary)
+    }
+}
+impl FromBinary for Board {
+    fn from_binary(
+        binary: &mut dyn std::io::prelude::Read,
+    ) -> std::prelude::v1::Result<Self, std::io::Error> {
+        Ok(Board {
+            tiles: <Vec<Option<Tile>>>::from_binary(binary)?,
+            room_map: <Vec<RoomIDFlagged>>::from_binary(binary)?,
+            axis_length: AxisLength::from_binary(binary)?,
+            viewport_size: <Vector<usize>>::from_binary(binary)?,
+            enemies: <Vec<Option<Enemy>>>::from_binary(binary)?,
+            local_turns: usize::from_binary(binary)?,
+            rooms: <Vec<Room>>::from_binary(binary)?,
+        })
+    }
+}
+
 // Helpers
 impl Board {
     /// Creates a blank board which is not populated by tile objects or map objects and is
@@ -111,6 +145,7 @@ impl Board {
         }
     }
 }
+
 // RENDERING
 impl Board {
     const VIEWPORT_BORDER_RIGHT: char = '│';
@@ -282,6 +317,21 @@ impl Board {
 // ENEMIES
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EnemyID(pub usize);
+impl ToBinary for EnemyID {
+    fn to_binary(&self, binary: &mut dyn Write) -> std::prelude::v1::Result<(), std::io::Error> {
+        self.0.to_binary(binary)
+    }
+}
+impl FromBinary for EnemyID {
+    fn from_binary(
+        binary: &mut dyn std::io::prelude::Read,
+    ) -> std::prelude::v1::Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(EnemyID(usize::from_binary(binary)?))
+    }
+}
 impl Board {
     pub fn add_enemy(&mut self, enemy: crate::enemy::Enemy) -> EnemyID {
         self.enemies.push(Some(enemy));

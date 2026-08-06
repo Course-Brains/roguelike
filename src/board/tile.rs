@@ -3,6 +3,7 @@ use super::RoomID;
 use crate::Vector;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
+use abes_nice_things::{FromBinary, ToBinary};
 /// Everything which makes up the map itself and not the logic of it, so not enemies but doors and
 /// walls.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,11 +12,33 @@ pub enum Tile {
     /// you can't blow it up (it's stronger than you)
     Wall,
     /// Like a wall, but you can make it pretend it doesn't exist. For a while anyway.
-    Door {
-        open: bool,
-        rooms: [RoomID; 2],
-    },
-    Marker,
+    Door { open: bool, rooms: [RoomID; 2] },
+}
+impl ToBinary for Tile {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+        match self {
+            Tile::Wall => false.to_binary(binary),
+            Tile::Door { open, rooms } => {
+                true.to_binary(binary)?;
+                open.to_binary(binary)?;
+                rooms.to_binary(binary)
+            }
+        }
+    }
+}
+impl FromBinary for Tile {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(match bool::from_binary(binary)? {
+            false => Tile::Wall,
+            true => Tile::Door {
+                open: bool::from_binary(binary)?,
+                rooms: <[RoomID; 2]>::from_binary(binary)?,
+            },
+        })
+    }
 }
 impl Tile {
     /// Gets the character and optionally the [Style] to draw the tile with
@@ -26,7 +49,6 @@ impl Tile {
                 (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE))
             }
             Tile::Door { open: true, .. } => OPEN_DOOR,
-            Tile::Marker => ('X', Some(*Style::new().purple().background_green())),
         }
     }
     /// Returns if the player will collide with this tile (not be able to walk through it)
@@ -34,7 +56,6 @@ impl Tile {
         match self {
             Tile::Wall => true,
             Tile::Door { open, .. } => !open,
-            Tile::Marker => false,
         }
     }
     pub fn is_enemy_collidable(&self) -> bool {

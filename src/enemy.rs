@@ -25,6 +25,10 @@ impl Enemy {
         }
     }
 }
+static CONVERTERS: [(
+    fn(&Box<dyn Any + Send>, &mut dyn Write) -> std::io::Result<()>,
+    fn(&mut dyn std::io::Read) -> std::io::Result<Box<dyn Any + Send>>,
+); VTABLES.len()] = [NO_OP_CONVERTERS, NO_OP_CONVERTERS];
 // And you're done
 
 use crate::Vector;
@@ -60,6 +64,40 @@ pub struct Enemy {
     /// The file for enemy specific logging
     /// This does NOT get saved when writing to a file
     log: Option<std::fs::File>,
+}
+impl ToBinary for Enemy {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.vtable_id.to_binary(binary)?;
+        (CONVERTERS[self.vtable_id.to_inner() as usize].0)(&self.state, binary)?;
+        self.health.to_binary(binary)?;
+        self.position.to_binary(binary)?;
+        self.move_target.as_ref().to_binary(binary)?;
+        self.end_goal.as_ref().to_binary(binary)?;
+        self.flags.to_binary(binary)?;
+        self.logical_position.to_binary(binary)?;
+        self.windup_time.to_binary(binary)
+        // log does NOT get saved
+    }
+}
+impl FromBinary for Enemy {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        let vtable_id = VTableID::from_binary(binary)?;
+        Ok(Enemy {
+            state: (CONVERTERS[vtable_id.to_inner() as usize].1)(binary)?,
+            health: usize::from_binary(binary)?,
+            position: <Vector<usize>>::from_binary(binary)?,
+            move_target: <Option<Vector<usize>>>::from_binary(binary)?,
+            end_goal: <Option<Vector<usize>>>::from_binary(binary)?,
+            vtable_id,
+            flags: Flags::from_binary(binary)?,
+            logical_position: <Vector<f64>>::from_binary(binary)?,
+            windup_time: usize::from_binary(binary)?,
+            log: None, // log does NOT get saved
+        })
+    }
 }
 impl Enemy {
     pub fn new(vtable_id: VTableID, position: Vector<usize>) -> Enemy {
@@ -382,6 +420,19 @@ impl Flags {
         self.0 ^= 0b10_0000
     }
 }
+impl ToBinary for Flags {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+        self.0.to_binary(binary)
+    }
+}
+impl FromBinary for Flags {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Flags(u8::from_binary(binary)?))
+    }
+}
 #[repr(u8)]
 enum WindupState {
     None = 0b0000,
@@ -425,6 +476,12 @@ impl VTableID {
     pub fn to_inner(self) -> u8 {
         unsafe { std::mem::transmute(self) }
     }
+    pub fn from_raw(raw: u8) -> Self {
+        if raw >= VTABLES.len() as u8 {
+            panic!("Attempted to make illegal vtable id: {raw}");
+        }
+        unsafe { std::mem::transmute(raw) }
+    }
 }
 impl ToBinary for VTableID {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
@@ -436,11 +493,7 @@ impl FromBinary for VTableID {
     where
         Self: Sized,
     {
-        unsafe {
-            Ok(std::mem::transmute::<u8, VTableID>(u8::from_binary(
-                binary,
-            )?))
-        }
+        Ok(VTableID::from_raw(u8::from_binary(binary)?))
     }
 }
 impl PartialOrd for VTableID {
@@ -453,3 +506,7 @@ impl Ord for VTableID {
         self.to_inner().cmp(&other.to_inner())
     }
 }
+static NO_OP_CONVERTERS: (
+    fn(&Box<dyn Any + Send>, &mut dyn Write) -> std::io::Result<()>,
+    fn(&mut dyn std::io::Read) -> std::io::Result<Box<dyn Any + Send>>,
+) = (|_, _| Ok(()), |_| Ok(Box::new(())));

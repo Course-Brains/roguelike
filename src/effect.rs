@@ -2,6 +2,7 @@ use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::require_debug;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 
 #[derive(Clone, Copy, Debug, Hash)]
 pub struct Effect {
@@ -19,7 +20,7 @@ pub struct EffectTracker {
     inner: [Option<usize>; EFFECTS.len()],
 }
 impl ToBinary for EffectTracker {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.inner
             .each_ref()
             .map(|time| time.as_ref())
@@ -27,10 +28,7 @@ impl ToBinary for EffectTracker {
     }
 }
 impl FromBinary for EffectTracker {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(EffectTracker {
             inner: <[Option<usize>; EFFECTS.len()]>::from_binary(binary)?,
         })

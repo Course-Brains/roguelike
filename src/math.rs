@@ -3,6 +3,7 @@ use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use abes_nice_things::PrimFrom;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 
 ////////////
 // Vector //
@@ -14,16 +15,13 @@ pub struct Vector<T: Number> {
     pub y: T,
 }
 impl<T: Number> ToBinary for Vector<T> {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.x.to_binary(binary)?;
         self.y.to_binary(binary)
     }
 }
 impl<T: Number> FromBinary for Vector<T> {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(Self {
             x: T::from_binary(binary)?,
             y: T::from_binary(binary)?,
@@ -228,7 +226,7 @@ pub enum Direction {
     Right,
 }
 impl ToBinary for Direction {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         match self {
             Direction::Up => 0_u8,
             Direction::Down => 1,
@@ -239,10 +237,7 @@ impl ToBinary for Direction {
     }
 }
 impl FromBinary for Direction {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match u8::from_binary(binary)? {
             0 => Direction::Up,
             1 => Direction::Down,
@@ -344,7 +339,7 @@ pub enum Axis {
     Vertical,
 }
 impl ToBinary for Axis {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         match self {
             Axis::Horizontal => false,
             Axis::Vertical => true,
@@ -353,10 +348,7 @@ impl ToBinary for Axis {
     }
 }
 impl FromBinary for Axis {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match bool::from_binary(binary)? {
             false => Axis::Horizontal,
             true => Axis::Vertical,
@@ -386,7 +378,7 @@ pub struct Zone<T: Number> {
     bottom: T,
 }
 impl<T: Number> ToBinary for Zone<T> {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.left.to_binary(binary)?;
         self.right.to_binary(binary)?;
         self.top.to_binary(binary)?;
@@ -394,10 +386,7 @@ impl<T: Number> ToBinary for Zone<T> {
     }
 }
 impl<T: Number> FromBinary for Zone<T> {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(Self {
             left: T::from_binary(binary)?,
             right: T::from_binary(binary)?,

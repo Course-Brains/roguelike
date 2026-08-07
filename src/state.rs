@@ -4,6 +4,7 @@ use crate::context_menu::ContextMenuID;
 use crate::math::*;
 use crate::player::Player;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 use std::io::Write;
 
 pub struct State {
@@ -20,7 +21,7 @@ pub struct State {
     next_enemy_visual: u8,
 }
 impl ToBinary for State {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.board.to_binary(binary)?;
         self.player.to_binary(binary)?;
         self.total_turns.to_binary(binary)?;
@@ -41,7 +42,7 @@ impl ToBinary for State {
     }
 }
 impl FromBinary for State {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         let mut state = State {
             board: Board::from_binary(binary)?,
             player: Player::from_binary(binary)?,
@@ -344,7 +345,7 @@ pub enum MapObject {
     Tile(Vector<usize>),
 }
 impl ToBinary for MapObject {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         match self {
             MapObject::Player => 0_u8.to_binary(binary),
             MapObject::Enemy(id) => {
@@ -359,16 +360,16 @@ impl ToBinary for MapObject {
     }
 }
 impl FromBinary for MapObject {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match u8::from_binary(binary)? {
             0 => MapObject::Player,
             1 => MapObject::Enemy(crate::board::EnemyID::from_binary(binary)?),
             2 => MapObject::Tile(<Vector<usize>>::from_binary(binary)?),
             _ => {
-                return Err(std::io::Error::new(
+                return Err(anyhow::Error::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "Could not get MapObject from binary due to invalid discriminant",
-                ));
+                )));
             }
         })
     }
@@ -381,7 +382,7 @@ pub enum Entity {
     Enemy(crate::board::EnemyID),
 }
 impl ToBinary for Entity {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         match self {
             Entity::Player => false.to_binary(binary),
             Entity::Enemy(id) => {
@@ -392,7 +393,7 @@ impl ToBinary for Entity {
     }
 }
 impl FromBinary for Entity {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match bool::from_binary(binary)? {
             false => Entity::Player,
             true => Entity::Enemy(crate::board::EnemyID::from_binary(binary)?),

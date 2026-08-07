@@ -39,6 +39,7 @@ use crate::state::*;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 use std::any::Any;
 use std::io::Write;
 
@@ -66,7 +67,7 @@ pub struct Enemy {
     log: Option<std::fs::File>,
 }
 impl ToBinary for Enemy {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.vtable_id.to_binary(binary)?;
         (CONVERTERS[self.vtable_id.to_inner() as usize].0)(&self.state, binary)?;
         self.health.to_binary(binary)?;
@@ -80,10 +81,7 @@ impl ToBinary for Enemy {
     }
 }
 impl FromBinary for Enemy {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         let vtable_id = VTableID::from_binary(binary)?;
         Ok(Enemy {
             state: (CONVERTERS[vtable_id.to_inner() as usize].1)(binary)?,
@@ -421,15 +419,12 @@ impl Flags {
     }
 }
 impl ToBinary for Flags {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.0.to_binary(binary)
     }
 }
 impl FromBinary for Flags {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(Flags(u8::from_binary(binary)?))
     }
 }
@@ -484,15 +479,12 @@ impl VTableID {
     }
 }
 impl ToBinary for VTableID {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.to_inner().to_binary(binary)
     }
 }
 impl FromBinary for VTableID {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(VTableID::from_raw(u8::from_binary(binary)?))
     }
 }

@@ -4,6 +4,7 @@ use crate::Vector;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 /// Everything which makes up the map itself and not the logic of it, so not enemies but doors and
 /// walls.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,7 +16,7 @@ pub enum Tile {
     Door { open: bool, rooms: [RoomID; 2] },
 }
 impl ToBinary for Tile {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         match self {
             Tile::Wall => false.to_binary(binary),
             Tile::Door { open, rooms } => {
@@ -27,10 +28,7 @@ impl ToBinary for Tile {
     }
 }
 impl FromBinary for Tile {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match bool::from_binary(binary)? {
             false => Tile::Wall,
             true => Tile::Door {

@@ -3,6 +3,7 @@ use crate::math::Vector;
 use crate::math::Zone;
 use abes_nice_things::PrimAs;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 use std::num::NonZeroU16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -16,15 +17,12 @@ pub fn room_id<T: PrimAs<u16>>(internal: T) -> RoomID {
     RoomID(internal.prim_as())
 }
 impl ToBinary for RoomID {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.get_inner().to_binary(binary)
     }
 }
 impl FromBinary for RoomID {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(RoomID(u16::from_binary(binary)?))
     }
 }
@@ -37,7 +35,7 @@ pub struct Room {
     pub enemies: Vec<EnemyID>,
 }
 impl ToBinary for Room {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.connections.len().to_binary(binary)?;
         for (position, room) in self.connections.iter() {
             position.to_binary(binary)?;
@@ -48,10 +46,7 @@ impl ToBinary for Room {
     }
 }
 impl FromBinary for Room {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(Room {
             connections: <Vec<(Vector<usize>, RoomID)>>::from_binary(binary)?,
             bounds: <Zone<usize>>::from_binary(binary)?,
@@ -86,7 +81,7 @@ impl Room {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoomIDFlagged(Option<NonZeroU16>);
 impl ToBinary for RoomIDFlagged {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         match self.0 {
             Some(id) => id.get(),
             None => 0,
@@ -95,10 +90,7 @@ impl ToBinary for RoomIDFlagged {
     }
 }
 impl FromBinary for RoomIDFlagged {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(RoomIDFlagged(NonZeroU16::new(u16::from_binary(binary)?)))
     }
 }

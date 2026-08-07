@@ -4,6 +4,7 @@ use crate::math::Zone;
 use crate::state::State;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 use std::io::Write;
 
 pub struct Player {
@@ -18,7 +19,7 @@ pub struct Player {
     pub effect_tracker: crate::effect::EffectTracker,
 }
 impl ToBinary for Player {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.position.to_binary(binary)?;
         self.selector.to_binary(binary)?;
         self.render_target.to_binary(binary)?;
@@ -31,10 +32,7 @@ impl ToBinary for Player {
     }
 }
 impl FromBinary for Player {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(Player {
             position: <Vector<usize>>::from_binary(binary)?,
             selector: <Vector<usize>>::from_binary(binary)?,
@@ -151,7 +149,7 @@ pub enum RenderTarget {
     Selector,
 }
 impl ToBinary for RenderTarget {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         match self {
             RenderTarget::Player => false,
             RenderTarget::Selector => true,
@@ -160,10 +158,7 @@ impl ToBinary for RenderTarget {
     }
 }
 impl FromBinary for RenderTarget {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match bool::from_binary(binary)? {
             false => RenderTarget::Player,
             true => RenderTarget::Selector,

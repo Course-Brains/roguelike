@@ -56,7 +56,7 @@ pub struct Board {
     rooms: Vec<Room>,
 }
 impl ToBinary for Board {
-    fn to_binary(&self, binary: &mut dyn Write) -> std::prelude::v1::Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.axis_length.to_binary(binary)?;
         self.tiles.len().to_binary(binary)?;
         for tile in self.tiles.iter() {
@@ -73,9 +73,7 @@ impl ToBinary for Board {
     }
 }
 impl FromBinary for Board {
-    fn from_binary(
-        binary: &mut dyn std::io::prelude::Read,
-    ) -> std::prelude::v1::Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         let axis_length = AxisLength::from_binary(binary)?;
         Ok(Board {
             tiles: <Vec<Option<Tile>>>::from_binary(binary)?,
@@ -319,14 +317,12 @@ impl Board {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EnemyID(pub usize);
 impl ToBinary for EnemyID {
-    fn to_binary(&self, binary: &mut dyn Write) -> std::prelude::v1::Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.0.to_binary(binary)
     }
 }
 impl FromBinary for EnemyID {
-    fn from_binary(
-        binary: &mut dyn std::io::prelude::Read,
-    ) -> std::prelude::v1::Result<Self, std::io::Error>
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self>
     where
         Self: Sized,
     {

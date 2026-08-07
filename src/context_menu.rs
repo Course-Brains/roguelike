@@ -2,6 +2,7 @@ use crate::board::EnemyID;
 use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 use std::io::Write;
 
 pub const COLUMNS_NEEDED: usize = 25;
@@ -107,7 +108,7 @@ pub enum Argument {
     Entity(Entity),
 }
 impl ToBinary for Argument {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         match self {
             Argument::EnemyID(id) => {
                 false.to_binary(binary)?;
@@ -121,7 +122,7 @@ impl ToBinary for Argument {
     }
 }
 impl FromBinary for Argument {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         Ok(match bool::from_binary(binary)? {
             false => Argument::EnemyID(EnemyID::from_binary(binary)?),
             true => Argument::Entity(Entity::from_binary(binary)?),
@@ -164,18 +165,18 @@ impl Default for ContextMenuID {
     }
 }
 impl ToBinary for ContextMenuID {
-    fn to_binary(&self, binary: &mut dyn Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         self.0.to_binary(binary)
     }
 }
 impl FromBinary for ContextMenuID {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error> {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         let inner = usize::from_binary(binary)?;
         if inner >= CONTEXT_MENUS.len() {
-            return Err(std::io::Error::new(
+            return Err(anyhow::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Could not load ContextMenuID from binary due to invalid inner value",
-            ));
+            )));
         }
         Ok(ContextMenuID(inner))
     }

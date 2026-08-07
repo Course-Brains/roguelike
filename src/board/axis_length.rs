@@ -1,4 +1,5 @@
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisLength {
@@ -9,12 +10,12 @@ pub enum AxisLength {
 }
 // Yes this is less efficient, I don't care
 impl ToBinary for AxisLength {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         self.to_inner().to_binary(binary)
     }
 }
 impl FromBinary for AxisLength {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self>
     where
         Self: Sized,
     {

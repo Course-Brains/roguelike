@@ -4,6 +4,7 @@ use crate::state::State;
 use abes_nice_things::PrimAs;
 use abes_nice_things::PrimFrom;
 use abes_nice_things::{FromBinary, ToBinary};
+use anyhow::Result;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RayCast {
@@ -17,7 +18,7 @@ pub struct RayCast {
     max_range: Option<usize>,
 }
 impl ToBinary for RayCast {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<(), std::io::Error> {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         // We are storing if max range exists with the other bools because it saves space
         self.start.to_binary(binary)?;
         self.target.to_binary(binary)?;
@@ -39,10 +40,7 @@ impl ToBinary for RayCast {
     }
 }
 impl FromBinary for RayCast {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self, std::io::Error>
-    where
-        Self: Sized,
-    {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
         let start = <Vector<usize>>::from_binary(binary)?;
         let target = <Vector<usize>>::from_binary(binary)?;
         let bools = abes_nice_things::expand(u8::from_binary(binary)?);

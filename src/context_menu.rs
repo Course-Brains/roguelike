@@ -3,6 +3,7 @@ use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
+use std::collections::VecDeque;
 use std::io::Write;
 
 pub const COLUMNS_NEEDED: usize = 25;
@@ -213,18 +214,42 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     ContextMenu {
         title: "DEBUG:",
         get_options: |state| {
-            vec![(
-                "Specific enemy debug".to_string(),
-                Choice::Recurse(SPECIFIC_ENEMY_DEBUG, |state| {
-                    Some(Argument::EnemyID(
-                        state
-                            .board
-                            .get_enemy_at_position(state.player.selector)
-                            .unwrap(),
-                    ))
-                }),
-                state.board.is_enemy_at_position(state.player.selector),
-            )]
+            vec![
+                (
+                    "Specific enemy debug".to_string(),
+                    Choice::Recurse(SPECIFIC_ENEMY_DEBUG, |state| {
+                        Some(Argument::EnemyID(
+                            state
+                                .board
+                                .get_enemy_at_position(state.player.selector)
+                                .unwrap(),
+                        ))
+                    }),
+                    state.board.is_enemy_at_position(state.player.selector),
+                ),
+                (
+                    "Test board binary".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        let mut buf = VecDeque::new();
+                        state.board.to_binary(&mut buf).unwrap();
+                        state.board = crate::board::Board::from_binary(&mut buf).unwrap();
+                        assert_eq!(buf.len(), 0);
+                        state.feedback = "Success".to_string();
+                    })),
+                    true,
+                ),
+                (
+                    "Test player binary".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        let mut buf = VecDeque::new();
+                        state.player.to_binary(&mut buf).unwrap();
+                        state.player = crate::player::Player::from_binary(&mut buf).unwrap();
+                        assert_eq!(buf.len(), 0);
+                        state.feedback = "Success".to_string();
+                    })),
+                    true,
+                ),
+            ]
         },
     },
     // 2: Specific enemy debug

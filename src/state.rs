@@ -34,7 +34,6 @@ impl ToBinary for State {
         }
         self.context_menu_inputs.to_binary(binary)?;
         self.feedback.to_binary(binary)?;
-        self.enemy_visuals.len().to_binary(binary)?;
         for enemy_visual in self.enemy_visuals.iter() {
             enemy_visual.as_ref().to_binary(binary)?;
         }

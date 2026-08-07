@@ -102,3 +102,34 @@ impl RoomIDFlagged {
         self.0.map(|id| RoomID(id.get() - 1))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::random::Random;
+    use std::collections::VecDeque;
+    #[test]
+    fn room_id_binary() {
+        let mut buf = VecDeque::new();
+        for _ in 0..1000 {
+            let test = RoomID(u16::random());
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, RoomID::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0);
+    }
+    #[test]
+    fn room_id_flagged_binary() {
+        let mut buf = VecDeque::new();
+        let test = RoomIDFlagged::new(None);
+        test.to_binary(&mut buf).unwrap();
+        assert_eq!(test, RoomIDFlagged::from_binary(&mut buf).unwrap());
+        buf.truncate(0);
+        for _ in 0..1000 {
+            let test = RoomIDFlagged(NonZeroU16::new(u16::random()));
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, RoomIDFlagged::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0);
+    }
+}

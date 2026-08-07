@@ -143,3 +143,30 @@ fn get_wall_char(board: &Board, position: Vector<usize>) -> char {
         '╳'
     }
 }
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use super::*;
+    use crate::board::room::room_id;
+    #[test]
+    fn tile_binary() {
+        let tests = [
+            Tile::Wall,
+            Tile::Door {
+                open: false,
+                rooms: [room_id(0), room_id(!0_u16)],
+            },
+            Tile::Door {
+                open: true,
+                rooms: [room_id(777), room_id(1234)],
+            },
+        ];
+        let mut buf = VecDeque::new();
+        for test in tests.into_iter() {
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, Tile::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0)
+    }
+}

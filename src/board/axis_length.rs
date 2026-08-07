@@ -82,6 +82,8 @@ impl std::fmt::Display for AxisLength {
 #[cfg(test)]
 mod tests {
     use super::AxisLength;
+    use abes_nice_things::{FromBinary, ToBinary};
+    use std::collections::VecDeque;
     #[test]
     fn small() {
         assert_eq!(64, AxisLength::Small.to_inner())
@@ -89,5 +91,18 @@ mod tests {
     #[test]
     fn full() {
         assert_eq!(1024, AxisLength::Full.to_inner())
+    }
+    fn binary(axis: AxisLength) {
+        let mut buf = VecDeque::new();
+        axis.to_binary(&mut buf).unwrap();
+        assert_eq!(axis, AxisLength::from_binary(&mut buf).unwrap())
+    }
+    #[test]
+    fn small_binary() {
+        binary(AxisLength::Small)
+    }
+    #[test]
+    fn full_binary() {
+        binary(AxisLength::Full)
     }
 }

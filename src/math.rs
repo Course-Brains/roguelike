@@ -1,3 +1,4 @@
+use crate::random::Random;
 use abes_nice_things::Integer;
 use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
@@ -328,6 +329,17 @@ impl std::ops::Not for Direction {
         }
     }
 }
+impl Random for Direction {
+    fn random() -> Self {
+        match u8::random() & 0b11 {
+            0 => Direction::Up,
+            1 => Direction::Down,
+            2 => Direction::Left,
+            3 => Direction::Right,
+            _ => unreachable!("Ar nawr!"),
+        }
+    }
+}
 
 //////////
 // Axis //
@@ -361,6 +373,14 @@ impl std::ops::Not for Axis {
         match self {
             Axis::Horizontal => Axis::Vertical,
             Axis::Vertical => Axis::Horizontal,
+        }
+    }
+}
+impl Random for Axis {
+    fn random() -> Self {
+        match bool::random() {
+            true => Axis::Horizontal,
+            false => Axis::Vertical,
         }
     }
 }
@@ -595,10 +615,62 @@ impl<'a, T: Integer> Iterator for Scanlines<'a, T> {
     }
 }
 #[cfg(test)]
-#[test]
-fn validate_scanlines() {
-    let zone = Zone::new(0, 63, 0, 63).unwrap(); // 64x64 = 4096
-    assert_eq!(zone.width(), 64);
-    assert_eq!(zone.height(), 64);
-    assert_eq!(zone.scanlines().count(), 4096)
+mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+    #[test]
+    fn validate_scanlines() {
+        let zone = Zone::new(0, 63, 0, 63).unwrap(); // 64x64 = 4096
+        assert_eq!(zone.width(), 64);
+        assert_eq!(zone.height(), 64);
+        assert_eq!(zone.scanlines().count(), 4096)
+    }
+    #[test]
+    fn vector_binary() {
+        let mut buf = VecDeque::new();
+        for _ in 0..1000 {
+            let test = Vector::new(usize::random(), usize::random());
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, <Vector<usize>>::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0);
+    }
+    #[test]
+    fn direction_binary() {
+        let mut buf = VecDeque::new();
+        for test in [
+            Direction::Up,
+            Direction::Down,
+            Direction::Left,
+            Direction::Right,
+        ]
+        .into_iter()
+        {
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, Direction::from_binary(&mut buf).unwrap())
+        }
+        assert_eq!(buf.len(), 0);
+    }
+    #[test]
+    fn axis_binary() {
+        let mut buf = VecDeque::new();
+        for test in [Axis::Horizontal, Axis::Vertical].into_iter() {
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, Axis::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0)
+    }
+    #[test]
+    fn zone_binary() {
+        let mut buf = VecDeque::new();
+        for _ in 0..1000 {
+            let test = Zone::from_vectors(
+                Vector::new(usize::random(), usize::random()),
+                Vector::new(usize::random(), usize::random()),
+            );
+            test.to_binary(&mut buf).unwrap();
+            assert_eq!(test, <Zone<usize>>::from_binary(&mut buf).unwrap());
+        }
+        assert_eq!(buf.len(), 0)
+    }
 }

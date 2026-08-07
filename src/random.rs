@@ -27,6 +27,11 @@ pub trait Random {
     /// states, floats do not implement this. If you want a float, try [random]
     fn random() -> Self;
 }
+impl Random for bool {
+    fn random() -> Self {
+        unsafe { std::mem::transmute(u8::random()) }
+    }
+}
 macro_rules! random_int_helper {
     ($type:ty) => {
         impl Random for $type {

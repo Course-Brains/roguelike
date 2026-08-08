@@ -4,10 +4,12 @@ mod context_menu;
 mod effect;
 mod enemy;
 mod input;
+mod main_menu;
 mod math;
 mod player;
 mod random;
 mod raycast;
+mod settings;
 mod state;
 
 use std::io::Write;
@@ -32,7 +34,7 @@ use math::Zone;
 
 fn main() {
     abes_nice_things::set_log_path("log").expect("Failed to set log path");
-    if let Err(error) = std::panic::catch_unwind(run) {
+    if let Err(error) = std::panic::catch_unwind(main_menu::main_menu) {
         // Panic handling
         let _ = normalize();
         print!("\x1b(B"); // reset confusion
@@ -47,7 +49,7 @@ fn main() {
         std::io::stdout().flush().unwrap();
     }
 }
-fn run() {
+fn play() {
     let terminal_size = get_terminal_size();
     let mut state = state::State::new(
         board::map_gen::generate(

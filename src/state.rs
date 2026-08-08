@@ -19,6 +19,8 @@ pub struct State {
     pub feedback: String,
     enemy_visuals: [Option<char>; crate::enemy::VTABLES.len()],
     next_enemy_visual: u8,
+    unlocked_settings: crate::settings::UnlockedSettings,
+    locked_settings: crate::settings::LockedSettings,
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -37,7 +39,9 @@ impl ToBinary for State {
         for enemy_visual in self.enemy_visuals.iter() {
             enemy_visual.as_ref().to_binary(binary)?;
         }
-        self.next_enemy_visual.to_binary(binary)
+        self.next_enemy_visual.to_binary(binary)?;
+        // Unlocked settings do not get saved by state
+        self.locked_settings.to_binary(binary)
     }
 }
 impl FromBinary for State {
@@ -52,6 +56,8 @@ impl FromBinary for State {
             feedback: String::from_binary(binary)?,
             enemy_visuals: <[Option<char>; crate::enemy::VTABLES.len()]>::from_binary(binary)?,
             next_enemy_visual: u8::from_binary(binary)?,
+            unlocked_settings: crate::settings::load_unlocked_settings(),
+            locked_settings: crate::settings::LockedSettings::from_binary(binary)?,
         };
         state.finish_load_effects();
         Ok(state)
@@ -59,6 +65,7 @@ impl FromBinary for State {
 }
 impl State {
     pub fn new(board: Board, player: Player, screen_size: Vector<usize>) -> State {
+        let (unlocked, locked) = crate::settings::load_from_file();
         State {
             board,
             player,
@@ -69,6 +76,8 @@ impl State {
             feedback: String::new(),
             enemy_visuals: [None; crate::enemy::VTABLES.len()],
             next_enemy_visual: 0,
+            unlocked_settings: unlocked,
+            locked_settings: locked,
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything

@@ -188,6 +188,7 @@ const DEBUG_MAIN: usize = 1;
 const SPECIFIC_ENEMY_DEBUG: usize = 2;
 const CHEAT_MAIN: usize = 3;
 const EFFECT_SETTER: usize = 4;
+const SETTINGS: usize = 5;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -196,6 +197,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "MAIN MENU:",
         get_options: |_| {
             vec![
+                (
+                    "Settings".to_string(),
+                    Choice::Recurse(SETTINGS, |_| None),
+                    true,
+                ),
                 (
                     "Debug".to_string(),
                     Choice::Recurse(DEBUG_MAIN, |_| None),
@@ -455,6 +461,37 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 ));
             }
             options
+        },
+    },
+    // 5: settings
+    // no argument
+    ContextMenu {
+        title: "SETTINGS",
+        get_options: |state| {
+            let mut out = Vec::new();
+            for (index, (name, value)) in state
+                .unlocked_settings
+                .get_names_and_values()
+                .into_iter()
+                .enumerate()
+            {
+                let row = index + 3;
+                let col = state.screen_size.x - COLUMNS_NEEDED + name.len() + 3;
+                out.push((
+                    format!("{name}: {value}"),
+                    Choice::Act(Box::new(move |state| {
+                        print!("\x1b[{row};{col}H\x1b[0K"); // Position cursor and clear old data
+                        std::io::stdout().flush().unwrap();
+                        state.unlocked_settings.prompt_set_value(name);
+                        crate::settings::save_to_file(
+                            &state.unlocked_settings,
+                            state.locked_settings(),
+                        );
+                    })),
+                    true,
+                ));
+            }
+            out
         },
     },
 ];

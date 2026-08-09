@@ -19,7 +19,7 @@ pub struct State {
     pub feedback: String,
     enemy_visuals: [Option<char>; crate::enemy::VTABLES.len()],
     next_enemy_visual: u8,
-    unlocked_settings: crate::settings::UnlockedSettings,
+    pub unlocked_settings: crate::settings::UnlockedSettings,
     locked_settings: crate::settings::LockedSettings,
 }
 impl ToBinary for State {
@@ -342,6 +342,9 @@ impl State {
                 effect.force_run_on_start(self, Entity::Player)
             }
         }
+    }
+    pub fn locked_settings(&self) -> &crate::settings::LockedSettings {
+        &self.locked_settings
     }
 }
 

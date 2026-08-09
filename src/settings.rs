@@ -65,7 +65,7 @@ macro_rules! settings {
                     $name,
                 )*]
             }
-            fn get_names_and_values(&self) -> Vec<(&'static str, String)> {
+            pub fn get_names_and_values(&self) -> Vec<(&'static str, String)> {
                 vec![$(
                     ($name, format!("{}", self.$field.value.as_ref().unwrap_or(&self.$field.default))),
                 )*]
@@ -73,7 +73,7 @@ macro_rules! settings {
             /// Set the cursor to the start of the value and clear until end of line before running
             /// this, k?
             /// Returns if it found a field to set, not if it set it
-            fn prompt_set_value(&mut self, name: &str) -> bool {
+            pub fn prompt_set_value(&mut self, name: &str) -> bool {
                 match name {$(
                     $name => {
                         // Handle the easy one first
@@ -189,7 +189,7 @@ pub fn load_unlocked_settings() -> UnlockedSettings {
     }
     unlocked
 }
-fn save_to_file(unlocked: &UnlockedSettings, locked: &LockedSettings) {
+pub fn save_to_file(unlocked: &UnlockedSettings, locked: &LockedSettings) {
     let mut file = File::create("settings").unwrap();
     unlocked.save_to_file(&mut file);
     locked.save_to_file(&mut file);

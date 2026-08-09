@@ -65,6 +65,7 @@ pub struct Enemy {
     /// The file for enemy specific logging
     /// This does NOT get saved when writing to a file
     log: Option<std::fs::File>,
+    pub effects: crate::effect::EffectTracker,
 }
 impl ToBinary for Enemy {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -76,8 +77,9 @@ impl ToBinary for Enemy {
         self.end_goal.as_ref().to_binary(binary)?;
         self.flags.to_binary(binary)?;
         self.logical_position.to_binary(binary)?;
-        self.windup_time.to_binary(binary)
+        self.windup_time.to_binary(binary)?;
         // log does NOT get saved
+        self.effects.to_binary(binary)
     }
 }
 impl FromBinary for Enemy {
@@ -94,6 +96,7 @@ impl FromBinary for Enemy {
             logical_position: <Vector<f64>>::from_binary(binary)?,
             windup_time: usize::from_binary(binary)?,
             log: None, // log does NOT get saved
+            effects: crate::effect::EffectTracker::from_binary(binary)?,
         })
     }
 }
@@ -111,6 +114,7 @@ impl Enemy {
             logical_position: position.prim_as() + 0.5,
             windup_time: 0,
             log: None,
+            effects: Default::default(),
         }
     }
     pub fn render(state: &mut State, id: EnemyID) -> (char, Style) {

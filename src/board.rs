@@ -120,6 +120,7 @@ impl Board {
     /// Then we pathfind
     pub fn increment(state: &mut State) {
         state.board.local_turns += 1;
+        Board::decriment_enemy_effects(state);
         Board::run_thinkers(state);
         Board::pathfind(state);
     }
@@ -647,6 +648,22 @@ impl Board {
             }
         }
         None
+    }
+    pub fn decriment_enemy_effects(state: &mut State) {
+        for id in 0..state.board.enemies.len() {
+            if state.board.enemies[id].is_some() {
+                let finished = state.board.enemies[id]
+                    .as_mut()
+                    .unwrap()
+                    .effects
+                    .decriment();
+                crate::effect::EffectTracker::run_on_ends(
+                    state,
+                    crate::state::Entity::Enemy(EnemyID(id)),
+                    finished,
+                );
+            }
+        }
     }
 }
 

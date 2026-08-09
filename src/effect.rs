@@ -1,6 +1,5 @@
 use crate::state::Entity;
 use crate::state::State;
-use abes_nice_things::require_debug;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 
@@ -67,12 +66,23 @@ impl EffectTracker {
     pub fn has(&self, effect: EffectID) -> bool {
         self.inner[effect.to_raw() as usize].is_none_or(|time| time > 0)
     }
+    pub fn give(state: &mut State, entity: Entity, effect: EffectID, time: Option<usize>) {
+        let effect_tracker = match entity {
+            Entity::Player => &mut state.player.effect_tracker,
+            Entity::Enemy(id) => &mut state.board[id].as_mut().unwrap().effects,
+        };
+        let run_on_start = !effect_tracker.has(effect);
+        effect_tracker.set_effect_time(effect, time);
+        if run_on_start {
+            (effect.get().on_start)(state, entity);
+        }
+    }
     /// Does NOT run on_start
     pub fn set_effect_time(&mut self, effect: EffectID, time: Option<usize>) {
         self.inner[effect.to_raw() as usize] = time
     }
     /// Does run on_start
-    pub fn prompt_set_time(state: &mut State, entity: Entity, effect: EffectID) {
+    pub fn prompt_set_time(state: &mut State, effect: EffectID) {
         let time = loop {
             let input = state.get_input("How many turns? ".to_string());
             break match input.as_str() {
@@ -89,17 +99,12 @@ impl EffectTracker {
             };
         };
         if time == Some(0) {
-            EffectTracker::clear(state, entity, effect);
+            EffectTracker::clear(state, Entity::Player, effect);
             return;
         }
-        match entity {
-            Entity::Player => {
-                if !state.player.effect_tracker.has(effect) {
-                    (effect.get().on_start)(state, entity);
-                }
-                state.player.effect_tracker.set_effect_time(effect, time);
-            }
-            Entity::Enemy(_) => abes_nice_things::require_debug!(todo!()),
+        state.player.effect_tracker.set_effect_time(effect, time);
+        if !state.player.effect_tracker.has(effect) {
+            (effect.get().on_start)(state, Entity::Player);
         }
     }
     pub fn get(&self, effect: EffectID) -> Option<usize> {
@@ -108,15 +113,15 @@ impl EffectTracker {
     pub fn iter_effect_ids() -> impl Iterator<Item = EffectID> {
         (0..EFFECTS.len()).map(|index| EffectID::from_raw(index as u8))
     }
+    /// Does run on_end
     pub fn clear(state: &mut State, entity: Entity, effect: EffectID) {
-        match entity {
-            Entity::Player => {
-                if state.player.effect_tracker.has(effect) {
-                    state.player.effect_tracker.inner[effect.to_raw() as usize] = Some(0);
-                    (effect.get().on_end)(state, entity);
-                }
-            }
-            Entity::Enemy(_) => require_debug!(todo!()),
+        let effect_tracker = match entity {
+            Entity::Player => &mut state.player.effect_tracker,
+            Entity::Enemy(id) => &mut state.board[id].as_mut().unwrap().effects,
+        };
+        if effect_tracker.has(effect) {
+            effect_tracker.inner[effect.to_raw() as usize] = Some(0);
+            (effect.get().on_end)(state, entity)
         }
     }
 }

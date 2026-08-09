@@ -231,7 +231,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                                 .unwrap(),
                         ))
                     }),
-                    state.board.is_enemy_at_position(state.player.selector),
+                    state.board.is_enemy_at_position(state.player.selector) && state.cheats,
                 ),
                 (
                     "Test board binary".to_string(),
@@ -368,11 +368,17 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     ContextMenu {
         title: "CHEATS:",
         get_options: |state| {
+            let cheats = state.cheats;
             vec![
+                (
+                    "Enable cheats".to_string(),
+                    Choice::Act(Box::new(|state| state.cheats = true)),
+                    !cheats,
+                ),
                 (
                     "Set effects".to_string(),
                     Choice::Recurse(EFFECT_SETTER, |_| Some(Argument::Entity(Entity::Player))),
-                    true,
+                    cheats,
                 ),
                 (
                     format!(
@@ -382,19 +388,19 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Act(Box::new(|state| {
                         state.player.no_interact_range_limit ^= true;
                     })),
-                    true,
+                    cheats,
                 ),
                 (
                     "Open all doors".to_string(),
                     Choice::Act(Box::new(|state| {
                         state.board.open_all_doors();
                     })),
-                    true,
+                    cheats,
                 ),
                 (
                     "Wake all enemies".to_string(),
                     Choice::Act(Box::new(|state| state.board.wake_all_enemies())),
-                    true,
+                    cheats,
                 ),
                 (
                     "Wake specific enemy".to_string(),
@@ -405,14 +411,14 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                             .unwrap();
                         state.board[id].as_mut().unwrap().flags.wake();
                     })),
-                    state.board.is_enemy_at_position(state.player.selector),
+                    state.board.is_enemy_at_position(state.player.selector) && cheats,
                 ),
                 (
                     "Teleport to selector".to_string(),
                     Choice::Act(Box::new(|state| {
                         state.player.position = state.player.selector
                     })),
-                    true,
+                    cheats,
                 ),
                 (
                     "Save".to_string(),
@@ -421,7 +427,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         let mut file = std::fs::File::create(path).unwrap();
                         state.to_binary(&mut file).unwrap();
                     })),
-                    true,
+                    cheats,
                 ),
                 (
                     "Load".to_string(),
@@ -430,7 +436,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         let mut file = std::fs::File::open(path).unwrap();
                         *state = State::from_binary(&mut file).unwrap();
                     })),
-                    true,
+                    cheats,
                 ),
             ]
         },
@@ -451,11 +457,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 options.push((
                     format!("{}: {time}", effect.get().name),
                     Choice::Act(Box::new(move |state| {
-                        crate::effect::EffectTracker::prompt_set_time(
-                            state,
-                            Entity::Player,
-                            effect,
-                        );
+                        crate::effect::EffectTracker::prompt_set_time(state, effect);
                     })),
                     true,
                 ));

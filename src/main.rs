@@ -158,3 +158,21 @@ fn get_terminal_size() -> Vector<usize> {
         .expect("This NEEDS stderr to be the terminal in order to work"),
     )
 }
+fn get_git_hash() -> String {
+    String::from_utf8(
+        std::process::Command::new("git")
+            .arg("log")
+            .arg("--oneline")
+            .arg("HEAD^..HEAD")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .trim_matches(|ch: char| !ch.is_ascii())
+    .split(" ")
+    .next()
+    .unwrap()
+    .to_string()
+}

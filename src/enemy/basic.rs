@@ -1,4 +1,7 @@
 use super::VTable;
+use super::WindupState;
+use crate::board::Board;
+use crate::math::*;
 use crate::random::Random;
 use crate::state::*;
 pub static VTABLE: VTable = VTable {
@@ -42,6 +45,20 @@ fn think(state: &mut State, id: super::EnemyID) {
 
     // Since we are awake let's get killing
     let this = state.board[id].as_mut().unwrap();
+    // If we are confused then walk in random direction if able
+    if this.effects.has(crate::effect::EffectID::Confusion) {
+        this.windup_time = 0;
+        this.flags.set_pathing(true);
+        this.flags.set_windup(WindupState::None);
+        let dir = Direction::random();
+        let start = this.get_position();
+        state.board[id].as_mut().unwrap().end_goal = if Board::enemy_can_move(state, start, dir) {
+            Some(start + dir)
+        } else {
+            None
+        };
+        return;
+    }
     this.end_goal = Some(state.player.position);
 
     // Are we smacking?
@@ -50,7 +67,7 @@ fn think(state: &mut State, id: super::EnemyID) {
         // Smack o clock
         if this.windup_time == 0 {
             this.flags.set_pathing(true);
-            this.flags.set_windup(super::WindupState::None);
+            this.flags.set_windup(WindupState::None);
             if state.player.position.is_near(this.position, SMACK_RANGE) {
                 crate::player::Player::damage(state, (u8::random() & 0b111) as usize + 1);
                 return;
@@ -61,7 +78,7 @@ fn think(state: &mut State, id: super::EnemyID) {
     else {
         if state.player.position.is_near(this.position, SMACK_RANGE) {
             this.flags.set_pathing(false);
-            this.flags.set_windup(super::WindupState::Physical);
+            this.flags.set_windup(WindupState::Physical);
             this.windup_time = 2;
         }
     }

@@ -21,6 +21,8 @@ pub struct State {
     next_enemy_visual: u8,
     pub unlocked_settings: crate::settings::UnlockedSettings,
     locked_settings: crate::settings::LockedSettings,
+    pub cheats: bool,
+    git_hash: String,
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -41,7 +43,9 @@ impl ToBinary for State {
         }
         self.next_enemy_visual.to_binary(binary)?;
         // Unlocked settings do not get saved by state
-        self.locked_settings.to_binary(binary)
+        self.locked_settings.to_binary(binary)?;
+        self.cheats.to_binary(binary)?;
+        self.git_hash.to_binary(binary)
     }
 }
 impl FromBinary for State {
@@ -58,7 +62,17 @@ impl FromBinary for State {
             next_enemy_visual: u8::from_binary(binary)?,
             unlocked_settings: crate::settings::load_unlocked_settings(),
             locked_settings: crate::settings::LockedSettings::from_binary(binary)?,
+            cheats: bool::from_binary(binary)?,
+            git_hash: String::from_binary(binary)?,
         };
+        let current_hash = crate::get_git_hash();
+        assert_eq!(
+            state.git_hash, current_hash,
+            "The save you tried to load is from a \
+        different version of the game and cannot be run on this version:\n\
+        Save's version: {}\nCurrent version: {current_hash}",
+            state.git_hash
+        );
         state.finish_load_effects();
         Ok(state)
     }
@@ -78,6 +92,8 @@ impl State {
             next_enemy_visual: 0,
             unlocked_settings: unlocked,
             locked_settings: locked,
+            cheats: false,
+            git_hash: crate::get_git_hash(),
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything
@@ -222,10 +238,6 @@ impl State {
         self.total_turns += 1;
         Board::increment(self);
         Player::increment(self);
-    }
-    pub fn is_reachable(&self, position: Vector<usize>) -> bool {
-        // Make it using the rooms for memoization
-        todo!()
     }
     pub fn get_context_menu(&self) -> &'static crate::context_menu::ContextMenu {
         self.context_menu_stack.last().unwrap().2.get_context_menu()

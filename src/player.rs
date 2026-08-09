@@ -83,12 +83,14 @@ impl Player {
             if let Some(id) = state
                 .board
                 .get_enemy_at_position(state.player.position + move_dir)
+                && *state.unlocked_settings.kick_enemies()
             {
                 Player::attack(state, id);
                 return true;
             } else if let Some(crate::board::tile::Tile::Door { open, .. }) =
                 &mut state.board[state.player.position + move_dir]
                 && !*open
+                && *state.unlocked_settings.kick_doors()
             {
                 *open = true;
                 return true;

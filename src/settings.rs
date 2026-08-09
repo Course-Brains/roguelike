@@ -99,7 +99,7 @@ macro_rules! settings {
             }
             $(
             /// Gets the value of the same name
-            fn $field(&self) -> &$type {
+            pub fn $field(&self) -> &$type {
                 self.$field.value.as_ref().unwrap_or(&self.$field.default)
             }
             )*

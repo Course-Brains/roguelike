@@ -290,6 +290,12 @@ impl Enemy {
                 new_room.enemies.push(id);
             }
         }
+
+        // Handling walk triggers
+        if let Some(crate::board::tile::Tile::WalkTrigger(walk_trigger)) = &state.board[new_pos] {
+            let walk_trigger = walk_trigger.clone();
+            walk_trigger.handle_enemy(state, id);
+        }
     }
     pub fn inital_room_memoize(board: &mut Board, id: EnemyID) {
         let rooms = board.get_possible_room_ids_at_position(board[id].as_ref().unwrap().position);

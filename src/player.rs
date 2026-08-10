@@ -99,6 +99,13 @@ impl Player {
         }
 
         state.player.position += move_dir;
+        let pos = state.player.position;
+        if let Some(crate::board::tile::Tile::WalkTrigger(walk_trigger)) = &state.board[pos] {
+            let walk_trigger = walk_trigger.clone();
+            if walk_trigger.handle_player(state) {
+                state.board[pos] = None;
+            }
+        }
         true
     }
     pub fn attack(state: &mut State, target: crate::board::EnemyID) {

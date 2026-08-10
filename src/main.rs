@@ -52,11 +52,11 @@ fn main() {
 fn play() {
     let terminal_size = get_terminal_size();
     let mut state = state::State::new(
-        board::map_gen::generate(
+        board::map_gen::generate(board::map_gen::MapGenSettings::new(
             AxisLength::Full,
             calc_desired_dimensions(terminal_size),
             10000,
-        )
+        ))
         .unwrap(),
         player::Player::new(Vector::new(1, 1)),
         terminal_size,
@@ -175,4 +175,21 @@ fn get_git_hash() -> String {
     .next()
     .unwrap()
     .to_string()
+}
+enum ThreadAsync<T: Send + 'static> {
+    Waiting(std::thread::JoinHandle<T>),
+    Done(T),
+}
+impl<T: Send + 'static> ThreadAsync<T> {
+    fn new<F: Fn() -> T + Send + 'static>(func: F) -> Self {
+        Self::Waiting(std::thread::spawn(func))
+    }
+    /// Consumes the [ThreadAsync] and returns the data output by the thread. This is a blocking
+    /// operation if the thread is not done
+    fn unwrap(self) -> Result<T, Box<dyn std::any::Any + Send + 'static>> {
+        match self {
+            Self::Waiting(handle) => handle.join(),
+            Self::Done(val) => Ok(val),
+        }
+    }
 }

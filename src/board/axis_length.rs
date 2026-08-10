@@ -1,7 +1,7 @@
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 #[repr(usize)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AxisLength {
     /// A 64 x 64 grid
     Small = 0b100_0000,
@@ -20,6 +20,28 @@ impl FromBinary for AxisLength {
         Self: Sized,
     {
         unsafe { Ok(AxisLength::from_inner(usize::from_binary(binary)?)) }
+    }
+}
+impl std::str::FromStr for AxisLength {
+    type Err = ();
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        Ok(match s {
+            "small" => AxisLength::Small,
+            "full" => AxisLength::Full,
+            _ => return Err(()),
+        })
+    }
+}
+impl std::fmt::Display for AxisLength {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                AxisLength::Small => "small",
+                AxisLength::Full => "full",
+            }
+        )
     }
 }
 impl AxisLength {
@@ -69,14 +91,6 @@ impl Ord for AxisLength {
     fn clamp(self, min: Self, max: Self) -> Self {
         // same as above
         unsafe { Self::from_inner(self.to_inner().clamp(min.to_inner(), max.to_inner())) }
-    }
-}
-impl std::fmt::Display for AxisLength {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Small => write!(f, "Small(64)"),
-            Self::Full => write!(f, "Full(1024)"),
-        }
     }
 }
 #[cfg(test)]

@@ -438,6 +438,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     })),
                     cheats,
                 ),
+                (
+                    "Go to shop".to_string(),
+                    Choice::Act(Box::new(|state| state.go_to_shop())),
+                    cheats,
+                ),
             ]
         },
     },

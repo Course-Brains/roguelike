@@ -1,8 +1,12 @@
+use crate::ThreadAsync;
 use crate::board::Board;
+use crate::board::map_gen::MapGenSettings;
 use crate::context_menu::ContextMenu;
 use crate::context_menu::ContextMenuID;
 use crate::math::*;
 use crate::player::Player;
+use crate::settings::LockedSettings;
+use crate::settings::UnlockedSettings;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 use std::io::Write;
@@ -19,13 +23,15 @@ pub struct State {
     pub feedback: String,
     enemy_visuals: [Option<char>; crate::enemy::VTABLES.len()],
     next_enemy_visual: u8,
-    pub unlocked_settings: crate::settings::UnlockedSettings,
-    locked_settings: crate::settings::LockedSettings,
+    pub unlocked_settings: UnlockedSettings,
+    locked_settings: LockedSettings,
     pub cheats: bool,
     git_hash: String,
+    pub next_level: Option<(MapGenSettings, ThreadAsync<Board>)>,
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
+        self.git_hash.to_binary(binary)?;
         self.board.to_binary(binary)?;
         self.player.to_binary(binary)?;
         self.total_turns.to_binary(binary)?;
@@ -45,12 +51,25 @@ impl ToBinary for State {
         // Unlocked settings do not get saved by state
         self.locked_settings.to_binary(binary)?;
         self.cheats.to_binary(binary)?;
-        self.git_hash.to_binary(binary)
+        self.next_level
+            .as_ref()
+            .map(|next| &next.0)
+            .to_binary(binary)
     }
 }
 impl FromBinary for State {
     fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
+        let saved_hash = String::from_binary(binary)?;
+        let current_hash = crate::get_git_hash();
+        assert_eq!(
+            saved_hash, current_hash,
+            "The save you tried to load is from a \
+        different version of the game and cannot be run on this version:\n\
+        Save's version: {}\nCurrent version: {current_hash}",
+            saved_hash
+        );
         let mut state = State {
+            git_hash: saved_hash,
             board: Board::from_binary(binary)?,
             player: Player::from_binary(binary)?,
             total_turns: usize::from_binary(binary)?,
@@ -63,16 +82,17 @@ impl FromBinary for State {
             unlocked_settings: crate::settings::load_unlocked_settings(),
             locked_settings: crate::settings::LockedSettings::from_binary(binary)?,
             cheats: bool::from_binary(binary)?,
-            git_hash: String::from_binary(binary)?,
+            next_level: None,
         };
-        let current_hash = crate::get_git_hash();
-        assert_eq!(
-            state.git_hash, current_hash,
-            "The save you tried to load is from a \
-        different version of the game and cannot be run on this version:\n\
-        Save's version: {}\nCurrent version: {current_hash}",
-            state.git_hash
-        );
+        if let Some(map_gen_settings) = <Option<MapGenSettings>>::from_binary(binary)? {
+            state.next_level = Some((
+                map_gen_settings,
+                crate::ThreadAsync::new(move || {
+                    crate::board::map_gen::generate(map_gen_settings).unwrap()
+                }),
+            ));
+        }
+
         state.finish_load_effects();
         Ok(state)
     }
@@ -94,6 +114,7 @@ impl State {
             locked_settings: locked,
             cheats: false,
             git_hash: crate::get_git_hash(),
+            next_level: None,
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything
@@ -357,6 +378,32 @@ impl State {
     }
     pub fn locked_settings(&self) -> &crate::settings::LockedSettings {
         &self.locked_settings
+    }
+    pub fn go_to_shop(&mut self) {
+        // First we start the map gen
+        let map_gen_settings = MapGenSettings::new(
+            *self.locked_settings().axis_length(),
+            crate::calc_desired_dimensions(self.screen_size),
+            10000,
+        );
+        self.next_level = Some((
+            map_gen_settings,
+            crate::ThreadAsync::new(move || {
+                crate::board::map_gen::generate(map_gen_settings).unwrap()
+            }),
+        ));
+
+        // Then we make the room
+        self.board = Board::create_blank_shop(crate::calc_desired_dimensions(self.screen_size));
+
+        let axis_length = self.board.axis_length();
+        // Then we fill it with goodies
+        self.board[Vector::new(axis_length.to_inner() - 2, 1)] = Some(
+            crate::board::tile::Tile::WalkTrigger(crate::board::tile::WalkTrigger::Exit),
+        );
+
+        // And we put the player in a good spot
+        self.player.position = Vector::new(1, 1);
     }
 }
 

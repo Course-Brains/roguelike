@@ -1,5 +1,6 @@
 use super::Board;
 use super::RoomID;
+pub use super::WalkTrigger;
 use crate::Vector;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
@@ -13,28 +14,41 @@ pub enum Tile {
     /// you can't blow it up (it's stronger than you)
     Wall,
     /// Like a wall, but you can make it pretend it doesn't exist. For a while anyway.
-    Door { open: bool, rooms: [RoomID; 2] },
+    Door {
+        open: bool,
+        rooms: [RoomID; 2],
+    },
+    WalkTrigger(WalkTrigger),
 }
 impl ToBinary for Tile {
     fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
         match self {
-            Tile::Wall => false.to_binary(binary),
+            Tile::Wall => 0_u8.to_binary(binary),
             Tile::Door { open, rooms } => {
-                true.to_binary(binary)?;
+                1_u8.to_binary(binary)?;
                 open.to_binary(binary)?;
                 rooms.to_binary(binary)
+            }
+            Tile::WalkTrigger(walk_trigger) => {
+                2_u8.to_binary(binary)?;
+                walk_trigger.to_binary(binary)
             }
         }
     }
 }
 impl FromBinary for Tile {
     fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
-        Ok(match bool::from_binary(binary)? {
-            false => Tile::Wall,
-            true => Tile::Door {
+        Ok(match u8::from_binary(binary)? {
+            0 => Tile::Wall,
+            1 => Tile::Door {
                 open: bool::from_binary(binary)?,
                 rooms: <[RoomID; 2]>::from_binary(binary)?,
             },
+            2 => Tile::WalkTrigger(WalkTrigger::from_binary(binary)?),
+            other => anyhow::bail!(
+                "Attempted to get Tile from binary with invalid \
+            discriminant: {other}"
+            ),
         })
     }
 }
@@ -47,6 +61,7 @@ impl Tile {
                 (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE))
             }
             Tile::Door { open: true, .. } => OPEN_DOOR,
+            Tile::WalkTrigger(walk_trigger) => (walk_trigger.get_char(), None),
         }
     }
     /// Returns if the player will collide with this tile (not be able to walk through it)
@@ -54,13 +69,14 @@ impl Tile {
         match self {
             Tile::Wall => true,
             Tile::Door { open, .. } => !open,
+            Tile::WalkTrigger(_) => false, // Must be able to walk on it to trigger it
         }
     }
     pub fn is_enemy_collidable(&self) -> bool {
         self.is_player_collidable() // for now these are aligned
     }
     pub fn is_wall_connectable(&self) -> bool {
-        true // both walls and doors are always connectable
+        matches!(self, Tile::Wall | Tile::Door { .. })
     }
     pub fn is_raycast_hittable(&self) -> bool {
         self.is_player_collidable() //for now these are aligned

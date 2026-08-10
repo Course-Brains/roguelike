@@ -1,3 +1,4 @@
+use crate::board::AxisLength;
 use crate::math::*;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -123,11 +124,11 @@ settings!(
 );
 // Locked settings
 settings!(
-    LockedSettings as f64,
-    enemy_budget_mult,
-    "enemy budget multiplier",
-    1.0,
-    None
+    LockedSettings as AxisLength,
+    axis_length,
+    "map size",
+    AxisLength::Full,
+    Some(&[AxisLength::Small, AxisLength::Full])
 );
 
 /// Settings that can only be changed in between runs and will be saved and loaded with [State].

@@ -8,6 +8,7 @@ use crate::enemy::Enemy;
 use crate::math::Axis;
 use crate::random::PickRandom;
 use crate::random::Random;
+use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 
 // Start with a box defined by the axis length and budget.
@@ -24,11 +25,42 @@ use anyhow::Result;
 // Because all of this is happening in a different thread, we do not need to care about
 // performance*
 
-pub fn generate(
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MapGenSettings {
     axis_length: AxisLength,
     desired_viewport: Vector<usize>,
     budget: usize,
-) -> Result<Board> {
+}
+impl MapGenSettings {
+    pub fn new(axis_length: AxisLength, desired_viewport: Vector<usize>, budget: usize) -> Self {
+        Self {
+            axis_length,
+            desired_viewport,
+            budget,
+        }
+    }
+}
+impl ToBinary for MapGenSettings {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
+        self.axis_length.to_binary(binary)?;
+        self.desired_viewport.to_binary(binary)?;
+        self.budget.to_binary(binary)
+    }
+}
+impl FromBinary for MapGenSettings {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
+        Ok(MapGenSettings {
+            axis_length: AxisLength::from_binary(binary)?,
+            desired_viewport: <Vector<usize>>::from_binary(binary)?,
+            budget: usize::from_binary(binary)?,
+        })
+    }
+}
+
+pub fn generate(settings: MapGenSettings) -> Result<Board> {
+    let axis_length = settings.axis_length;
+    let desired_viewport = settings.desired_viewport;
+    let budget = settings.budget;
     let mut rooms = Vec::new();
     rooms.push(Room {
         bounds: Zone::from_vectors(
@@ -47,7 +79,7 @@ pub fn generate(
     let mut tiles = Board::create_blank_tile_array(axis_length)?;
     Room::place_walls(&mut rooms, 0, axis_length, &mut tiles)?;
 
-    let mut board = Board::new(axis_length, desired_viewport)?;
+    let mut board = Board::new(axis_length, desired_viewport, super::MapType::Normal)?;
     board.tiles = tiles;
     Room::create_counterparts(&mut rooms, 0, &mut board);
     Room::fill_counterpart_adjacencies(&mut board);

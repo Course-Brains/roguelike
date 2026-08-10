@@ -22,6 +22,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Write;
 use tile::Tile;
+mod walk_trigger;
+pub use walk_trigger::WalkTrigger;
 
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.
@@ -54,6 +56,7 @@ pub struct Board {
     /// The number of turns spent on this map
     local_turns: usize,
     rooms: Vec<Room>,
+    map_type: MapType,
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -69,7 +72,8 @@ impl ToBinary for Board {
             enemy.as_ref().to_binary(binary)?;
         }
         self.local_turns.to_binary(binary)?;
-        self.rooms.to_binary(binary)
+        self.rooms.to_binary(binary)?;
+        self.map_type.to_binary(binary)
     }
 }
 impl FromBinary for Board {
@@ -85,6 +89,7 @@ impl FromBinary for Board {
             enemies: <Vec<Option<Enemy>>>::from_binary(binary)?,
             local_turns: usize::from_binary(binary)?,
             rooms: <Vec<Room>>::from_binary(binary)?,
+            map_type: MapType::from_binary(binary)?,
         })
     }
 }
@@ -93,7 +98,11 @@ impl FromBinary for Board {
 impl Board {
     /// Creates a blank board which is not populated by tile objects or map objects and is
     /// therefore not valid
-    pub fn new(axis_length: AxisLength, desired_viewport: Vector<usize>) -> Result<Board> {
+    pub fn new(
+        axis_length: AxisLength,
+        desired_viewport: Vector<usize>,
+        map_type: MapType,
+    ) -> Result<Board> {
         Ok(Board {
             tiles: Board::create_blank_tile_array(axis_length)?,
             room_map: vec![
@@ -106,6 +115,7 @@ impl Board {
             enemies: Vec::new(),
             local_turns: 0,
             rooms: Vec::new(),
+            map_type,
         })
     }
     pub fn axis_length(&self) -> AxisLength {
@@ -143,6 +153,22 @@ impl Board {
                 enemy.flags.wake()
             }
         }
+    }
+    /// Creates a valid but empty shop without anything to buy and no exit
+    pub fn create_blank_shop(desired_viewport: Vector<usize>) -> Board {
+        let mut out = Board::new(AxisLength::Small, desired_viewport, MapType::Shop).unwrap();
+        let edge = AxisLength::Small.to_inner() - 1;
+
+        for i in 0..AxisLength::Small.to_inner() {
+            for pos in [(i, 0), (0, i), (i, edge), (edge, i)]
+                .map(|(x, y)| Vector::new(x, y))
+                .into_iter()
+            {
+                out[pos] = Some(Tile::Wall);
+            }
+        }
+
+        out
     }
 }
 
@@ -742,6 +768,27 @@ fn convert_z_order_index(index: Vector<usize>, axis_length: AxisLength) -> Resul
     // 3 3 2 2 1 1 0 0
 
     Ok(true_index)
+}
+/// The various types of maps that the board can be
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum MapType {
+    Normal = 0,
+    Shop = 1,
+}
+impl FromBinary for MapType {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
+        let inner = u8::from_binary(binary)?;
+        if inner > 1 {
+            anyhow::bail!("Attempted to load MapType with illegal discriminant: {inner}")
+        }
+        Ok(unsafe { std::mem::transmute(inner) })
+    }
+}
+impl ToBinary for MapType {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
+        unsafe { std::mem::transmute::<Self, u8>(*self) }.to_binary(binary)
+    }
 }
 #[cfg(test)]
 #[test]

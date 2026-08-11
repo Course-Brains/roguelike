@@ -8,6 +8,7 @@ use crate::enemy::Enemy;
 use crate::math::Axis;
 use crate::random::PickRandom;
 use crate::random::Random;
+use abes_nice_things::log;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 
@@ -61,6 +62,7 @@ pub fn generate(settings: MapGenSettings) -> Result<Board> {
     let axis_length = settings.axis_length;
     let desired_viewport = settings.desired_viewport;
     let budget = settings.budget;
+    log!("Generating board with budget: {budget}");
     let mut rooms = Vec::new();
     rooms.push(Room {
         bounds: Zone::from_vectors(
@@ -70,12 +72,14 @@ pub fn generate(settings: MapGenSettings) -> Result<Board> {
         children: None,
         budget,
     });
+    log!("  Subdividing");
     Room::subdivide(
         &mut rooms,
         0,
         0,
         (axis_length.to_inner() as f64).powf(1.5).cbrt(),
     );
+    log!("  Done subdividing");
     let mut tiles = Board::create_blank_tile_array(axis_length)?;
     Room::place_walls(&mut rooms, 0, axis_length, &mut tiles)?;
 
@@ -86,7 +90,9 @@ pub fn generate(settings: MapGenSettings) -> Result<Board> {
     Room::set_room_map(&mut board);
     let spawn_budget = Room::remove_budget_of_spawn(&mut rooms, 0);
     Room::reallocate_spawn_budget(&mut rooms, 0, spawn_budget);
+    log!("Placing enemies");
     Room::place_enemies(&mut board, &rooms, 0);
+    log!("Validating");
     validate(&board);
     Ok(board)
 }
@@ -440,8 +446,8 @@ impl Room {
                 .subset(&room_bounds)
                 .unwrap();
                 let max_tier = board[*center].as_ref().unwrap().get_vtable().tier;
-                // usual 10 attempts max
-                for _ in 0..10 {
+                // usual 20 attempts max
+                for _ in 0..20 {
                     let position = spawn_bounds.generate();
                     if board.is_enemy_at_position(position) {
                         continue;
@@ -456,6 +462,8 @@ impl Room {
                     // continuing
                     return;
                 }
+                // If we reach this then we can't place enemies and I give up
+                return;
             }
         }
     }

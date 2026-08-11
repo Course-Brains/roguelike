@@ -30,7 +30,8 @@ impl WalkTrigger {
             // Go to next level
             MapType::Shop => {
                 state.board = state.next_level.take().unwrap().1.unwrap().unwrap();
-                state.player.position = Vector::new(1, 1)
+                state.player.position = Vector::new(1, 1);
+                state.player.selector = Vector::new(1, 1);
             }
         }
         false

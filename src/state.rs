@@ -381,10 +381,11 @@ impl State {
     }
     pub fn go_to_shop(&mut self) {
         // First we start the map gen
+        let budget = self.calculate_budget();
         let map_gen_settings = MapGenSettings::new(
             *self.locked_settings().axis_length(),
             crate::calc_desired_dimensions(self.screen_size),
-            10000,
+            budget,
         );
         self.next_level = Some((
             map_gen_settings,
@@ -404,6 +405,20 @@ impl State {
 
         // And we put the player in a good spot
         self.player.position = Vector::new(1, 1);
+        self.player.selector = Vector::new(1, 1);
+    }
+    /// This is only to be used while currently in a completed level
+    fn calculate_budget(&self) -> usize {
+        // Math:
+        // budget = board_area/100 + total_turns/100
+
+        // We start with a base of map area / 100
+        let mut budget = self.board.axis_length().area() / 100;
+
+        // We add total turns / 100
+        budget += self.total_turns / 100;
+
+        budget
     }
 }
 

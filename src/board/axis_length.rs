@@ -58,6 +58,9 @@ impl AxisLength {
     pub const unsafe fn from_inner(inner: usize) -> Self {
         unsafe { std::mem::transmute(inner) }
     }
+    pub const fn area(self) -> usize {
+        self.to_inner().pow(2)
+    }
 }
 impl PartialOrd for AxisLength {
     fn lt(&self, other: &Self) -> bool {

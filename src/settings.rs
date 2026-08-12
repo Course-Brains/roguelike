@@ -120,7 +120,13 @@ settings!(
     kick_enemies,
     "kick enemies",
     true,
-    Some(&[true, false])
+    Some(&[true, false]);
+
+    ResizeTriggerMode,
+    resize_trigger_mode,
+    "resize_mode",
+    ResizeTriggerMode::Manual,
+    Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto])
 );
 // Locked settings
 settings!(
@@ -301,4 +307,36 @@ pub fn settings_editor() {
         }
     }
     save_to_file(&unlocked, &locked);
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum ResizeTriggerMode {
+    Auto,
+    Manual,
+}
+impl std::fmt::Display for ResizeTriggerMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::Manual => write!(f, "manual"),
+        }
+    }
+}
+impl std::str::FromStr for ResizeTriggerMode {
+    type Err = ();
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        Ok(match s {
+            "auto" => Self::Auto,
+            "manual" => Self::Manual,
+            _ => return Err(()),
+        })
+    }
+}
+impl ResizeTriggerMode {
+    pub fn is_auto(self) -> bool {
+        matches!(self, Self::Auto)
+    }
+    pub fn is_manual(&self) -> bool {
+        matches!(self, Self::Manual)
+    }
 }

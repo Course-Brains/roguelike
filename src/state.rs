@@ -119,6 +119,9 @@ impl State {
     }
     /// Clear the screen and draw the board, the player, enemies, everything
     pub fn render(&mut self) {
+        if self.unlocked_settings.resize_trigger_mode().is_auto() {
+            self.rememo_screen_size();
+        }
         let center = self.player.get_render_target_pos();
         let viewport = self.board.calculate_viewport(center);
         let mut buffer = Vec::new();
@@ -403,7 +406,7 @@ impl State {
             crate::board::tile::Tile::WalkTrigger(crate::board::tile::WalkTrigger::Exit),
         );
 
-        // And we put the player in a good spot
+        // And we do some housekeeping
         self.player.position = Vector::new(1, 1);
         self.player.selector = Vector::new(1, 1);
     }
@@ -419,6 +422,11 @@ impl State {
         budget += self.total_turns / 100;
 
         budget
+    }
+    pub fn rememo_screen_size(&mut self) {
+        self.screen_size = crate::get_terminal_size();
+        let desired = crate::calc_desired_dimensions(self.screen_size);
+        self.board.recalc_viewport(desired);
     }
 }
 

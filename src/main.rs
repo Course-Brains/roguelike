@@ -90,6 +90,13 @@ fn play() {
                 }*/
             }
             Input::SkipTurn => true,
+            Input::ResizeScreen => {
+                if state.unlocked_settings.resize_trigger_mode().is_manual() {
+                    state.rememo_screen_size();
+                }
+                state.render();
+                false
+            }
         } {
             state.increment();
         }

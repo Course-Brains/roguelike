@@ -118,6 +118,9 @@ impl Board {
             map_type,
         })
     }
+    pub fn recalc_viewport(&mut self, desired: Vector<usize>) {
+        self.viewport_size = desired.min(Vector::equal_from_axis(self.axis_length().to_inner()));
+    }
     pub fn axis_length(&self) -> AxisLength {
         self.axis_length
     }

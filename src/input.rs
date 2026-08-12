@@ -8,6 +8,7 @@ pub enum Input {
     Select,
     ChangeRenderTarget,
     SkipTurn,
+    ResizeScreen,
 }
 impl Input {
     pub fn get() -> Input {
@@ -35,6 +36,7 @@ impl Input {
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
                 b'\t' => Input::SkipTurn,
+                b'+' => Input::ResizeScreen,
                 _ => continue,
             };
         }

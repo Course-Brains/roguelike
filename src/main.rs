@@ -50,17 +50,7 @@ fn main() {
     }
 }
 fn play() {
-    let terminal_size = get_terminal_size();
-    let mut state = state::State::new(
-        board::map_gen::generate(board::map_gen::MapGenSettings::new(
-            AxisLength::Full,
-            calc_desired_dimensions(terminal_size),
-            10000,
-        ))
-        .unwrap(),
-        player::Player::new(Vector::new(1, 1)),
-        terminal_size,
-    );
+    let mut state = state::State::new();
 
     weirdify().unwrap();
     loop {

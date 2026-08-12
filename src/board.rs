@@ -159,7 +159,7 @@ impl Board {
     }
     /// Creates a valid but empty shop without anything to buy and no exit
     pub fn create_blank_shop(desired_viewport: Vector<usize>) -> Board {
-        let mut out = Board::new(AxisLength::Small, desired_viewport, MapType::Shop).unwrap();
+        let mut out = Board::new(AxisLength::Tiny, desired_viewport, MapType::Shop).unwrap();
         let edge = AxisLength::Small.to_inner() - 1;
 
         for i in 0..AxisLength::Small.to_inner() {

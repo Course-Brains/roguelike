@@ -98,11 +98,19 @@ impl FromBinary for State {
     }
 }
 impl State {
-    pub fn new(board: Board, player: Player, screen_size: Vector<usize>) -> State {
+    pub fn new() -> State {
+        let screen_size = crate::get_terminal_size();
         let (unlocked, locked) = crate::settings::load_from_file();
+        let budget = ((locked.axis_length().area() / 100) as f32 * locked.enemy_mult()) as usize;
+        let board = crate::board::map_gen::generate(crate::board::map_gen::MapGenSettings::new(
+            *locked.axis_length(),
+            crate::calc_desired_dimensions(screen_size),
+            budget,
+        ))
+        .unwrap();
         State {
             board,
-            player,
+            player: Player::new(Vector::new(1, 1)),
             total_turns: 0,
             screen_size,
             context_menu_stack: vec![(None, 0, ContextMenuID::default())],
@@ -420,6 +428,9 @@ impl State {
 
         // We add total turns / 100
         budget += self.total_turns / 100;
+
+        // And we multiply by the multiplier
+        budget = (budget as f32 * self.locked_settings().enemy_mult()) as usize;
 
         budget
     }

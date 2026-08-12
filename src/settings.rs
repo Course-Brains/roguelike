@@ -9,8 +9,8 @@ use std::io::Write;
 
 macro_rules! settings {
     // The macro call which does
-    ($setting_type:tt as $($type:ty, $field:ident, $name:literal, $default:expr, $values:expr);*) => {
-        settings!($setting_type | $($type, $field, $name, $default, $values);*);
+    ($setting_type:tt; $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*) => {
+        settings!($setting_type | $($field = $name: $type, $default => $values);*);
         impl ToBinary for $setting_type {
             fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
                 $(self.$field.value.as_ref().to_binary(binary)?;)*
@@ -26,7 +26,7 @@ macro_rules! settings {
         }
     };
     // The macro call which does not implement binary conversions
-    ($setting_type:tt | $($type:ty, $field:ident, $name:literal, $default:expr, $values:expr);*) => {
+    ($setting_type:tt | $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*) => {
         /// Settings that can be changed at any time and do not get saved by [State]. Things like personal
         /// preferences rather than game affecting things
         #[derive(Debug)]
@@ -110,31 +110,33 @@ macro_rules! settings {
 // Unlocked settings
 settings!(
     UnlockedSettings |
-    bool,
-    kick_doors,
-    "kick doors",
-    true,
-    Some(&[true, false]);
 
-    bool,
-    kick_enemies,
-    "kick enemies",
-    true,
-    Some(&[true, false]);
+    kick_doors = "kick_doors": bool,
+    true => Some(&[true, false]);
 
-    ResizeTriggerMode,
-    resize_trigger_mode,
-    "resize_mode",
-    ResizeTriggerMode::Manual,
-    Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto])
+    kick_enemies = "kick_enemies": bool,
+    true => Some(&[true, false]);
+
+    resize_trigger_mode = "resize_mode": ResizeTriggerMode,
+    ResizeTriggerMode::Manual => Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto])
+
+
 );
 // Locked settings
 settings!(
-    LockedSettings as AxisLength,
-    axis_length,
-    "map size",
-    AxisLength::Full,
-    Some(&[AxisLength::Small, AxisLength::Full])
+    LockedSettings;
+
+    axis_length = "map size": AxisLength,
+    AxisLength::Small => Some(&[
+        AxisLength::Tiny,
+        AxisLength::Small,
+        AxisLength::Medium,
+        AxisLength::Large,
+        AxisLength::Full
+    ]);
+
+    enemy_mult = "enemy mult": f32,
+    1.0 => None
 );
 
 /// Settings that can only be changed in between runs and will be saved and loaded with [State].

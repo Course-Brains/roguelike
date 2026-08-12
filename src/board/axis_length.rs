@@ -4,7 +4,13 @@ use anyhow::Result;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AxisLength {
     /// A 64 x 64 grid
-    Small = 0b100_0000,
+    Tiny = 0b000_0100_0000,
+    /// A 128 x 128 grid
+    Small = 0b000_1000_0000,
+    /// A 256 x 256 grid
+    Medium = 0b001_0000_0000,
+    /// A 512 x 512 grid
+    Large = 0b010_0000_0000,
     /// A 1024 x 1024 grid
     Full = 0b100_0000_0000,
 }
@@ -26,7 +32,10 @@ impl std::str::FromStr for AxisLength {
     type Err = ();
     fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
         Ok(match s {
+            "tiny" => AxisLength::Tiny,
             "small" => AxisLength::Small,
+            "medium" => AxisLength::Medium,
+            "large" => AxisLength::Large,
             "full" => AxisLength::Full,
             _ => return Err(()),
         })
@@ -38,7 +47,10 @@ impl std::fmt::Display for AxisLength {
             f,
             "{}",
             match self {
+                AxisLength::Tiny => "tiny",
                 AxisLength::Small => "small",
+                AxisLength::Medium => "medium",
+                AxisLength::Large => "large",
                 AxisLength::Full => "full",
             }
         )
@@ -106,6 +118,10 @@ mod tests {
         assert_eq!(64, AxisLength::Small.to_inner())
     }
     #[test]
+    fn large() {
+        assert_eq!(512, AxisLength::Large.to_inner())
+    }
+    #[test]
     fn full() {
         assert_eq!(1024, AxisLength::Full.to_inner())
     }
@@ -117,6 +133,10 @@ mod tests {
     #[test]
     fn small_binary() {
         binary(AxisLength::Small)
+    }
+    #[test]
+    fn large_binary() {
+        binary(AxisLength::Large)
     }
     #[test]
     fn full_binary() {

@@ -14,7 +14,6 @@ mod state;
 
 use std::io::Write;
 
-use board::AxisLength;
 use input::Input;
 use input::normalize;
 use input::weirdify;
@@ -63,22 +62,7 @@ fn play() {
                 false
             }
             Input::ToggleContextMenu => state.handle_toggle_context_menu_input(),
-            Input::Select => {
-                state.handle_select_input()
-                /*if state.board.count_enemies() == 0 {
-                    state.board.add_enemy(enemy::Enemy::new(
-                        &enemy::dummy::VTABLE,
-                        state.player.selector,
-                    ));
-                } else {
-                    state
-                        .board
-                        .get_enemy_mut(board::EnemyID(0))
-                        .as_mut()
-                        .unwrap()
-                        .move_target = Some(state.player.selector);
-                }*/
-            }
+            Input::Select => state.handle_select_input(),
             Input::SkipTurn => true,
             Input::ResizeScreen => {
                 if state.unlocked_settings.resize_trigger_mode().is_manual() {
@@ -89,6 +73,9 @@ fn play() {
             }
         } {
             state.increment();
+        }
+        if state.exit {
+            break;
         }
     }
 }
@@ -172,6 +159,20 @@ fn get_git_hash() -> String {
     .next()
     .unwrap()
     .to_string()
+}
+/// Writes the bell character to the given destination or stdout if none is given.
+///
+/// If it is writing to stdout then it will flush afterwards
+fn bell(dest: Option<&mut impl Write>) -> anyhow::Result<()> {
+    match dest {
+        Some(dest) => dest.write_all(&[7])?,
+        None => {
+            let mut stdout = std::io::stdout();
+            stdout.write_all(&[7])?;
+            stdout.flush()?
+        }
+    }
+    Ok(())
 }
 enum ThreadAsync<T: Send + 'static> {
     Waiting(std::thread::JoinHandle<T>),

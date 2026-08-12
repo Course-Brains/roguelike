@@ -92,7 +92,7 @@ impl ContextMenu {
 pub enum Choice {
     /// The context menu to recurse into and a function to create the argument of it, most of the
     /// time you just want |_| None
-    Recurse(usize, fn(&mut State) -> Option<Argument>),
+    Recurse(usize, Option<Box<dyn Fn(&mut State) -> Argument>>),
     Act(Box<dyn Fn(&mut crate::state::State)>),
 }
 
@@ -199,17 +199,13 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             vec![
                 (
                     "Settings".to_string(),
-                    Choice::Recurse(SETTINGS, |_| None),
+                    Choice::Recurse(SETTINGS, None),
                     true,
                 ),
-                (
-                    "Debug".to_string(),
-                    Choice::Recurse(DEBUG_MAIN, |_| None),
-                    true,
-                ),
+                ("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, None), true),
                 (
                     "Cheats".to_string(),
-                    Choice::Recurse(CHEAT_MAIN, |_| None),
+                    Choice::Recurse(CHEAT_MAIN, None),
                     true,
                 ),
             ]
@@ -223,14 +219,17 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             vec![
                 (
                     "Specific enemy debug".to_string(),
-                    Choice::Recurse(SPECIFIC_ENEMY_DEBUG, |state| {
-                        Some(Argument::EnemyID(
-                            state
-                                .board
-                                .get_enemy_at_position(state.player.selector)
-                                .unwrap(),
-                        ))
-                    }),
+                    Choice::Recurse(
+                        SPECIFIC_ENEMY_DEBUG,
+                        Some(Box::new(|state| {
+                            Argument::EnemyID(
+                                state
+                                    .board
+                                    .get_enemy_at_position(state.player.selector)
+                                    .unwrap(),
+                            )
+                        })),
+                    ),
                     state.board.is_enemy_at_position(state.player.selector) && state.cheats,
                 ),
                 (
@@ -360,6 +359,17 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 })),
                 enemy.is_some_and(|enemy| enemy.has_log_file()),
             ));
+
+            // Editing effects
+            options.push((
+                "Set effects".to_string(),
+                Choice::Recurse(
+                    EFFECT_SETTER,
+                    Some(Box::new(move |_| Argument::Entity(Entity::Enemy(enemy_id)))),
+                ),
+                enemy.is_some() && state.cheats,
+            ));
+
             options
         },
     },
@@ -369,6 +379,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "CHEATS:",
         get_options: |state| {
             let cheats = state.cheats;
+            let alive = state.player.is_alive();
             vec![
                 (
                     "Enable cheats".to_string(),
@@ -377,18 +388,21 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 ),
                 (
                     "Set effects".to_string(),
-                    Choice::Recurse(EFFECT_SETTER, |_| Some(Argument::Entity(Entity::Player))),
-                    cheats,
+                    Choice::Recurse(
+                        EFFECT_SETTER,
+                        Some(Box::new(|_| Argument::Entity(Entity::Player))),
+                    ),
+                    cheats && alive,
                 ),
                 (
                     format!(
                         "No interact limit: {}",
-                        state.player.no_interact_range_limit
+                        state.player.flags.no_interact_range_limit()
                     ),
                     Choice::Act(Box::new(|state| {
-                        state.player.no_interact_range_limit ^= true;
+                        state.player.flags.swap_no_interact_range_limit()
                     })),
-                    cheats,
+                    cheats && alive,
                 ),
                 (
                     "Open all doors".to_string(),
@@ -418,7 +432,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Act(Box::new(|state| {
                         state.player.position = state.player.selector
                     })),
-                    cheats,
+                    cheats && alive,
                 ),
                 (
                     "Save".to_string(),
@@ -427,7 +441,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         let mut file = std::fs::File::create(path).unwrap();
                         state.to_binary(&mut file).unwrap();
                     })),
-                    cheats,
+                    cheats || !alive,
                 ),
                 (
                     "Load".to_string(),
@@ -452,9 +466,25 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "EFFECT SETTER",
         get_options: |state| {
             let mut options = Vec::new();
+            let entity = state
+                .get_current_context_menu_argument()
+                .unwrap()
+                .entity()
+                .unwrap();
+            // Can't set the effects of the dead
+            if match entity {
+                Entity::Player => state.player.is_dead(),
+                Entity::Enemy(id) => state.board[id].is_none(),
+            } {
+                return Vec::new();
+            }
+            let effect_tracker = match entity {
+                Entity::Player => &state.player.effect_tracker,
+                Entity::Enemy(id) => &state.board[id].as_ref().unwrap().effects,
+            };
             for effect in 0..crate::effect::EFFECTS.len() {
                 let effect = crate::effect::EffectID::from_raw(effect as u8);
-                let current = state.player.effect_tracker.get(effect);
+                let current = effect_tracker.get(effect);
                 let time = match current {
                     Some(time) => time.to_string(),
                     None => "inf".to_string(),
@@ -462,7 +492,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 options.push((
                     format!("{}: {time}", effect.get().name),
                     Choice::Act(Box::new(move |state| {
-                        crate::effect::EffectTracker::prompt_set_time(state, effect);
+                        crate::effect::EffectTracker::prompt_set_time(state, effect, entity)
                     })),
                     true,
                 ));

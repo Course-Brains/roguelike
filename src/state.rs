@@ -1,5 +1,6 @@
 use crate::ThreadAsync;
 use crate::board::Board;
+use crate::board::EnemyID;
 use crate::board::map_gen::MapGenSettings;
 use crate::context_menu::ContextMenu;
 use crate::context_menu::ContextMenuID;
@@ -28,6 +29,8 @@ pub struct State {
     pub cheats: bool,
     git_hash: String,
     pub next_level: Option<(MapGenSettings, ThreadAsync<Board>)>,
+    /// If this is true then the game will quit once we are back in the main event loop
+    pub exit: bool,
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -83,6 +86,7 @@ impl FromBinary for State {
             locked_settings: crate::settings::LockedSettings::from_binary(binary)?,
             cheats: bool::from_binary(binary)?,
             next_level: None,
+            exit: false,
         };
         if let Some(map_gen_settings) = <Option<MapGenSettings>>::from_binary(binary)? {
             state.next_level = Some((
@@ -123,6 +127,7 @@ impl State {
             cheats: false,
             git_hash: crate::get_git_hash(),
             next_level: None,
+            exit: false,
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything
@@ -162,7 +167,9 @@ impl State {
             }
             match &options[*selector].1 {
                 crate::context_menu::Choice::Recurse(child, argument_generator) => {
-                    let argument = (argument_generator)(self);
+                    let argument = argument_generator
+                        .as_ref()
+                        .map(|generator| (generator)(self));
                     self.context_menu_stack
                         .push((argument, 0, ContextMenuID::new(*child)));
                 }
@@ -170,9 +177,13 @@ impl State {
             }
             false
         } else {
+            if self.player.is_dead() {
+                self.exit = true;
+                return false;
+            }
             const INTERACT_RANGE: usize = 3;
             const SMACK_RANGE: usize = 1;
-            let no_range_limit = self.player.no_interact_range_limit;
+            let no_range_limit = self.player.flags.no_interact_range_limit();
             if !(no_range_limit
                 || self
                     .player
@@ -249,13 +260,15 @@ impl State {
                         _,
                         crate::context_menu::Choice::Recurse(child, argument_generator),
                         active,
-                    ) = (self.get_context_menu().get_options)(self)
+                    ) = &(self.get_context_menu().get_options)(self)
                         [self.context_menu_stack.last().unwrap().1]
-                        && active
+                        && *active
                     {
-                        let argument = (argument_generator)(self);
+                        let argument = argument_generator
+                            .as_ref()
+                            .map(|generator| (generator)(self));
                         self.context_menu_stack
-                            .push((argument, 0, ContextMenuID::new(child)));
+                            .push((argument, 0, ContextMenuID::new(*child)));
                     }
                 }
             }
@@ -267,6 +280,10 @@ impl State {
         false
     }
     pub fn increment(&mut self) {
+        // If the player is dead then changing the game state becomes illegal
+        if self.player.is_dead() {
+            return;
+        }
         self.total_turns += 1;
         Board::increment(self);
         Player::increment(self);
@@ -298,7 +315,7 @@ impl State {
 
         // health bar
         abes_nice_things::ProgressBar::new(
-            self.player.health,
+            self.player.health(),
             self.player.max_health,
             (self.board.get_viewport_size().x - 20).min(self.player.max_health),
         )
@@ -502,5 +519,18 @@ impl FromBinary for Entity {
             false => Entity::Player,
             true => Entity::Enemy(crate::board::EnemyID::from_binary(binary)?),
         })
+    }
+}
+impl Entity {
+    pub fn is_player(&self) -> bool {
+        matches!(self, Entity::Player)
+    }
+    pub fn is_enemy(&self) -> bool {
+        matches!(self, Entity::Enemy(_))
+    }
+}
+impl From<EnemyID> for Entity {
+    fn from(value: EnemyID) -> Self {
+        Entity::Enemy(value)
     }
 }

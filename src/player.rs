@@ -1,6 +1,7 @@
 use crate::math::Direction;
 use crate::math::Vector;
 use crate::math::Zone;
+use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -11,12 +12,13 @@ pub struct Player {
     pub position: Vector<usize>,
     pub selector: Vector<usize>,
     render_target: RenderTarget,
-    pub health: usize,
+    health: usize,
     pub max_health: usize,
     pub energy: usize,
     pub max_energy: usize,
-    pub no_interact_range_limit: bool,
     pub effect_tracker: crate::effect::EffectTracker,
+    pub flags: PlayerFlags,
+    killer: Option<Entity>,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -27,8 +29,9 @@ impl ToBinary for Player {
         self.max_health.to_binary(binary)?;
         self.energy.to_binary(binary)?;
         self.max_energy.to_binary(binary)?;
-        self.no_interact_range_limit.to_binary(binary)?;
-        self.effect_tracker.to_binary(binary)
+        self.effect_tracker.to_binary(binary)?;
+        self.flags.to_binary(binary)?;
+        self.killer.as_ref().to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -41,8 +44,9 @@ impl FromBinary for Player {
             max_health: usize::from_binary(binary)?,
             energy: usize::from_binary(binary)?,
             max_energy: usize::from_binary(binary)?,
-            no_interact_range_limit: bool::from_binary(binary)?,
             effect_tracker: crate::effect::EffectTracker::from_binary(binary)?,
+            flags: PlayerFlags::from_binary(binary)?,
+            killer: <Option<Entity>>::from_binary(binary)?,
         })
     }
 }
@@ -56,8 +60,9 @@ impl Player {
             max_health: 100,
             energy: 3,
             max_energy: 5,
-            no_interact_range_limit: false,
-            effect_tracker: crate::effect::EffectTracker::default(),
+            effect_tracker: Default::default(),
+            flags: Default::default(),
+            killer: None,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
@@ -78,6 +83,9 @@ impl Player {
     }
     /// Tries to move in the given direction, returns true if the turn should be incremented
     pub fn handle_walk_input(state: &mut State, move_dir: Direction) -> bool {
+        if state.player.is_dead() {
+            return false;
+        }
         if !state.board.player_can_move(state.player.position, move_dir) {
             // There is something blocking movement
             if let Some(id) = state
@@ -135,24 +143,59 @@ impl Player {
         // Only draw the player if we can see the player
         if viewport.contains(self.position) {
             let visual_pos = self.position - viewport.top_left();
+            // If we are dead then the player is greyed out
+            let style = if self.is_alive() {
+                *Style::new().cyan().intense(true)
+            } else {
+                Style::new()
+            };
             write!(
                 buffer,
                 "\x1b[{};{}H{}@\x1b[0m",
                 visual_pos.y + 1,
                 visual_pos.x + 1,
-                Style::new().cyan().intense(true)
+                style
             )
             .unwrap();
         }
     }
-    pub fn damage(state: &mut State, damage: usize) {
-        state.player.health = state.player.health.saturating_sub(damage);
+    /// The function for damaging the player. It properly handles things so only use this.
+    ///
+    /// A source of None is to show the player damaging themself
+    pub fn damage(state: &mut State, damage: usize, source: Entity) {
+        let player = &mut state.player;
+        // If the player is dead then there is no point doing furthur damage
+        if player.is_dead() {
+            return;
+        }
+
+        player.health = player.health.saturating_sub(damage);
+
+        // If the player has died then label that
+        if player.health() == 0 {
+            state.feedback = "You have died. Press enter to exit.".to_string();
+            crate::bell(Some(&mut std::io::stdout())).unwrap();
+            player.killer = Some(source)
+        }
+    }
+    pub fn health(&self) -> usize {
+        self.health
     }
     pub fn increment(state: &mut State) {
         let finished = state.player.effect_tracker.decriment();
         crate::effect::EffectTracker::run_on_ends(state, crate::state::Entity::Player, finished);
     }
+    pub fn is_dead(&self) -> bool {
+        self.killer.is_some()
+    }
+    pub fn is_alive(&self) -> bool {
+        self.killer.is_none()
+    }
+    pub fn get_killer(&self) -> Option<Entity> {
+        self.killer
+    }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RenderTarget {
     Player,
     Selector,
@@ -172,5 +215,39 @@ impl FromBinary for RenderTarget {
             false => RenderTarget::Player,
             true => RenderTarget::Selector,
         })
+    }
+}
+pub struct PlayerFlags {
+    dead: bool,
+    no_interact_range_limit: bool,
+}
+impl ToBinary for PlayerFlags {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
+        self.dead.to_binary(binary)?;
+        self.no_interact_range_limit.to_binary(binary)
+    }
+}
+impl FromBinary for PlayerFlags {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
+        Ok(PlayerFlags {
+            dead: bool::from_binary(binary)?,
+            no_interact_range_limit: bool::from_binary(binary)?,
+        })
+    }
+}
+impl Default for PlayerFlags {
+    fn default() -> Self {
+        Self {
+            dead: false,
+            no_interact_range_limit: false,
+        }
+    }
+}
+impl PlayerFlags {
+    pub fn no_interact_range_limit(&self) -> bool {
+        self.no_interact_range_limit
+    }
+    pub fn swap_no_interact_range_limit(&mut self) {
+        self.no_interact_range_limit ^= true;
     }
 }

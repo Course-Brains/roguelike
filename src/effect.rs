@@ -82,7 +82,9 @@ impl EffectTracker {
         self.inner[effect.to_raw() as usize] = time
     }
     /// Does run on_start
-    pub fn prompt_set_time(state: &mut State, effect: EffectID) {
+    ///
+    /// Assumes alive entity
+    pub fn prompt_set_time(state: &mut State, effect: EffectID, entity: Entity) {
         let time = loop {
             let input = state.get_input("How many turns? ".to_string());
             break match input.as_str() {
@@ -99,12 +101,16 @@ impl EffectTracker {
             };
         };
         if time == Some(0) {
-            EffectTracker::clear(state, Entity::Player, effect);
+            EffectTracker::clear(state, entity, effect);
             return;
         }
-        state.player.effect_tracker.set_effect_time(effect, time);
-        if !state.player.effect_tracker.has(effect) {
-            (effect.get().on_start)(state, Entity::Player);
+        let effect_tracker = match entity {
+            Entity::Player => &mut state.player.effect_tracker,
+            Entity::Enemy(id) => &mut state.board[id].as_mut().unwrap().effects,
+        };
+        effect_tracker.set_effect_time(effect, time);
+        if !effect_tracker.has(effect) {
+            (effect.get().on_start)(state, entity);
         }
     }
     pub fn get(&self, effect: EffectID) -> Option<usize> {

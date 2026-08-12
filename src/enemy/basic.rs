@@ -69,7 +69,11 @@ fn think(state: &mut State, id: super::EnemyID) {
             this.flags.set_pathing(true);
             this.flags.set_windup(WindupState::None);
             if state.player.position.is_near(this.position, SMACK_RANGE) {
-                crate::player::Player::damage(state, (u8::random() & 0b111) as usize + 1);
+                crate::player::Player::damage(
+                    state,
+                    (u8::random() & 0b111) as usize + 1,
+                    id.into(),
+                );
                 return;
             }
         }

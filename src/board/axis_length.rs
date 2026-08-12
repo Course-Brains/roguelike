@@ -73,6 +73,15 @@ impl AxisLength {
     pub const fn area(self) -> usize {
         self.to_inner().pow(2)
     }
+    pub const fn num_bosses(self) -> usize {
+        match self {
+            Self::Tiny => 1,
+            Self::Small => 2,
+            Self::Medium => 3,
+            Self::Large => 4,
+            Self::Full => 5,
+        }
+    }
 }
 impl PartialOrd for AxisLength {
     fn lt(&self, other: &Self) -> bool {

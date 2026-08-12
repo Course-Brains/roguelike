@@ -105,7 +105,8 @@ impl State {
     pub fn new() -> State {
         let screen_size = crate::get_terminal_size();
         let (unlocked, locked) = crate::settings::load_from_file();
-        let budget = ((locked.axis_length().area() / 100) as f32 * locked.enemy_mult()) as usize;
+        let budget =
+            ((locked.axis_length().area() / 100) as f32 * locked.enemy_mult()).ceil() as usize;
         let board = crate::board::map_gen::generate(crate::board::map_gen::MapGenSettings::new(
             *locked.axis_length(),
             crate::calc_desired_dimensions(screen_size),
@@ -447,7 +448,7 @@ impl State {
         budget += self.total_turns / 100;
 
         // And we multiply by the multiplier
-        budget = (budget as f32 * self.locked_settings().enemy_mult()) as usize;
+        budget = (budget as f32 * self.locked_settings().enemy_mult()).ceil() as usize;
 
         budget
     }

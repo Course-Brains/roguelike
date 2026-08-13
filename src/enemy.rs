@@ -1,8 +1,9 @@
 // Place mod for enemies here
 pub mod basic;
 pub mod dummy;
+pub mod alice;
 // Put the vtable here
-pub static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE];
+pub static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE, alice::VTABLE];
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 // Register the vtable here, make sure you correctly put its index

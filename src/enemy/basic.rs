@@ -6,12 +6,11 @@ use crate::random::Random;
 use crate::state::*;
 pub static VTABLE: VTable = VTable {
     starting_health: 3,
-    is_boss: false,
     init: VTable::DEFAULT_INIT,
     think,
     damage: VTable::DEFAULT_DAMAGE,
     budget_cost: 1,
-    tier: 0,
+    promote_tier: Some((0, todo!())),
 };
 const SMACK_RANGE: usize = 1;
 fn think(state: &mut State, id: super::EnemyID) {

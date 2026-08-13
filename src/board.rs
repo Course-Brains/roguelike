@@ -57,6 +57,9 @@ pub struct Board {
     local_turns: usize,
     rooms: Vec<Room>,
     map_type: MapType,
+    /// The bosses and their last known valid position (empty positions so we don't overwrite
+    /// something and break things)
+    bosses: Vec<(EnemyID, Vector<usize>)>,
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -73,7 +76,13 @@ impl ToBinary for Board {
         }
         self.local_turns.to_binary(binary)?;
         self.rooms.to_binary(binary)?;
-        self.map_type.to_binary(binary)
+        self.map_type.to_binary(binary)?;
+        self.bosses.len().to_binary(binary)?;
+        for (boss, last_good) in self.bosses.iter() {
+            boss.to_binary(binary)?;
+            last_good.to_binary(binary)?;
+        }
+        Ok(())
     }
 }
 impl FromBinary for Board {
@@ -90,6 +99,7 @@ impl FromBinary for Board {
             local_turns: usize::from_binary(binary)?,
             rooms: <Vec<Room>>::from_binary(binary)?,
             map_type: MapType::from_binary(binary)?,
+            bosses: <Vec<(EnemyID, Vector<usize>)>>::from_binary(binary)?,
         })
     }
 }
@@ -116,6 +126,7 @@ impl Board {
             local_turns: 0,
             rooms: Vec::new(),
             map_type,
+            bosses: Vec::new(),
         })
     }
     pub fn recalc_viewport(&mut self, desired: Vector<usize>) {
@@ -136,6 +147,23 @@ impl Board {
         Board::decriment_enemy_effects(state);
         Board::run_thinkers(state);
         Board::pathfind(state);
+        state.board.update_boss_last_known_positions();
+    }
+    /// Update the last known good positions of bosses and spawn exits where needed
+    pub fn update_boss_last_known_positions(&mut self) {
+        for index in 0..self.bosses.len() {
+            // Dead bosses don't update positions but do need an exit
+            // Yes this does spawn the exit every tick, it doesn't matter much
+            if self[self.bosses[index].0].is_none() {
+                let pos = self.bosses[index].1;
+                self[pos] = Some(Tile::WalkTrigger(WalkTrigger::Exit));
+                continue;
+            }
+            let enemy_pos = self[self.bosses[index].0].as_ref().unwrap().get_position();
+            if self[enemy_pos].is_none() {
+                self.bosses[index].1 = enemy_pos
+            }
+        }
     }
     pub fn get_viewport_size(&self) -> Vector<usize> {
         self.viewport_size

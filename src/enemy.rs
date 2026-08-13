@@ -123,8 +123,8 @@ impl Enemy {
 
         // Foreground
 
-        // These are mutually exclusive because bosses skip detection checks and are always awake
-        if this.get_vtable().is_boss {
+        // These are mutually exclusive because bosses will skip detection checks and are always awake
+        if this.get_vtable().promote_tier.is_none() {
             // Bosses are blue
             style.blue();
         } else if this.flags.is_awake() {
@@ -330,8 +330,6 @@ impl Enemy {
 #[derive(Clone, Copy, Debug)]
 pub struct VTable {
     starting_health: usize,
-    /// The character used to represent this enemy type during rendering
-    is_boss: bool,
     /// The function which initializes the state of the enemy. If the enemy does not need a state
     /// then simply give it Box<()> which won't allocate anything
     init: fn() -> Box<dyn Any + Send>,
@@ -340,7 +338,8 @@ pub struct VTable {
     /// How damage is dealt to enemies. It returns if the enemy should be deleted
     pub damage: fn(&mut State, EnemyID, usize) -> bool,
     budget_cost: usize,
-    pub tier: usize,
+    /// None means a boss. If it is not a boss then it gives its tier and what it promotes to
+    pub promote_tier: Option<(usize, VTableID)>,
 }
 impl VTable {
     const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());

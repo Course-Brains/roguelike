@@ -1,5 +1,6 @@
 use super::AxisLength;
 use super::Board;
+use super::EnemyID;
 use super::Tile;
 use super::convert_z_order_index;
 use crate::Vector;
@@ -92,6 +93,7 @@ pub fn generate(settings: MapGenSettings) -> Result<Board> {
     Room::reallocate_spawn_budget(&mut rooms, 0, spawn_budget);
     log!("Placing enemies");
     Room::place_enemies(&mut board, &rooms, 0);
+    promote_bosses(&mut board);
     log!("Validating");
     validate(&board);
     Ok(board)
@@ -445,7 +447,14 @@ impl Room {
                 .unwrap()
                 .subset(&room_bounds)
                 .unwrap();
-                let max_tier = board[*center].as_ref().unwrap().get_vtable().tier;
+                // We can assume there are no bosses yet
+                let max_tier = board[*center]
+                    .as_ref()
+                    .unwrap()
+                    .get_vtable()
+                    .promote_tier
+                    .unwrap()
+                    .0;
                 // usual 20 attempts max
                 for _ in 0..20 {
                     let position = spawn_bounds.generate();
@@ -464,6 +473,78 @@ impl Room {
                 }
                 // If we reach this then we can't place enemies and I give up
                 return;
+            }
+        }
+    }
+}
+fn promote_bosses(board: &mut Board) {
+    let num_bosses = board.axis_length().num_bosses();
+    // First we find the highest tier
+    let mut highest_tier = 0;
+    for enemy in board.enemies.iter() {
+        if let Some((tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
+            if tier > highest_tier {
+                highest_tier = tier;
+            }
+        }
+    }
+
+    fn pick_from_tier(board: &mut Board, highest_tier: usize) -> Option<EnemyID> {
+        let options = board
+            .enemies
+            .iter()
+            .enumerate()
+            .filter(|(_, enemy)| {
+                enemy.as_ref().is_some_and(|enemy| {
+                    enemy
+                        .get_vtable()
+                        .promote_tier
+                        .is_some_and(|(tier, _)| tier == highest_tier)
+                })
+            })
+            .map(|(index, _)| EnemyID(index))
+            .collect::<Vec<EnemyID>>();
+        if options.is_empty() {
+            return None;
+        }
+        Some(*options.as_slice().generate())
+    }
+
+    // Now we promote
+    let mut bosses_made = 0;
+    while bosses_made < num_bosses {
+        // The simple path
+        if let Some(id) = pick_from_tier(board, highest_tier) {
+            let new_vtable = board[id]
+                .as_ref()
+                .unwrap()
+                .get_vtable()
+                .promote_tier
+                .unwrap()
+                .1;
+            let pos = board[id].as_ref().unwrap().get_position();
+            // We don't need to rememoize the enemy list of the room because we don't change the
+            // position and it only cares about enemy ids, which also didn't change
+            *board[id].as_mut().unwrap() = Enemy::new(new_vtable, pos);
+            bosses_made += 1;
+
+            // Now we get a 1 in 2 chance to lower the tier assuming we aren't already at 0 so that
+            // there is variety in the bosses
+            if highest_tier > 0 && bool::random() {
+                highest_tier -= 1;
+            }
+        }
+        // The not so simple path
+        else {
+            // If we get here then getting an enemy of the desired tier failed which means that
+            // there are no remaining enemies of that tier so we need to go down to the highest
+            // remaining enemy tier which we do by just running the highest tier getting code again
+            for enemy in board.enemies.iter() {
+                if let Some((tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
+                    if tier > highest_tier {
+                        highest_tier = tier;
+                    }
+                }
             }
         }
     }

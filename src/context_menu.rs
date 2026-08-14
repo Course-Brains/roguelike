@@ -189,6 +189,7 @@ const SPECIFIC_ENEMY_DEBUG: usize = 2;
 const CHEAT_MAIN: usize = 3;
 const EFFECT_SETTER: usize = 4;
 const SETTINGS: usize = 5;
+const SPELL_MAIN: usize = 6;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -530,5 +531,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             }
             out
         },
+    },
+    // 6: spell main
+    // no argument
+    ContextMenu {
+        title: "Spells",
+        get_options: |_| todo!(),
     },
 ];

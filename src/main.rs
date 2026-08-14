@@ -10,6 +10,7 @@ mod player;
 mod random;
 mod raycast;
 mod settings;
+mod spell;
 mod state;
 
 use std::io::Write;

@@ -6,7 +6,7 @@ use abes_nice_things::PrimFrom;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RayCast {
     start: Vector<usize>,
     target: Vector<usize>,
@@ -16,6 +16,8 @@ pub struct RayCast {
     stop_at_target: bool,
     record_path: bool,
     max_range: Option<usize>,
+    override_logical_start: Option<Vector<f64>>,
+    override_initial_direction: Option<Vector<f64>>,
 }
 impl ToBinary for RayCast {
     fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
@@ -36,7 +38,8 @@ impl ToBinary for RayCast {
         if let Some(max_range) = self.max_range {
             max_range.to_binary(binary)?;
         }
-        Ok(())
+        self.override_logical_start.as_ref().to_binary(binary)?;
+        self.override_initial_direction.as_ref().to_binary(binary)
     }
 }
 impl FromBinary for RayCast {
@@ -57,6 +60,8 @@ impl FromBinary for RayCast {
             } else {
                 None
             },
+            override_logical_start: <Option<Vector<f64>>>::from_binary(binary)?,
+            override_initial_direction: <Option<Vector<f64>>>::from_binary(binary)?,
         })
     }
 }
@@ -64,7 +69,7 @@ impl RayCast {
     /// Creates a new raycast with some default values, specifically it will not be able to hit
     /// players, can hit enemies and tiles, does not stop upon reaching the target, does not record
     /// its path and does not have a maximum range
-    pub fn new(start: Vector<usize>, target: Vector<usize>) -> RayCast {
+    pub const fn new(start: Vector<usize>, target: Vector<usize>) -> RayCast {
         RayCast {
             start,
             target,
@@ -74,13 +79,19 @@ impl RayCast {
             stop_at_target: false,
             record_path: false,
             max_range: None,
+            override_logical_start: None,
+            override_initial_direction: None,
         }
     }
     pub fn resolve(self, state: &State) -> (Option<MapObject>, Option<Vec<Vector<usize>>>) {
-        let mut logical_position = Vector::<f64>::prim_from(self.start) + 0.5;
+        let mut logical_position = self
+            .override_logical_start
+            .unwrap_or(Vector::<f64>::prim_from(self.start) + 0.5);
         let mut position = self.start;
         let logical_target = Vector::<f64>::prim_from(self.target) + 0.5;
-        let initial_direction = logical_target - logical_position;
+        let initial_direction = self
+            .override_initial_direction
+            .unwrap_or(logical_target - logical_position);
 
         let mut steps_taken = 0;
         let mut path = if self.record_path {
@@ -95,56 +106,23 @@ impl RayCast {
             } else {
                 logical_target - (position.prim_as() + 0.5)
             };
-            // Check stop conditions
-            // Hitting a player
-            if self.can_hit_player && position == state.player.position {
-                return (Some(MapObject::Player), path);
-            }
-            // Hitting a tile
-            if self.can_hit_tile
-                && state.board[position].is_some_and(|tile| tile.is_raycast_hittable())
-            {
-                return (Some(MapObject::Tile(position)), path);
-            }
-            // Hitting an enemy
-            if self.can_hit_enemy
-                && let Some(enemy) = state.board.get_enemy_at_position(position)
-            {
-                return (Some(MapObject::Enemy(enemy)), path);
-            }
-            // Hitting the range limit
-            if let Some(max_range) = self.max_range
-                && steps_taken >= max_range
-            {
-                return (None, path);
-            }
-            // Hitting the target
-            if self.stop_at_target && self.target == position {
-                assert_eq!(steps_taken, self.start.abs_diff(self.target).sum_axes());
-                return (None, path);
-            }
-            let mut x_style = abes_nice_things::Style::new();
-            let mut y_style = x_style.clone();
             // Figuring out which direction we need to go next
             // figuring out possible next positions
             let diff_x = logical_diff.x; // pure sugar
             let next_target_x = match diff_x {
                 // right is positive x
                 _right if diff_x > 0_f64 => {
-                    x_style.background_green();
                     // move towards the next integer away from 0
                     (logical_position.x + 1_f64).floor()
                 }
                 // left is negative x
                 _left if diff_x < 0_f64 => {
                     // move to the next integer towards 0
-                    x_style.background_blue();
                     (logical_position.x - 1_f64).ceil()
                 }
                 _none => {
                     // not moving on the x axis at all
                     // not actually infinity, in effect it's 0, but expected value later
-                    x_style.background_cyan();
                     f64::INFINITY
                 }
             };
@@ -154,19 +132,16 @@ impl RayCast {
                 // down is positive y
                 _down if diff_y > 0_f64 => {
                     // move towards the next integer away from 0
-                    y_style.background_red();
                     (logical_position.y + 1_f64).floor()
                 }
                 // up is negative y
                 _up if diff_y < 0_f64 => {
                     // move towards the next integer away from 0
-                    y_style.background_yellow();
                     (logical_position.y - 1_f64).ceil()
                 }
                 _none => {
                     // not moving on the y axis at all
                     // not actually infinity, in effect it's 0 but expected value later
-                    y_style.background_purple();
                     f64::INFINITY
                 }
             };
@@ -174,12 +149,6 @@ impl RayCast {
             let next_target = Vector::new(next_target_x, next_target_y);
 
             let effective_dist_to_target = (next_target - logical_position) / logical_diff;
-            /*assert!(
-                effective_dist_to_target.x.is_sign_positive() || effective_dist_to_target.x == 0.0
-            );
-            assert!(
-                effective_dist_to_target.y.is_sign_positive() || effective_dist_to_target.y == 0.0
-            );*/
             // Incrementing everything
             if position.is_adjacent(self.target) {
                 let direction = if position.x > self.target.x {
@@ -193,12 +162,6 @@ impl RayCast {
                 } else {
                     unreachable!("We are already at the target")
                 };
-                print!(
-                    "\x1b[{};{}H{} \x1b[0m",
-                    position.y + 1,
-                    position.x + 1,
-                    abes_nice_things::Style::new().background_purple()
-                );
                 position += direction;
                 steps_taken += 1;
                 if self.record_path {
@@ -234,53 +197,78 @@ impl RayCast {
                     return (None, path);
                 }
                 position += direction;
-                match direction.axis() {
-                    Axis::Horizontal => {
-                        print!(
-                            "\x1b[{};{}H{} \x1b[0m",
-                            position.y + 1,
-                            position.x + 1,
-                            x_style
-                        )
-                    }
-                    Axis::Vertical => {
-                        print!(
-                            "\x1b[{};{}H{} \x1b[0m",
-                            position.y + 1,
-                            position.x + 1,
-                            y_style
-                        )
-                    }
-                }
                 steps_taken += 1;
                 if self.record_path {
                     path.as_mut().unwrap().push(position);
                 }
             }
+            // Check stop conditions
+            // Hitting a player
+            if self.can_hit_player && position == state.player.position {
+                return (Some(MapObject::Player), path);
+            }
+            // Hitting a tile
+            if self.can_hit_tile
+                && state.board[position].is_some_and(|tile| tile.is_raycast_hittable())
+            {
+                return (Some(MapObject::Tile(position)), path);
+            }
+            // Hitting an enemy
+            if self.can_hit_enemy
+                && let Some(enemy) = state.board.get_enemy_at_position(position)
+            {
+                return (Some(MapObject::Enemy(enemy)), path);
+            }
+            // Hitting the range limit
+            if let Some(max_range) = self.max_range
+                && steps_taken >= max_range
+            {
+                return (None, path);
+            }
+            // Hitting the target
+            if self.stop_at_target && self.target == position {
+                assert_eq!(steps_taken, self.start.abs_diff(self.target).sum_axes());
+                return (None, path);
+            }
         }
     }
-    pub fn can_hit_player(&mut self, can_hit_player: bool) -> &mut Self {
+    pub const fn can_hit_player(&mut self, can_hit_player: bool) -> &mut Self {
         self.can_hit_player = can_hit_player;
         self
     }
-    pub fn can_hit_enemy(&mut self, can_hit_enemy: bool) -> &mut Self {
+    pub const fn can_hit_enemy(&mut self, can_hit_enemy: bool) -> &mut Self {
         self.can_hit_enemy = can_hit_enemy;
         self
     }
-    pub fn can_hit_tile(&mut self, can_hit_tile: bool) -> &mut Self {
+    pub const fn can_hit_tile(&mut self, can_hit_tile: bool) -> &mut Self {
         self.can_hit_tile = can_hit_tile;
         self
     }
-    pub fn stop_at_target(&mut self, stop_at_target: bool) -> &mut Self {
+    pub const fn stop_at_target(&mut self, stop_at_target: bool) -> &mut Self {
         self.stop_at_target = stop_at_target;
         self
     }
-    pub fn max_range(&mut self, max_range: Option<usize>) -> &mut Self {
+    pub const fn max_range(&mut self, max_range: Option<usize>) -> &mut Self {
         self.max_range = max_range;
         self
     }
-    pub fn record_path(&mut self, record_path: bool) -> &mut Self {
+    pub const fn record_path(&mut self, record_path: bool) -> &mut Self {
         self.record_path = record_path;
+        self
+    }
+    /// Override the starting logical position. If this is not valid for the actual position then
+    /// the raycast will not behave as it should.
+    pub const fn override_logical_start(&mut self, r#override: Option<Vector<f64>>) -> &mut Self {
+        self.override_logical_start = r#override;
+        self
+    }
+    /// This is an advanced usage of [RayCast] but this in combination with overriding the logical
+    /// start let you essentially split the raycast over multiple calls.
+    pub const fn override_initial_direction(
+        &mut self,
+        r#override: Option<Vector<f64>>,
+    ) -> &mut Self {
+        self.override_initial_direction = r#override;
         self
     }
 }

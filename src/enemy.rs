@@ -1,15 +1,16 @@
 // Place mod for enemies here
+pub mod alice;
 pub mod basic;
 pub mod dummy;
-pub mod alice;
 // Put the vtable here
-pub static VTABLES: [VTable; 2] = [dummy::VTABLE, basic::VTABLE, alice::VTABLE];
+pub static VTABLES: [VTable; 3] = [dummy::VTABLE, basic::VTABLE, alice::VTABLE];
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 // Register the vtable here, make sure you correctly put its index
 pub enum VTableID {
     Dummy = 0,
     Basic = 1,
+    AliceBoss = 2,
 }
 // Add in the required logic for it
 impl Enemy {
@@ -18,10 +19,10 @@ impl Enemy {
         budget: &mut usize,
         max_tier: Option<usize>,
     ) -> Option<VTableID> {
-        if *budget < VTableID::Basic.get_vtable().budget_cost {
+        if *budget < VTableID::Basic.get_vtable().budget_cost().unwrap() {
             None
         } else {
-            *budget -= VTableID::Basic.get_vtable().budget_cost;
+            *budget -= VTableID::Basic.get_vtable().budget_cost().unwrap();
             Some(VTableID::Basic)
         }
     }
@@ -29,7 +30,7 @@ impl Enemy {
 static CONVERTERS: [(
     fn(&Box<dyn Any + Send>, &mut dyn Write) -> std::io::Result<()>,
     fn(&mut dyn std::io::Read) -> std::io::Result<Box<dyn Any + Send>>,
-); VTABLES.len()] = [NO_OP_CONVERTERS, NO_OP_CONVERTERS];
+); VTABLES.len()] = [NO_OP_CONVERTERS, NO_OP_CONVERTERS, todo!()];
 // And you're done
 
 use crate::Vector;
@@ -338,9 +339,10 @@ pub struct VTable {
     pub think: fn(&mut State, EnemyID),
     /// How damage is dealt to enemies. It returns if the enemy should be deleted
     pub damage: fn(&mut State, EnemyID, usize) -> bool,
-    budget_cost: usize,
-    /// None means a boss. If it is not a boss then it gives its tier and what it promotes to
-    pub promote_tier: Option<(usize, VTableID)>,
+    /// None means a boss.
+    ///
+    /// Some((budget, tier, promote vtable))
+    pub promote_tier: Option<(usize, usize, VTableID)>,
 }
 impl VTable {
     const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());
@@ -367,6 +369,9 @@ impl VTable {
         }
         false
     };
+    pub fn budget_cost(&self) -> Option<usize> {
+        self.promote_tier.map(|(budget, _, _)| budget)
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

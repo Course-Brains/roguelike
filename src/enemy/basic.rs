@@ -9,8 +9,7 @@ pub static VTABLE: VTable = VTable {
     init: VTable::DEFAULT_INIT,
     think,
     damage: VTable::DEFAULT_DAMAGE,
-    budget_cost: 1,
-    promote_tier: Some((0, todo!())),
+    promote_tier: Some((1, 0, super::VTableID::AliceBoss)),
 };
 const SMACK_RANGE: usize = 1;
 fn think(state: &mut State, id: super::EnemyID) {

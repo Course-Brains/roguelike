@@ -25,7 +25,6 @@ use std::io::Write;
 use tile::Tile;
 mod walk_trigger;
 pub use projectile::Projectile;
-pub use projectile::ProjectileType;
 pub use walk_trigger::WalkTrigger;
 
 /// This contains all data which is tied to the specific map, which is everything that does not
@@ -63,6 +62,7 @@ pub struct Board {
     /// The bosses and their last known valid position (empty positions so we don't overwrite
     /// something and break things)
     bosses: Vec<(EnemyID, Vector<usize>)>,
+    /// Projectiles in the air, you cannot assume the index of a projectile will be consistent
     projectiles: Vec<Projectile>,
 }
 impl ToBinary for Board {
@@ -173,8 +173,9 @@ impl Board {
         }
     }
     fn update_projectiles(state: &mut State) {
+        let viewport = state.calculate_viewport();
         for index in 0..state.board.projectiles.len() {
-            Projectile::step(state, index);
+            Projectile::step(state, index, &viewport);
         }
     }
     pub fn get_viewport_size(&self) -> Vector<usize> {

@@ -46,7 +46,11 @@ impl ProjectileType {
         }
     }
     pub fn on_stop(self, state: &mut State, collision: Option<MapObject>) {
-        todo!()
+        match self {
+            Self::Fireball { radius, damage } => {
+                todo!();
+            }
+        }
     }
 }
 
@@ -91,20 +95,36 @@ impl FromBinary for Projectile {
 impl Projectile {
     /// Move the projectile all the spaces it should move this turn and handle it hitting something
     /// if it does
-    pub fn step(state: &mut State, projectile_index: usize) {
+    pub fn step(state: &mut State, projectile_index: usize, viewport: &Zone<usize>) {
         let projectile = &state.board.projectiles[projectile_index];
+        let (ground, max_range) = if projectile
+            .travel_limit
+            .is_some_and(|limit| limit <= projectile.speed)
+        {
+            (true, projectile.travel_limit.unwrap())
+        } else {
+            (false, projectile.speed)
+        };
         let (hit, path) = RayCast::new(projectile.position, projectile.target)
             .can_hit_player(true)
             .can_hit_enemy(true)
             .can_hit_tile(true)
-            .max_range(projectile.travel_limit.min(Some(projectile.speed)))
+            .max_range(Some(max_range))
             .record_path(true)
             .resolve(state);
         let path = path.unwrap();
-        for position in path.iter() {
-            todo!()
+        for position in path.iter().filter(|pos| viewport.contains(**pos)) {
+            state.board.projectiles[projectile_index].position = *position;
+            state.render();
+            std::thread::sleep(std::time::Duration::from_millis(
+                *state.unlocked_settings.projectile_time(),
+            ));
         }
-        todo!()
+        if ground || hit.is_some() {
+            state.board.projectiles[projectile_index]
+                .r#type
+                .on_stop(state, hit)
+        }
     }
     pub fn position(&self) -> Vector<usize> {
         self.position

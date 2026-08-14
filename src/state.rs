@@ -457,6 +457,10 @@ impl State {
         let desired = crate::calc_desired_dimensions(self.screen_size);
         self.board.recalc_viewport(desired);
     }
+    pub fn calculate_viewport(&self) -> Zone<usize> {
+        self.board
+            .calculate_viewport(self.player.get_render_target_pos())
+    }
 }
 
 /// Anything on the board, specifically the player an enemy or a tile

@@ -118,9 +118,10 @@ settings!(
     true => Some(&[true, false]);
 
     resize_trigger_mode = "resize_mode": ResizeTriggerMode,
-    ResizeTriggerMode::Manual => Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto])
+    ResizeTriggerMode::Manual => Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto]);
 
-
+    projectile_time = "projectile time(ms)": u64,
+    100 => None
 );
 // Locked settings
 settings!(

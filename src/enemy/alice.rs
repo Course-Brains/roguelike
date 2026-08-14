@@ -1,34 +1,30 @@
-use core::index::Last;
-use std::{collections::BTreeMap, intrinsics::disjoint_bitor};
+use std::collections::BTreeMap;
 
-use crate::{board::EnemyID, math::{self, Vector}, state::State};
 use super::VTable;
+use crate::{board::EnemyID, math::*, state::State};
 pub static VTABLE: VTable = VTable {
     // honestly not really sure how to implement this
-    // probably something like with the weight function 
+    // probably something like with the weight function
     // with if Some() = map.get_mut("Name")
     // but the "Name" being consistent is a pretty obvious failure method
     starting_health: todo!(),
-    is_boss: true,
     init: todo!(),
     think: todo!(),
     damage: todo!(),
-    budget_cost: todo!(), // a lot
-    tier: todo!(), // no clue
-    render_char: todo!(), // needs to be changeable
+    promote_tier: None, // no clue
 };
 
 // assumes turn always goes up between thinks
-struct History { 
+struct History {
     // everything is an i32 so it works well with the weights
     // since those can be negative
     current_turn: i32, // so things can be relative instead of absolute
-    // for keeping track of what's going on 
+    // for keeping track of what's going on
     // helps decide weights
     last_turn_damaged: i32, // last turn damage was taken
     last_health_lost: i32,
     last_turn_attacked: i32, // last turn damage dealing attack was made
-    last_turn_hit: i32, // last turn damage was dealt
+    last_turn_hit: i32,      // last turn damage was dealt
     // how many thinks does this character get before the player is in melee range
     // basically just distance, but accounts for energy & being a grid
     thinks_till_player_arrives: i32,
@@ -38,25 +34,29 @@ struct History {
     player_room_escapes: Vec<Vector<usize>>, // does not include exits to same room as character
 }
 
-
 struct WeightedFragment<'a> {
     fragment: &'a Fragment,
-    weight: i32
+    weight: i32,
 }
 fn weight(history: History, status: FragmentedSoul) {
     let living = status.living_souls;
     // same thing except now it's has a weight field, initialized at 0
-    let mut weights = living.iter().map(|fragment_iter|
-        (*fragment_iter.0, // the name (key)
-            WeightedFragment {
-                fragment: fragment_iter.1, // the Fragment(value)
-                weight: 0
-            }
-        )
-    ).collect::<BTreeMap<&'static str, WeightedFragment>>(); 
-    
+    let mut weights = living
+        .iter()
+        .map(|fragment_iter| {
+            (
+                *fragment_iter.0, // the name (key)
+                WeightedFragment {
+                    fragment: fragment_iter.1, // the Fragment(value)
+                    weight: 0,
+                },
+            )
+        })
+        .collect::<BTreeMap<&'static str, WeightedFragment>>();
+
     if let Some(alice) = weights.get_mut("Alice") {
-        { // damage weighting
+        {
+            // damage weighting
             // logarithmically scaled by damage amount, and damage time since
             let health_lost = history.last_health_lost;
             let damage_scalar = (health_lost + 1).ilog2() as i32;
@@ -64,7 +64,7 @@ fn weight(history: History, status: FragmentedSoul) {
             // tapers off nicely, anything 0 or larger is >=0
             // guaranteed to be positive before the 2 -
             // positive when less then 8 turns, otherwise negative
-            let damage_base = 3 - ( (turns_since_damaged + 1).ilog2() as i32 );
+            let damage_base = 3 - ((turns_since_damaged + 1).ilog2() as i32);
             let damage_weight = damage_base * damage_scalar;
             // alice mostly handles pain
             // so her weight increases the more recently it's been
@@ -72,7 +72,8 @@ fn weight(history: History, status: FragmentedSoul) {
             // (-29 when damage hasn't been taken yet)
             alice.weight += damage_weight
         }
-        { // distance weighting 
+        {
+            // distance weighting
             let distance = history.thinks_till_player_arrives;
             // more severe log, since distance is often larger
             // something that is more significant within about 3 or 4 squares and quiclk tapers off would be great
@@ -86,9 +87,7 @@ fn weight(history: History, status: FragmentedSoul) {
     // i need to sleep so handing it off to abe to work wit hthe commit while i'm asleep
 }
 
-fn death(state: State, id: EnemyID) {
-    
-}
+fn death(state: State, id: EnemyID) {}
 static DAMAGE_FUNCTION: fn(&mut State, EnemyID, usize) -> bool = {
     |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
@@ -115,7 +114,7 @@ static DAMAGE_FUNCTION: fn(&mut State, EnemyID, usize) -> bool = {
     }
 };
 struct FragmentedSoul {
-    living_souls: BTreeMap<&'static str, Fragment> // names
+    living_souls: BTreeMap<&'static str, Fragment>, // names
 }
 #[derive(Clone)]
 enum Fragment {

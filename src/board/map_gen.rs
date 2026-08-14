@@ -482,7 +482,7 @@ fn promote_bosses(board: &mut Board) {
     // First we find the highest tier
     let mut highest_tier = 0;
     for enemy in board.enemies.iter() {
-        if let Some((tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
+        if let Some((_, tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
             if tier > highest_tier {
                 highest_tier = tier;
             }
@@ -499,7 +499,7 @@ fn promote_bosses(board: &mut Board) {
                     enemy
                         .get_vtable()
                         .promote_tier
-                        .is_some_and(|(tier, _)| tier == highest_tier)
+                        .is_some_and(|(_, tier, _)| tier == highest_tier)
                 })
             })
             .map(|(index, _)| EnemyID(index))
@@ -521,7 +521,7 @@ fn promote_bosses(board: &mut Board) {
                 .get_vtable()
                 .promote_tier
                 .unwrap()
-                .1;
+                .2;
             let pos = board[id].as_ref().unwrap().get_position();
             // We don't need to rememoize the enemy list of the room because we don't change the
             // position and it only cares about enemy ids, which also didn't change
@@ -540,7 +540,7 @@ fn promote_bosses(board: &mut Board) {
             // there are no remaining enemies of that tier so we need to go down to the highest
             // remaining enemy tier which we do by just running the highest tier getting code again
             for enemy in board.enemies.iter() {
-                if let Some((tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
+                if let Some((_, tier, _)) = enemy.as_ref().unwrap().get_vtable().promote_tier {
                     if tier > highest_tier {
                         highest_tier = tier;
                     }

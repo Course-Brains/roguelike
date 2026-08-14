@@ -6,6 +6,7 @@ mod room;
 use room::Room;
 use room::RoomID;
 use room::RoomIDFlagged;
+mod projectile;
 
 use crate::Vector;
 use crate::Zone;
@@ -23,6 +24,8 @@ use std::collections::HashSet;
 use std::io::Write;
 use tile::Tile;
 mod walk_trigger;
+pub use projectile::Projectile;
+pub use projectile::ProjectileType;
 pub use walk_trigger::WalkTrigger;
 
 /// This contains all data which is tied to the specific map, which is everything that does not
@@ -60,6 +63,7 @@ pub struct Board {
     /// The bosses and their last known valid position (empty positions so we don't overwrite
     /// something and break things)
     bosses: Vec<(EnemyID, Vector<usize>)>,
+    projectiles: Vec<Projectile>,
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -82,7 +86,7 @@ impl ToBinary for Board {
             boss.to_binary(binary)?;
             last_good.to_binary(binary)?;
         }
-        Ok(())
+        self.projectiles.to_binary(binary)
     }
 }
 impl FromBinary for Board {
@@ -100,6 +104,7 @@ impl FromBinary for Board {
             rooms: <Vec<Room>>::from_binary(binary)?,
             map_type: MapType::from_binary(binary)?,
             bosses: <Vec<(EnemyID, Vector<usize>)>>::from_binary(binary)?,
+            projectiles: <Vec<Projectile>>::from_binary(binary)?,
         })
     }
 }
@@ -127,6 +132,7 @@ impl Board {
             rooms: Vec::new(),
             map_type,
             bosses: Vec::new(),
+            projectiles: Vec::new(),
         })
     }
     pub fn recalc_viewport(&mut self, desired: Vector<usize>) {
@@ -146,11 +152,12 @@ impl Board {
         state.board.local_turns += 1;
         Board::decriment_enemy_effects(state);
         Board::run_thinkers(state);
+        Board::update_projectiles(state);
         Board::pathfind(state);
         state.board.update_boss_last_known_positions();
     }
     /// Update the last known good positions of bosses and spawn exits where needed
-    pub fn update_boss_last_known_positions(&mut self) {
+    fn update_boss_last_known_positions(&mut self) {
         for index in 0..self.bosses.len() {
             // Dead bosses don't update positions but do need an exit
             // Yes this does spawn the exit every tick, it doesn't matter much
@@ -165,12 +172,18 @@ impl Board {
             }
         }
     }
+    fn update_projectiles(state: &mut State) {
+        for index in 0..state.board.projectiles.len() {
+            Projectile::step(state, index);
+        }
+    }
     pub fn get_viewport_size(&self) -> Vector<usize> {
         self.viewport_size
     }
     pub fn get_local_turn(&self) -> usize {
         self.local_turns
     }
+    #[cold]
     pub fn open_all_doors(&mut self) {
         for tile in self.tiles.iter_mut() {
             if let Some(Tile::Door { open, .. }) = tile {
@@ -178,6 +191,7 @@ impl Board {
             }
         }
     }
+    #[cold]
     pub fn wake_all_enemies(&mut self) {
         for enemy in self.enemies.iter_mut() {
             if let Some(enemy) = enemy {
@@ -269,9 +283,6 @@ impl Board {
     }
     /// Moves the cursor about to draw the enemies, this is the second layer of rendering.
     pub fn render_enemies(state: &mut State, viewport: Zone<usize>, buffer: &mut impl Write) {
-        // The weird iterator stuff ensures that we only are rendering enemies which are alive and
-        // on screen on top of getting us the on screen position of that enemy
-
         for index in 0..state.board.enemies.len() {
             if state.board.enemies[index].is_none() {
                 continue;
@@ -288,6 +299,23 @@ impl Board {
                 screen_position.y, screen_position.x
             )
             .unwrap();
+        }
+    }
+    pub fn render_projectiles(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
+        for projectile in self.projectiles.iter() {
+            if !viewport.contains(projectile.position()) {
+                continue;
+            }
+            let screen_position = projectile.position() - viewport.top_left() + 1;
+            let (ch, style) = projectile.r#type().render();
+            write!(buffer, "\x1b[{};{}H", screen_position.y, screen_position.x).unwrap();
+            if let Some(style) = style {
+                write!(buffer, "{style}").unwrap();
+            }
+            write!(buffer, "{ch}").unwrap();
+            if style.is_some() {
+                write!(buffer, "\x1b[0m").unwrap();
+            }
         }
     }
 }
@@ -836,7 +864,7 @@ fn validate_z_order() {
 #[cfg(test)]
 #[test]
 fn validate_tile_indexing() {
-    let board = Board::new(AxisLength::Small, Vector::new(0, 0)).unwrap(); // 64 x 64
+    let board = Board::new(AxisLength::Small, Vector::new(0, 0), MapType::Normal).unwrap(); // 64 x 64
 
     for x in 0..64_usize {
         for y in 0..64_usize {

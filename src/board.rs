@@ -24,6 +24,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use tile::Tile;
 mod walk_trigger;
+use crate::spell::Spell;
 pub use projectile::Projectile;
 pub use walk_trigger::WalkTrigger;
 
@@ -64,6 +65,9 @@ pub struct Board {
     bosses: Vec<(EnemyID, Vector<usize>)>,
     /// Projectiles in the air, you cannot assume the index of a projectile will be consistent
     projectiles: Vec<Projectile>,
+    /// Spell circles that are not within the bounds of a room (currently only case where this
+    /// would happen is an open door)
+    floating_spell_circles: Vec<(Vector<usize>, Spell)>,
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -86,7 +90,13 @@ impl ToBinary for Board {
             boss.to_binary(binary)?;
             last_good.to_binary(binary)?;
         }
-        self.projectiles.to_binary(binary)
+        self.projectiles.to_binary(binary)?;
+        self.floating_spell_circles.len().to_binary(binary)?;
+        for (position, spell) in self.floating_spell_circles.iter() {
+            position.to_binary(binary)?;
+            spell.to_binary(binary)?;
+        }
+        Ok(())
     }
 }
 impl FromBinary for Board {
@@ -105,6 +115,7 @@ impl FromBinary for Board {
             map_type: MapType::from_binary(binary)?,
             bosses: <Vec<(EnemyID, Vector<usize>)>>::from_binary(binary)?,
             projectiles: <Vec<Projectile>>::from_binary(binary)?,
+            floating_spell_circles: <Vec<(Vector<usize>, Spell)>>::from_binary(binary)?,
         })
     }
 }
@@ -133,6 +144,7 @@ impl Board {
             map_type,
             bosses: Vec::new(),
             projectiles: Vec::new(),
+            floating_spell_circles: Vec::new(),
         })
     }
     pub fn recalc_viewport(&mut self, desired: Vector<usize>) {
@@ -215,6 +227,19 @@ impl Board {
         }
 
         out
+    }
+    pub fn get_spell_circle_at_position(&self, position: Vector<usize>) -> Option<&Spell> {
+        for (circle_position, spell) in match self.get_room_id_of_coord(position) {
+            Some(room) => &self[room].spell_circles,
+            None => &self.floating_spell_circles,
+        }
+        .iter()
+        {
+            if *circle_position == position {
+                return Some(spell);
+            }
+        }
+        None
     }
 }
 

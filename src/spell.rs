@@ -106,7 +106,30 @@ impl FromBinary for ContactSpell {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Spell {
     Position(PositionSpell),
     Contact(ContactSpell),
+}
+impl ToBinary for Spell {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
+        match self {
+            Spell::Position(spell) => {
+                false.to_binary(binary)?;
+                spell.to_binary(binary)
+            }
+            Spell::Contact(spell) => {
+                true.to_binary(binary)?;
+                spell.to_binary(binary)
+            }
+        }
+    }
+}
+impl FromBinary for Spell {
+    fn from_binary(binary: &mut dyn Read) -> Result<Self> {
+        Ok(match bool::from_binary(binary)? {
+            false => Spell::Position(PositionSpell::from_binary(binary)?),
+            true => Spell::Contact(ContactSpell::from_binary(binary)?),
+        })
+    }
 }

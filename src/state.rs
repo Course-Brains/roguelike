@@ -461,6 +461,9 @@ impl State {
         self.board
             .calculate_viewport(self.player.get_render_target_pos())
     }
+    pub fn explode(&mut self, position: Vector<usize>, radius: usize) {
+        todo!()
+    }
 }
 
 /// Anything on the board, specifically the player an enemy or a tile

@@ -1,6 +1,7 @@
 use super::EnemyID;
 use crate::math::Vector;
 use crate::math::Zone;
+use crate::spell::Spell;
 use abes_nice_things::PrimAs;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
@@ -33,6 +34,7 @@ pub struct Room {
     pub connections: Vec<(Vector<usize>, RoomID)>,
     pub bounds: Zone<usize>,
     pub enemies: Vec<EnemyID>,
+    pub spell_circles: Vec<(Vector<usize>, Spell)>,
 }
 impl ToBinary for Room {
     fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
@@ -42,7 +44,13 @@ impl ToBinary for Room {
             room.to_binary(binary)?;
         }
         self.bounds.to_binary(binary)?;
-        self.enemies.to_binary(binary)
+        self.enemies.to_binary(binary)?;
+        self.spell_circles.len().to_binary(binary)?;
+        for (position, spell) in self.spell_circles.iter() {
+            position.to_binary(binary)?;
+            spell.to_binary(binary)?;
+        }
+        Ok(())
     }
 }
 impl FromBinary for Room {
@@ -51,6 +59,7 @@ impl FromBinary for Room {
             connections: <Vec<(Vector<usize>, RoomID)>>::from_binary(binary)?,
             bounds: <Zone<usize>>::from_binary(binary)?,
             enemies: <Vec<EnemyID>>::from_binary(binary)?,
+            spell_circles: <Vec<(Vector<usize>, Spell)>>::from_binary(binary)?,
         })
     }
 }
@@ -60,6 +69,7 @@ impl Room {
             connections: Vec::new(),
             bounds,
             enemies: Vec::new(),
+            spell_circles: Vec::new(),
         }
     }
     pub fn add_connection(&mut self, position: Vector<usize>, connectee: RoomID) {

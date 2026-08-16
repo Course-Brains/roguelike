@@ -30,7 +30,7 @@ impl Enemy {
 static CONVERTERS: [(
     fn(&Box<dyn Any + Send>, &mut dyn Write) -> std::io::Result<()>,
     fn(&mut dyn std::io::Read) -> std::io::Result<Box<dyn Any + Send>>,
-); VTABLES.len()] = [NO_OP_CONVERTERS, NO_OP_CONVERTERS, todo!()];
+); VTABLES.len()] = [NO_OP_CONVERTERS, NO_OP_CONVERTERS, NO_OP_CONVERTERS];
 // And you're done
 
 use crate::Vector;

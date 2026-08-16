@@ -47,6 +47,7 @@ impl RayCast {
             logical_target,
             steps_taken: 0,
             initial_direction: logical_target - logical_position,
+            initial_dist_to_target: self.start.abs_diff(self.target).sum_axes(),
             can_hit_player: self.can_hit_player,
             can_hit_enemy: self.can_hit_enemy,
             can_hit_tile: self.can_hit_tile,
@@ -96,6 +97,7 @@ pub struct RayCastStepper {
     logical_target: Vector<f64>,
     steps_taken: usize,
     initial_direction: Vector<f64>,
+    initial_dist_to_target: usize,
 
     // Settings
     can_hit_player: bool,
@@ -124,7 +126,8 @@ impl ToBinary for RayCastStepper {
         self.position.to_binary(binary)?;
         self.logical_position.to_binary(binary)?;
         self.steps_taken.to_binary(binary)?;
-        self.initial_direction.to_binary(binary)
+        self.initial_direction.to_binary(binary)?;
+        self.initial_dist_to_target.to_binary(binary)
     }
 }
 impl FromBinary for RayCastStepper {
@@ -143,6 +146,7 @@ impl FromBinary for RayCastStepper {
             logical_target: target.prim_as() + 0.5,
             steps_taken: usize::from_binary(binary)?,
             initial_direction: <Vector<f64>>::from_binary(binary)?,
+            initial_dist_to_target: usize::from_binary(binary)?,
 
             can_hit_player: flags[0],
             can_hit_enemy: flags[1],
@@ -158,11 +162,8 @@ impl RayCastStepper {
     pub fn step(&mut self, state: &State) -> Option<Option<MapObject>> {
         // incrementing position
         // complicated thing to find out if we have gone past or are at the target
-        let logical_diff = if self.logical_position.x.copysign(self.initial_direction.x)
-            >= self.logical_target.x.copysign(self.initial_direction.x)
-            || self.logical_position.y.copysign(self.initial_direction.y)
-                >= self.logical_target.y.copysign(self.initial_direction.y)
-        {
+        let past_target = self.steps_taken >= self.initial_dist_to_target;
+        let logical_diff = if past_target {
             self.initial_direction
         } else {
             self.logical_target - (self.position.prim_as() + 0.5)
@@ -211,7 +212,7 @@ impl RayCastStepper {
 
         let effective_dist_to_target = (next_target - self.logical_position) / logical_diff;
         // Incrementing everything
-        if self.position.is_adjacent(self.target) {
+        /*if self.position.is_adjacent(self.target) && !past_target {
             let direction = if self.position.x > self.target.x {
                 Direction::Left
             } else if self.position.x < self.target.x {
@@ -223,38 +224,40 @@ impl RayCastStepper {
             } else {
                 unreachable!("We are already at the target")
             };
-            self.position += direction;
-            assert_eq!(self.position, self.target)
-        } else {
-            let direction = if effective_dist_to_target.x.abs() < effective_dist_to_target.y.abs()
-                && effective_dist_to_target.x.is_finite()
-            {
-                self.logical_position.x = next_target.x;
-                self.logical_position.y += logical_diff.y * effective_dist_to_target.x;
-                if logical_diff.x > 0.0 {
-                    Direction::Right
-                } else {
-                    Direction::Left
-                }
-            } else if effective_dist_to_target.y.is_finite() {
-                self.logical_position.y = next_target.y;
-                self.logical_position.x += logical_diff.x * effective_dist_to_target.y;
-                if logical_diff.y > 0.0 {
-                    Direction::Down
-                } else {
-                    Direction::Up
-                }
-            } else {
-                return Some(None);
-            };
-
-            // If moving would take us off the board, then don't
-            if !state.board.is_move_on_board(self.position, direction) {
-                return Some(None);
-            }
-            self.position += direction;
             self.steps_taken += 1;
+            self.position += direction;
+            self.logical_position += direction;
+            assert_eq!(self.position, self.target)
+        } else {*/
+        let direction = if effective_dist_to_target.x.abs() < effective_dist_to_target.y.abs()
+            && effective_dist_to_target.x.is_finite()
+        {
+            self.logical_position.x = next_target.x;
+            self.logical_position.y += logical_diff.y * effective_dist_to_target.x;
+            if logical_diff.x > 0.0 {
+                Direction::Right
+            } else {
+                Direction::Left
+            }
+        } else if effective_dist_to_target.y.is_finite() {
+            self.logical_position.y = next_target.y;
+            self.logical_position.x += logical_diff.x * effective_dist_to_target.y;
+            if logical_diff.y > 0.0 {
+                Direction::Down
+            } else {
+                Direction::Up
+            }
+        } else {
+            return Some(None);
+        };
+
+        // If moving would take us off the board, then don't
+        if !state.board.is_move_on_board(self.position, direction) {
+            return Some(None);
         }
+        self.position += direction;
+        self.steps_taken += 1;
+        //}
         // Check stop conditions
         // Hitting a player
         if self.can_hit_player && self.position == state.player.position {

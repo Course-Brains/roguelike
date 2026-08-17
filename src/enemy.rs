@@ -327,6 +327,9 @@ impl Enemy {
     pub fn has_log_file(&self) -> bool {
         self.log.is_some()
     }
+    pub fn damage(state: &mut State, id: EnemyID, amount: usize) {
+        (state.board[id].as_mut().unwrap().get_vtable().damage)(state, id, amount);
+    }
 }
 /// Where enemy type specific logic is stored as well as some constants
 #[derive(Clone, Copy, Debug)]

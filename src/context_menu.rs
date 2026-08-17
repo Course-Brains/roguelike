@@ -458,6 +458,19 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Act(Box::new(|state| state.go_to_shop())),
                     cheats,
                 ),
+                (
+                    "Test spell".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        crate::spell::PositionSpell::Fireball.cast(
+                            state,
+                            state.player.position,
+                            Entity::Player,
+                            state.player.selector,
+                            10,
+                        )
+                    })),
+                    cheats,
+                ),
             ]
         },
     },

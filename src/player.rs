@@ -1,7 +1,6 @@
 use crate::math::Direction;
 use crate::math::Vector;
 use crate::math::Zone;
-use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -18,7 +17,6 @@ pub struct Player {
     pub max_energy: usize,
     pub effect_tracker: crate::effect::EffectTracker,
     pub flags: PlayerFlags,
-    killer: Option<Entity>,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -30,8 +28,7 @@ impl ToBinary for Player {
         self.energy.to_binary(binary)?;
         self.max_energy.to_binary(binary)?;
         self.effect_tracker.to_binary(binary)?;
-        self.flags.to_binary(binary)?;
-        self.killer.as_ref().to_binary(binary)
+        self.flags.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -46,7 +43,6 @@ impl FromBinary for Player {
             max_energy: usize::from_binary(binary)?,
             effect_tracker: crate::effect::EffectTracker::from_binary(binary)?,
             flags: PlayerFlags::from_binary(binary)?,
-            killer: <Option<Entity>>::from_binary(binary)?,
         })
     }
 }
@@ -62,7 +58,6 @@ impl Player {
             max_energy: 5,
             effect_tracker: Default::default(),
             flags: Default::default(),
-            killer: None,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
@@ -117,7 +112,7 @@ impl Player {
         true
     }
     pub fn attack(state: &mut State, target: crate::board::EnemyID) {
-        (state.board[target].as_ref().unwrap().get_vtable().damage)(state, target, 1);
+        crate::enemy::Enemy::damage(state, target, 1)
     }
     pub fn handle_move_selector_input(state: &mut State, direction: Direction) {
         let viewport = state
@@ -162,7 +157,7 @@ impl Player {
     /// The function for damaging the player. It properly handles things so only use this.
     ///
     /// A source of None is to show the player damaging themself
-    pub fn damage(state: &mut State, damage: usize, source: Entity) {
+    pub fn damage(state: &mut State, damage: usize) {
         let player = &mut state.player;
         // If the player is dead then there is no point doing furthur damage
         if player.is_dead() {
@@ -174,8 +169,8 @@ impl Player {
         // If the player has died then label that
         if player.health() == 0 {
             state.feedback = "You have died. Press enter to exit.".to_string();
+            state.player.flags.kill();
             crate::bell(Some(&mut std::io::stdout())).unwrap();
-            player.killer = Some(source)
         }
     }
     pub fn health(&self) -> usize {
@@ -186,13 +181,10 @@ impl Player {
         crate::effect::EffectTracker::run_on_ends(state, crate::state::Entity::Player, finished);
     }
     pub fn is_dead(&self) -> bool {
-        self.killer.is_some()
+        self.flags.is_dead()
     }
     pub fn is_alive(&self) -> bool {
-        self.killer.is_none()
-    }
-    pub fn get_killer(&self) -> Option<Entity> {
-        self.killer
+        !self.is_dead()
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -249,5 +241,11 @@ impl PlayerFlags {
     }
     pub fn swap_no_interact_range_limit(&mut self) {
         self.no_interact_range_limit ^= true;
+    }
+    pub fn kill(&mut self) {
+        self.dead = true
+    }
+    pub fn is_dead(&self) -> bool {
+        self.dead
     }
 }

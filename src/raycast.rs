@@ -51,8 +51,12 @@ impl RayCast {
             can_hit_player: self.can_hit_player,
             can_hit_enemy: self.can_hit_enemy,
             can_hit_tile: self.can_hit_tile,
-            stop_at_target: self.stop_at_target,
-            max_range: self.max_range,
+            max_range: if self.stop_at_target {
+                self.max_range
+                    .min(Some(self.start.abs_diff(self.target).sum_axes()))
+            } else {
+                self.max_range
+            },
         };
 
         loop {
@@ -89,6 +93,7 @@ impl RayCast {
         self
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RayCastStepper {
     // State
     position: Vector<usize>,
@@ -100,11 +105,10 @@ pub struct RayCastStepper {
     initial_dist_to_target: usize,
 
     // Settings
-    can_hit_player: bool,
-    can_hit_enemy: bool,
-    can_hit_tile: bool,
-    stop_at_target: bool,
-    max_range: Option<usize>,
+    pub can_hit_player: bool,
+    pub can_hit_enemy: bool,
+    pub can_hit_tile: bool,
+    pub max_range: Option<usize>,
 }
 impl ToBinary for RayCastStepper {
     fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> Result<()> {
@@ -112,7 +116,7 @@ impl ToBinary for RayCastStepper {
             self.can_hit_player,      // 0
             self.can_hit_enemy,       // 1
             self.can_hit_tile,        // 2
-            self.stop_at_target,      // 3
+            false,                    // 3
             self.max_range.is_some(), // 4
             false,
             false,
@@ -151,12 +155,30 @@ impl FromBinary for RayCastStepper {
             can_hit_player: flags[0],
             can_hit_enemy: flags[1],
             can_hit_tile: flags[2],
-            stop_at_target: flags[3],
             max_range,
         })
     }
 }
 impl RayCastStepper {
+    /// Creates a new RayCastStepper with no set settings meaning that it will no collide with
+    /// anything and will go off the map. So I recommend giving it stop conditions.
+    pub fn new(start: Vector<usize>, target: Vector<usize>) -> RayCastStepper {
+        let logical_position = start.prim_as() + 0.5;
+        let logical_target = target.prim_as() + 0.5;
+        Self {
+            position: start,
+            logical_position,
+            target,
+            logical_target,
+            steps_taken: 0,
+            initial_direction: logical_target - logical_position,
+            initial_dist_to_target: start.abs_diff(target).sum_axes(),
+            can_hit_player: false,
+            can_hit_enemy: false,
+            can_hit_tile: false,
+            max_range: None,
+        }
+    }
     /// If it stops then it returns Some(Option<MapObject). If stop_at_target is not enabled then
     /// the inner option will never be None and so you should flatten it.
     pub fn step(&mut self, state: &State) -> Option<Option<MapObject>> {
@@ -281,10 +303,34 @@ impl RayCastStepper {
         {
             return Some(None);
         }
-        // Hitting the target
-        if self.stop_at_target && self.target == self.position {
-            return Some(None);
-        }
         None
+    }
+    pub fn can_hit_player(&mut self, new: bool) -> &mut Self {
+        self.can_hit_player = new;
+        self
+    }
+    pub fn can_hit_enemy(&mut self, new: bool) -> &mut Self {
+        self.can_hit_enemy = new;
+        self
+    }
+    pub fn can_hit_tile(&mut self, new: bool) -> &mut Self {
+        self.can_hit_tile = new;
+        self
+    }
+    pub fn max_range(&mut self, new: Option<usize>) -> &mut Self {
+        self.max_range = new;
+        self
+    }
+    /// This is done through setting the max range so it is a lossy operation and will no longer
+    /// apply if you set the max range again.
+    ///
+    /// It will not affect the max range if the max range is already shorter than the distance to
+    /// the target
+    pub fn stop_at_target(&mut self) -> &mut Self {
+        self.max_range = self.max_range.min(Some(self.initial_dist_to_target));
+        self
+    }
+    pub fn position(&self) -> Vector<usize> {
+        self.position
     }
 }

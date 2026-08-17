@@ -26,6 +26,7 @@ use tile::Tile;
 mod walk_trigger;
 use crate::spell::Spell;
 pub use projectile::Projectile;
+pub use projectile::ProjectileType;
 pub use walk_trigger::WalkTrigger;
 
 /// This contains all data which is tied to the specific map, which is everything that does not
@@ -68,6 +69,9 @@ pub struct Board {
     /// Spell circles that are not within the bounds of a room (currently only case where this
     /// would happen is an open door)
     floating_spell_circles: Vec<(Vector<usize>, Spell)>,
+    /// Visual graphics which do not affect logic which must only exist for a short time (less than
+    /// one turn)
+    short_render_specials: Vec<RenderSpecial>,
 }
 impl ToBinary for Board {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -96,6 +100,7 @@ impl ToBinary for Board {
             position.to_binary(binary)?;
             spell.to_binary(binary)?;
         }
+        // Short render specials do not live long enough to reach a save
         Ok(())
     }
 }
@@ -116,6 +121,8 @@ impl FromBinary for Board {
             bosses: <Vec<(EnemyID, Vector<usize>)>>::from_binary(binary)?,
             projectiles: <Vec<Projectile>>::from_binary(binary)?,
             floating_spell_circles: <Vec<(Vector<usize>, Spell)>>::from_binary(binary)?,
+            // Short render specials do not live long enough to reach a save
+            short_render_specials: Vec::new(),
         })
     }
 }
@@ -145,6 +152,7 @@ impl Board {
             bosses: Vec::new(),
             projectiles: Vec::new(),
             floating_spell_circles: Vec::new(),
+            short_render_specials: Vec::new(),
         })
     }
     pub fn recalc_viewport(&mut self, desired: Vector<usize>) {
@@ -186,8 +194,13 @@ impl Board {
     }
     fn update_projectiles(state: &mut State) {
         let viewport = state.calculate_viewport();
-        for index in 0..state.board.projectiles.len() {
-            Projectile::step(state, index, &viewport);
+        let mut index = 0;
+        while index < state.board.projectiles.len() {
+            if Projectile::step(state, index, &viewport) {
+                state.board.projectiles.swap_remove(index);
+            } else {
+                index += 1;
+            }
         }
     }
     pub fn get_viewport_size(&self) -> Vector<usize> {
@@ -240,6 +253,9 @@ impl Board {
             }
         }
         None
+    }
+    pub fn add_projectile(&mut self, projectile: Projectile) {
+        self.projectiles.push(projectile);
     }
 }
 
@@ -341,6 +357,29 @@ impl Board {
             write!(buffer, "{ch}").unwrap();
             if style.is_some() {
                 write!(buffer, "\x1b[0m").unwrap();
+            }
+        }
+    }
+    pub fn render_short_specials(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
+        for special in self.short_render_specials.iter() {
+            if !viewport.contains(special.position) {
+                continue;
+            }
+            let screen_position = special.position - viewport.top_left() + 1;
+            if let Some(style) = special.style {
+                write!(
+                    buffer,
+                    "\x1b[{};{}H{style}{}\x1b[0m",
+                    screen_position.y, screen_position.x, special.ch
+                )
+                .unwrap();
+            } else {
+                write!(
+                    buffer,
+                    "\x1b[{};{}H{}",
+                    screen_position.y, screen_position.x, special.ch
+                )
+                .unwrap()
             }
         }
     }
@@ -873,6 +912,30 @@ impl FromBinary for MapType {
 impl ToBinary for MapType {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         unsafe { std::mem::transmute::<Self, u8>(*self) }.to_binary(binary)
+    }
+}
+pub struct RenderSpecial {
+    pub position: Vector<usize>,
+    pub ch: char,
+    pub style: Option<abes_nice_things::Style>,
+}
+impl ToBinary for RenderSpecial {
+    fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
+        self.position.to_binary(binary)?;
+        self.ch.to_binary(binary)?;
+        self.style.as_ref().to_binary(binary)
+    }
+}
+impl FromBinary for RenderSpecial {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            position: <Vector<usize>>::from_binary(binary)?,
+            ch: char::from_binary(binary)?,
+            style: <Option<abes_nice_things::Style>>::from_binary(binary)?,
+        })
     }
 }
 #[cfg(test)]

@@ -143,6 +143,8 @@ impl State {
         self.board.render_tiles(viewport, &mut buffer);
         Board::render_enemies(self, viewport, &mut buffer);
         self.player.render(viewport, &mut buffer);
+        self.board.render_projectiles(viewport, &mut buffer);
+        self.board.render_short_specials(viewport, &mut buffer);
         self.render_meta_ui(&mut buffer);
         crate::context_menu::ContextMenu::render(self, &mut buffer);
 

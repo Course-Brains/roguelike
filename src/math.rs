@@ -249,6 +249,13 @@ impl FromBinary for Direction {
     }
 }
 impl Direction {
+    /// The set of all values as an array
+    pub const SET: [Direction; 4] = [
+        Direction::Up,
+        Direction::Down,
+        Direction::Left,
+        Direction::Right,
+    ];
     /// Approximates the direction the vector is going based on the magnitudes of the directions. A
     /// Zero vector will return None
     pub fn from_vector<T: Number>(vector: Vector<T>) -> Option<Direction> {

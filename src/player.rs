@@ -17,6 +17,7 @@ pub struct Player {
     pub max_energy: usize,
     pub effect_tracker: crate::effect::EffectTracker,
     pub flags: PlayerFlags,
+    pub known_spells: Vec<crate::spell::Spell>,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -28,7 +29,8 @@ impl ToBinary for Player {
         self.energy.to_binary(binary)?;
         self.max_energy.to_binary(binary)?;
         self.effect_tracker.to_binary(binary)?;
-        self.flags.to_binary(binary)
+        self.flags.to_binary(binary)?;
+        self.known_spells.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -43,6 +45,7 @@ impl FromBinary for Player {
             max_energy: usize::from_binary(binary)?,
             effect_tracker: crate::effect::EffectTracker::from_binary(binary)?,
             flags: PlayerFlags::from_binary(binary)?,
+            known_spells: <Vec<crate::spell::Spell>>::from_binary(binary)?,
         })
     }
 }
@@ -58,6 +61,9 @@ impl Player {
             max_energy: 5,
             effect_tracker: Default::default(),
             flags: Default::default(),
+            known_spells: vec![crate::spell::Spell::Position(
+                crate::spell::PositionSpell::Fireball,
+            )],
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {

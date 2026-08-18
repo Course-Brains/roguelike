@@ -1,4 +1,5 @@
 use crate::board::EnemyID;
+use crate::spell::Spell;
 use crate::state::Entity;
 use crate::state::State;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -37,7 +38,7 @@ impl ContextMenu {
         write!(
             buffer,
             "\x1b[1;{start_column}H{}{}\x1b[0m",
-            style_base.clone().yellow(),
+            style_base.clone().cyan(),
             context_menu.title
         )
         .unwrap();
@@ -72,6 +73,11 @@ impl ContextMenu {
             if index == *selector {
                 style.background_red().intense(true);
             }
+            match options[index].1 {
+                Choice::Act(_) => style.green(),
+                Choice::Recurse(_, _) => style.yellow(),
+                Choice::Info => &mut style,
+            };
             if let Choice::Act(_) = options[index].1 {
                 style.green();
             }
@@ -94,6 +100,8 @@ pub enum Choice {
     /// time you just want |_| None
     Recurse(usize, Option<Box<dyn Fn(&mut State) -> Argument>>),
     Act(Box<dyn Fn(&mut crate::state::State)>),
+    /// Pure info which does nothing when selected
+    Info,
 }
 
 /// The stack holding the previous and current arguments for when we recurse out as well as the
@@ -107,26 +115,34 @@ pub type Stack = Vec<(Option<Argument>, usize, ContextMenuID)>;
 pub enum Argument {
     EnemyID(EnemyID),
     Entity(Entity),
+    Spell(Spell, usize),
 }
 impl ToBinary for Argument {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
         match self {
             Argument::EnemyID(id) => {
-                false.to_binary(binary)?;
+                0_u8.to_binary(binary)?;
                 id.to_binary(binary)
             }
             Argument::Entity(entity) => {
-                true.to_binary(binary)?;
+                1_u8.to_binary(binary)?;
                 entity.to_binary(binary)
+            }
+            Argument::Spell(spell, mana) => {
+                2_u8.to_binary(binary)?;
+                spell.to_binary(binary)?;
+                mana.to_binary(binary)
             }
         }
     }
 }
 impl FromBinary for Argument {
     fn from_binary(binary: &mut dyn std::io::prelude::Read) -> Result<Self> {
-        Ok(match bool::from_binary(binary)? {
-            false => Argument::EnemyID(EnemyID::from_binary(binary)?),
-            true => Argument::Entity(Entity::from_binary(binary)?),
+        Ok(match u8::from_binary(binary)? {
+            0 => Argument::EnemyID(EnemyID::from_binary(binary)?),
+            1 => Argument::Entity(Entity::from_binary(binary)?),
+            2 => Argument::Spell(Spell::from_binary(binary)?, usize::from_binary(binary)?),
+            other => anyhow::bail!("Attempted to make Argument with illegal discriminant {other}"),
         })
     }
 }
@@ -141,6 +157,13 @@ impl Argument {
     fn entity(self) -> Option<Entity> {
         if let Argument::Entity(entity) = self {
             Some(entity)
+        } else {
+            None
+        }
+    }
+    fn spell(self) -> Option<(Spell, usize)> {
+        if let Argument::Spell(spell, mana) = self {
+            Some((spell, mana))
         } else {
             None
         }
@@ -190,6 +213,7 @@ const CHEAT_MAIN: usize = 3;
 const EFFECT_SETTER: usize = 4;
 const SETTINGS: usize = 5;
 const SPELL_MAIN: usize = 6;
+const SPECIFIC_SPELL: usize = 7;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -198,6 +222,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "MAIN MENU:",
         get_options: |_| {
             vec![
+                (
+                    "Spells".to_string(),
+                    Choice::Recurse(SPELL_MAIN, None),
+                    true,
+                ),
                 (
                     "Settings".to_string(),
                     Choice::Recurse(SETTINGS, None),
@@ -292,7 +321,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         .enemy_id()
                         .unwrap();
                     if state.board[enemy_id].is_some() {
-                        let path = state.get_input("What file? ".to_string());
+                        let path = state.get_input("What file? ");
                         state.board[enemy_id]
                             .as_mut()
                             .unwrap()
@@ -438,7 +467,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 (
                     "Save".to_string(),
                     Choice::Act(Box::new(|state| {
-                        let path = state.get_input("What file?".to_string());
+                        let path = state.get_input("What file? ");
                         let mut file = std::fs::File::create(path).unwrap();
                         state.to_binary(&mut file).unwrap();
                     })),
@@ -447,11 +476,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 (
                     "Load".to_string(),
                     Choice::Act(Box::new(|state| {
-                        let path = state.get_input("What file?".to_string());
+                        let path = state.get_input("What file? ");
                         let mut file = std::fs::File::open(path).unwrap();
                         *state = State::from_binary(&mut file).unwrap();
                     })),
-                    cheats,
+                    true,
                 ),
                 (
                     "Go to shop".to_string(),
@@ -459,15 +488,29 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     cheats,
                 ),
                 (
-                    "Test spell".to_string(),
+                    "Set energy".to_string(),
                     Choice::Act(Box::new(|state| {
-                        crate::spell::PositionSpell::Fireball.cast(
-                            state,
-                            state.player.position,
-                            Entity::Player,
-                            state.player.selector,
-                            10,
-                        )
+                        use abes_nice_things::Number;
+                        if let Some(new_energy) = state
+                            .get_input_with_mapper("What do you want to set energy to? ", |input| {
+                                input.parse().ok()
+                            })
+                        {
+                            state.player.energy = new_energy;
+                            state.player.max_energy.max_assign(new_energy);
+                        }
+                    })),
+                    cheats,
+                ),
+                (
+                    "Set max energy".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        if let Some(new_max) = state.get_input_with_mapper(
+                            "What do you want the new max energy to be? ",
+                            |input| input.parse().ok(),
+                        ) {
+                            state.player.max_energy = new_max
+                        }
                     })),
                     cheats,
                 ),
@@ -549,6 +592,101 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     // no argument
     ContextMenu {
         title: "Spells",
-        get_options: |_| todo!(),
+        get_options: |state| {
+            let mut options = Vec::new();
+
+            for spell in state.player.known_spells.iter().cloned() {
+                options.push((
+                    format!("{}: {}", spell.minimum_mana(), spell.get_name()),
+                    Choice::Recurse(
+                        SPECIFIC_SPELL,
+                        Some(Box::new(move |_| {
+                            Argument::Spell(spell.clone(), spell.minimum_mana())
+                        })),
+                    ),
+                    true,
+                ));
+            }
+
+            options
+        },
+    },
+    // 7: specific spell
+    // argument of (Spell, usize)
+    // being the spell to cast and the currently selected amount of mana to use
+    ContextMenu {
+        title: "Cast",
+        get_options: |state| {
+            let (spell, mana) = state
+                .get_current_context_menu_argument()
+                .unwrap()
+                .spell()
+                .unwrap();
+            vec![
+                (format!("Spell: {}", spell.get_name()), Choice::Info, true),
+                (
+                    format!("Type: {}", spell.spell_type_name()),
+                    Choice::Info,
+                    true,
+                ),
+                (
+                    "cast".to_string(),
+                    Choice::Act(Box::new(move |state| {
+                        state.player.energy -= mana;
+                        match spell {
+                            Spell::Position(spell) => spell.cast(
+                                state,
+                                state.player.position,
+                                Entity::Player,
+                                state.player.selector,
+                                mana,
+                            ),
+                            Spell::Contact(contact) => todo!(),
+                        }
+                        state.increment();
+                    })),
+                    state.player.energy >= mana,
+                ),
+                (
+                    format!("mana: {mana}"),
+                    Choice::Act(Box::new(|state| {
+                        let spell = state
+                            .get_current_context_menu_argument()
+                            .unwrap()
+                            .spell()
+                            .unwrap()
+                            .0;
+                        loop {
+                            let input = state.get_input("How much mana do you want to spend? ");
+                            if matches!(
+                                input.as_str(),
+                                "cancel" | "c" | "stop" | "s" | "back" | "b"
+                            ) {
+                                return;
+                            }
+                            match input.parse() {
+                                Ok(new_mana) => {
+                                    if new_mana < spell.minimum_mana() {
+                                        state.feedback = format!(
+                                            "You must use at least {} mana",
+                                            spell.minimum_mana()
+                                        );
+                                    } else {
+                                        state.set_current_context_menu_argument(Argument::Spell(
+                                            spell, new_mana,
+                                        ));
+                                        break;
+                                    }
+                                }
+                                Err(error) => state.feedback = error.to_string(),
+                            }
+                            crate::bell(None).unwrap();
+                            state.render();
+                        }
+                    })),
+                    true,
+                ),
+            ]
+        },
     },
 ];

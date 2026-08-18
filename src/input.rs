@@ -9,6 +9,8 @@ pub enum Input {
     ChangeRenderTarget,
     SkipTurn,
     ResizeScreen,
+    /// The numbers from 1 - 9
+    Number(u8),
 }
 impl Input {
     pub fn get() -> Input {
@@ -37,6 +39,15 @@ impl Input {
                 b't' => Input::ChangeRenderTarget,
                 b'\t' => Input::SkipTurn,
                 b'+' => Input::ResizeScreen,
+                b'1' => Input::Number(1),
+                b'2' => Input::Number(2),
+                b'3' => Input::Number(3),
+                b'4' => Input::Number(4),
+                b'5' => Input::Number(5),
+                b'6' => Input::Number(6),
+                b'7' => Input::Number(7),
+                b'8' => Input::Number(8),
+                b'9' => Input::Number(9),
                 _ => continue,
             };
         }

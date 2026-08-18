@@ -177,6 +177,7 @@ impl State {
                         .push((argument, 0, ContextMenuID::new(*child)));
                 }
                 crate::context_menu::Choice::Act(action) => (action)(self),
+                crate::context_menu::Choice::Info => {}
             }
             false
         } else {
@@ -282,6 +283,18 @@ impl State {
         }
         false
     }
+    pub fn handle_number_input(&mut self, number: u8) -> bool {
+        if number
+            <= (self
+                .get_current_context_menu_id()
+                .get_context_menu()
+                .get_options)(self)
+            .len() as u8
+        {
+            *self.get_context_menu_selector_mut() = number as usize - 1;
+        }
+        false
+    }
     pub fn increment(&mut self) {
         // If the player is dead then changing the game state becomes illegal
         if self.player.is_dead() {
@@ -302,6 +315,10 @@ impl State {
     }
     pub fn get_context_menu_selector_mut(&mut self) -> &mut usize {
         &mut self.context_menu_stack.last_mut().unwrap().1
+    }
+    pub fn set_current_context_menu_argument(&mut self, new: crate::context_menu::Argument) {
+        let current = &mut self.context_menu_stack.last_mut().unwrap().0;
+        *current = Some(new);
     }
     pub fn render_meta_ui(&self, buffer: &mut impl Write) {
         // all meta ui positions are based on the viewport's height and so are given as offsets
@@ -354,13 +371,12 @@ impl State {
         )
         .unwrap();
     }
-    pub fn get_input(&self, prompt: String) -> String {
+    pub fn get_input(&self, prompt: &str) -> String {
         // First we move to the input row and show the prompt
         print!("\x1b[{};0H{prompt}", self.board.get_viewport_size().y + 6);
+        std::io::stdout().flush().unwrap();
         // Then we make the terminal go back to normal
         crate::input::normalize().unwrap();
-        // Make sure everything sends
-        std::io::stdout().flush().unwrap();
         // Then we get what they typed
         let mut buf = String::new();
         std::io::stdin().read_line(&mut buf).unwrap();
@@ -371,6 +387,31 @@ impl State {
         abes_nice_things::windows!(buf.pop());
         // And return!
         buf
+    }
+    /// This uses a mapper to determine if it should pass along the mapped value or try getting
+    /// input again but it will exit and return None if it is given quit, stop, back, lemme out,
+    /// or nuh uh
+    ///
+    /// If the mapper decides to reject the given text then it will send the bell character
+    pub fn get_input_with_mapper<T>(
+        &self,
+        prompt: &str,
+        mapper: impl Fn(String) -> Option<T>,
+    ) -> Option<T> {
+        loop {
+            let input = self.get_input(prompt);
+            if matches!(
+                input.to_lowercase().as_str(),
+                "quit" | "stop" | "back" | "lemme out" | "nuh uh"
+            ) {
+                return None;
+            }
+            if let Some(out) = (mapper)(input) {
+                return Some(out);
+            } else {
+                crate::bell(None).unwrap();
+            }
+        }
     }
     pub fn get_enemy_char(&mut self, vtable_id: crate::enemy::VTableID) -> char {
         if self
@@ -462,9 +503,6 @@ impl State {
     pub fn calculate_viewport(&self) -> Zone<usize> {
         self.board
             .calculate_viewport(self.player.get_render_target_pos())
-    }
-    pub fn explode(&mut self, position: Vector<usize>, radius: usize) {
-        todo!()
     }
 }
 

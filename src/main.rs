@@ -72,6 +72,7 @@ fn play() {
                 state.render();
                 false
             }
+            Input::Number(number) => state.handle_number_input(number),
         } {
             state.increment();
         }
@@ -164,7 +165,7 @@ fn get_git_hash() -> String {
 /// Writes the bell character to the given destination or stdout if none is given.
 ///
 /// If it is writing to stdout then it will flush afterwards
-fn bell(dest: Option<&mut impl Write>) -> anyhow::Result<()> {
+fn bell(dest: Option<&mut dyn Write>) -> anyhow::Result<()> {
     match dest {
         Some(dest) => dest.write_all(&[7])?,
         None => {

@@ -44,6 +44,11 @@ impl PositionSpell {
             Self::Fireball => "fireball",
         }
     }
+    pub fn minimum_mana(self) -> usize {
+        match self {
+            Self::Fireball => 5,
+        }
+    }
     pub fn cast(
         self,
         state: &mut State,
@@ -60,6 +65,9 @@ impl PositionSpell {
 
 impl ContactSpell {
     pub fn get_name(self) -> &'static str {
+        match self {}
+    }
+    pub fn minimum_mana(self) -> usize {
         match self {}
     }
     pub fn cast(self, _state: &mut State, _caster: Entity, _target: Entity) {
@@ -131,5 +139,26 @@ impl FromBinary for Spell {
             false => Spell::Position(PositionSpell::from_binary(binary)?),
             true => Spell::Contact(ContactSpell::from_binary(binary)?),
         })
+    }
+}
+impl Spell {
+    pub fn get_name(&self) -> &'static str {
+        match self {
+            Self::Position(position) => position.get_name(),
+            Self::Contact(contact) => contact.get_name(),
+        }
+    }
+    pub fn minimum_mana(&self) -> usize {
+        match self {
+            Self::Position(position) => position.minimum_mana(),
+            Self::Contact(contact) => contact.minimum_mana(),
+        }
+    }
+    /// Returns position for position spells and contact for contact spells
+    pub fn spell_type_name(&self) -> &'static str {
+        match self {
+            Self::Position(_) => "position",
+            Self::Contact(_) => "contact",
+        }
     }
 }

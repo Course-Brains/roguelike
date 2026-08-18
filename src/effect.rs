@@ -86,7 +86,7 @@ impl EffectTracker {
     /// Assumes alive entity
     pub fn prompt_set_time(state: &mut State, effect: EffectID, entity: Entity) {
         let time = loop {
-            let input = state.get_input("How many turns? ".to_string());
+            let input = state.get_input("How many turns? ");
             break match input.as_str() {
                 "cancel" | "c" | "quit" | "q" => return,
                 "infinty" | "infinite" | "inf" | "i" => None,

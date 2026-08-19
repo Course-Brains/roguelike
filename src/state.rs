@@ -185,15 +185,8 @@ impl State {
                 self.exit = true;
                 return false;
             }
-            const INTERACT_RANGE: usize = 3;
             const SMACK_RANGE: usize = 1;
-            let no_range_limit = self.player.flags.no_interact_range_limit();
-            if !(no_range_limit
-                || self
-                    .player
-                    .position
-                    .is_near(self.player.selector, INTERACT_RANGE))
-            {
+            if !self.player.within_interact_range(self.player.selector) {
                 return false;
             }
 

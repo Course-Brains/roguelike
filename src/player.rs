@@ -1,6 +1,7 @@
 use crate::math::Direction;
 use crate::math::Vector;
 use crate::math::Zone;
+use crate::spell::Spell;
 use crate::state::State;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -17,7 +18,8 @@ pub struct Player {
     pub max_energy: usize,
     pub effect_tracker: crate::effect::EffectTracker,
     pub flags: PlayerFlags,
-    pub known_spells: Vec<crate::spell::Spell>,
+    known_spells: Vec<crate::spell::Spell>,
+    unknown_spells: Vec<crate::spell::Spell>,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -30,7 +32,8 @@ impl ToBinary for Player {
         self.max_energy.to_binary(binary)?;
         self.effect_tracker.to_binary(binary)?;
         self.flags.to_binary(binary)?;
-        self.known_spells.to_binary(binary)
+        self.known_spells.to_binary(binary)?;
+        self.unknown_spells.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -46,6 +49,7 @@ impl FromBinary for Player {
             effect_tracker: crate::effect::EffectTracker::from_binary(binary)?,
             flags: PlayerFlags::from_binary(binary)?,
             known_spells: <Vec<crate::spell::Spell>>::from_binary(binary)?,
+            unknown_spells: <Vec<Spell>>::from_binary(binary)?,
         })
     }
 }
@@ -61,9 +65,8 @@ impl Player {
             max_energy: 5,
             effect_tracker: Default::default(),
             flags: Default::default(),
-            known_spells: vec![crate::spell::Spell::Position(
-                crate::spell::PositionSpell::Fireball,
-            )],
+            known_spells: Vec::new(),
+            unknown_spells: crate::spell::EVERY_SPELL.to_vec(),
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
@@ -118,7 +121,7 @@ impl Player {
         true
     }
     pub fn attack(state: &mut State, target: crate::board::EnemyID) {
-        crate::enemy::Enemy::damage(state, target, 1)
+        crate::enemy::Enemy::damage(state, target, 10)
     }
     pub fn handle_move_selector_input(state: &mut State, direction: Direction) {
         let viewport = state
@@ -191,6 +194,27 @@ impl Player {
     }
     pub fn is_alive(&self) -> bool {
         !self.is_dead()
+    }
+    pub fn get_known_spells(&self) -> &[Spell] {
+        self.known_spells.as_slice()
+    }
+    pub fn get_unknown_spells(&self) -> &[Spell] {
+        self.unknown_spells.as_slice()
+    }
+    pub fn learn_spell(&mut self, spell: Spell) {
+        // Yes this is inefficient but this will be called very infrequently so it shouldn't matter
+        for index in 0..self.unknown_spells.len() {
+            if self.unknown_spells[index] == spell {
+                self.known_spells
+                    .push(self.unknown_spells.swap_remove(index));
+                break;
+            }
+        }
+    }
+    pub fn within_interact_range(&self, position: Vector<usize>) -> bool {
+        const INTERACT_RANGE: usize = 3;
+        let no_range_limit = self.flags.no_interact_range_limit();
+        no_range_limit || self.position.is_near(position, INTERACT_RANGE)
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

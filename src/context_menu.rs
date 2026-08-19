@@ -214,6 +214,7 @@ const EFFECT_SETTER: usize = 4;
 const SETTINGS: usize = 5;
 const SPELL_MAIN: usize = 6;
 const SPECIFIC_SPELL: usize = 7;
+const CHEAT_SPELL_LEARN: usize = 8;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -514,6 +515,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     })),
                     cheats,
                 ),
+                (
+                    "Learn spells".to_string(),
+                    Choice::Recurse(CHEAT_SPELL_LEARN, None),
+                    true,
+                ),
             ]
         },
     },
@@ -595,7 +601,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         get_options: |state| {
             let mut options = Vec::new();
 
-            for spell in state.player.known_spells.iter().cloned() {
+            for spell in state.player.get_known_spells().iter().cloned() {
                 options.push((
                     format!("{}: {}", spell.minimum_mana(), spell.get_name()),
                     Choice::Recurse(
@@ -622,7 +628,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 .unwrap()
                 .spell()
                 .unwrap();
-            vec![
+            let mut options = vec![
                 (format!("Spell: {}", spell.get_name()), Choice::Info, true),
                 (
                     format!("Type: {}", spell.spell_type_name()),
@@ -641,11 +647,23 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                                 state.player.selector,
                                 mana,
                             ),
-                            Spell::Contact(contact) => todo!(),
+                            Spell::Contact(contact) => contact.cast(
+                                state,
+                                Entity::Player,
+                                Entity::Enemy(
+                                    state
+                                        .board
+                                        .get_enemy_at_position(state.player.selector)
+                                        .unwrap(),
+                                ),
+                            ),
                         }
                         state.increment();
                     })),
-                    state.player.energy >= mana,
+                    state.player.energy >= mana
+                        && (!spell.is_contact()
+                            || (state.player.within_interact_range(state.player.selector)
+                                && state.board.is_enemy_at_position(state.player.selector))),
                 ),
                 (
                     format!("mana: {mana}"),
@@ -686,7 +704,33 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     })),
                     true,
                 ),
-            ]
+            ];
+
+            for info in spell.get_info(mana) {
+                options.push((info, Choice::Info, true));
+            }
+
+            options
+        },
+    },
+    // 8: spell learn cheat
+    // no argument
+    ContextMenu {
+        title: "Learn spell cheats",
+        get_options: |state| {
+            let mut options = Vec::new();
+            let cheats = state.cheats;
+
+            for spell in state.player.get_unknown_spells().iter() {
+                let spell = *spell;
+                options.push((
+                    spell.get_name().to_string(),
+                    Choice::Act(Box::new(move |state| state.player.learn_spell(spell))),
+                    cheats,
+                ));
+            }
+
+            options
         },
     },
 ];

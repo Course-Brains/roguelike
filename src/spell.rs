@@ -33,20 +33,27 @@ pub enum PositionSpell {
 //#[repr(u8)]
 pub enum ContactSpell {}
 
+pub static EVERY_SPELL: &[Spell] = &[Spell::Position(PositionSpell::Fireball)];
+
 ////////////////////////////////////////////////////////////
 // Things which do need changing when you add a new spell //
 ////////////////////////////////////////////////////////////
 
 impl PositionSpell {
     const HIGHEST_DISCRIMINANT: u8 = 0;
-    pub fn get_name(self) -> &'static str {
+    const fn get_name(self) -> &'static str {
         match self {
             Self::Fireball => "fireball",
         }
     }
-    pub fn minimum_mana(self) -> usize {
+    const fn minimum_mana(self) -> usize {
         match self {
             Self::Fireball => 5,
+        }
+    }
+    fn get_info(self, mana: usize) -> Vec<String> {
+        match self {
+            PositionSpell::Fireball => fireball::get_info(mana),
         }
     }
     pub fn cast(
@@ -64,10 +71,13 @@ impl PositionSpell {
 }
 
 impl ContactSpell {
-    pub fn get_name(self) -> &'static str {
+    const fn get_name(self) -> &'static str {
         match self {}
     }
-    pub fn minimum_mana(self) -> usize {
+    const fn minimum_mana(self) -> usize {
+        match self {}
+    }
+    fn get_info(self, mana: usize) -> Vec<String> {
         match self {}
     }
     pub fn cast(self, _state: &mut State, _caster: Entity, _target: Entity) {
@@ -142,23 +152,47 @@ impl FromBinary for Spell {
     }
 }
 impl Spell {
-    pub fn get_name(&self) -> &'static str {
+    pub const fn get_name(&self) -> &'static str {
         match self {
             Self::Position(position) => position.get_name(),
             Self::Contact(contact) => contact.get_name(),
         }
     }
-    pub fn minimum_mana(&self) -> usize {
+    pub const fn minimum_mana(&self) -> usize {
         match self {
             Self::Position(position) => position.minimum_mana(),
             Self::Contact(contact) => contact.minimum_mana(),
         }
     }
     /// Returns position for position spells and contact for contact spells
-    pub fn spell_type_name(&self) -> &'static str {
+    pub const fn spell_type_name(&self) -> &'static str {
         match self {
             Self::Position(_) => "position",
             Self::Contact(_) => "contact",
         }
+    }
+    pub const fn is_contact(&self) -> bool {
+        matches!(self, Spell::Contact(_))
+    }
+    pub const fn is_position(&self) -> bool {
+        matches!(self, Spell::Position(_))
+    }
+    /// Get additional information to be displayed when the spell is selected. Some spells might
+    /// not have any
+    pub fn get_info(&self, mana: usize) -> Vec<String> {
+        match self {
+            Self::Position(spell) => spell.get_info(mana),
+            Self::Contact(spell) => spell.get_info(mana),
+        }
+    }
+}
+impl From<PositionSpell> for Spell {
+    fn from(value: PositionSpell) -> Self {
+        Spell::Position(value)
+    }
+}
+impl From<ContactSpell> for Spell {
+    fn from(value: ContactSpell) -> Self {
+        Spell::Contact(value)
     }
 }

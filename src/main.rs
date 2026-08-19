@@ -12,6 +12,7 @@ mod raycast;
 mod settings;
 mod spell;
 mod state;
+mod upgrade;
 
 use std::io::Write;
 

@@ -51,31 +51,26 @@ macro_rules! random_int_helper {
 random_int_helper!(u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize);
 
 /// Create a random value from self
-pub trait PickRandom {
-    type Out;
-    fn generate(&self) -> Self::Out;
+pub trait PickRandom<T> {
+    fn generate(&self) -> T;
 }
-impl<'a, T> PickRandom for &'a [T] {
-    type Out = &'a T;
-    fn generate(&self) -> Self::Out {
+impl<'a, T> PickRandom<&'a T> for &'a [T] {
+    fn generate(&self) -> &'a T {
         &self[((random() - 1.0) * self.len() as f64) as usize]
     }
 }
-impl PickRandom for std::ops::Range<usize> {
-    type Out = usize;
-    fn generate(&self) -> Self::Out {
+impl PickRandom<usize> for std::ops::Range<usize> {
+    fn generate(&self) -> usize {
         ((random() - 1.0) * (self.end - self.start) as f64 + self.start as f64) as usize
     }
 }
-impl PickRandom for std::ops::RangeInclusive<usize> {
-    type Out = usize;
-    fn generate(&self) -> Self::Out {
+impl PickRandom<usize> for std::ops::RangeInclusive<usize> {
+    fn generate(&self) -> usize {
         (*self.start()..*self.end() + 1).generate()
     }
 }
-impl PickRandom for Zone<usize> {
-    type Out = Vector<usize>;
-    fn generate(&self) -> Self::Out {
+impl PickRandom<Vector<usize>> for Zone<usize> {
+    fn generate(&self) -> Vector<usize> {
         Vector::new(
             (self.left()..=self.right()).generate(),
             (self.top()..=self.bottom()).generate(),

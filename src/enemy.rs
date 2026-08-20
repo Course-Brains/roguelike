@@ -327,20 +327,27 @@ impl Enemy {
     pub fn has_log_file(&self) -> bool {
         self.log.is_some()
     }
-    pub fn damage(state: &mut State, id: EnemyID, amount: usize) {
-        (state.board[id].as_mut().unwrap().get_vtable().damage)(state, id, amount);
+    pub fn damage(state: &mut State, id: EnemyID, amount: usize) -> Option<usize> {
+        let vtable = state.board[id].as_mut().unwrap().get_vtable();
+        if (vtable.damage)(state, id, amount) {
+            Some(vtable.kill_energy)
+        } else {
+            None
+        }
     }
 }
 /// Where enemy type specific logic is stored as well as some constants
 #[derive(Clone, Copy, Debug)]
 pub struct VTable {
     starting_health: usize,
+    /// The energy rewarded to the player when this enemy type is killed
+    kill_energy: usize,
     /// The function which initializes the state of the enemy. If the enemy does not need a state
     /// then simply give it Box<()> which won't allocate anything
     init: fn() -> Box<dyn Any + Send>,
     /// The main logic function which is called for all enemies every turn before other logic
     pub think: fn(&mut State, EnemyID),
-    /// How damage is dealt to enemies. It returns if the enemy should be deleted
+    /// How damage is dealt to enemies. It returns if the enemy has been deleted
     pub damage: fn(&mut State, EnemyID, usize) -> bool,
     /// None means a boss.
     ///

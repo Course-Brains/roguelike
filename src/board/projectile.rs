@@ -87,7 +87,7 @@ impl ProjectileType {
                     if current == state.player.position {
                         crate::player::Player::damage(state, damage)
                     } else if let Some(enemy) = state.board.get_enemy_at_position(current) {
-                        crate::enemy::Enemy::damage(state, enemy, damage)
+                        crate::enemy::Enemy::damage(state, enemy, damage);
                     }
                     if depth > deepest {
                         deepest = depth;

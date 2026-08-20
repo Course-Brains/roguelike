@@ -6,6 +6,7 @@ use crate::random::Random;
 use crate::state::*;
 pub static VTABLE: VTable = VTable {
     starting_health: 30,
+    kill_energy: 1,
     init: VTable::DEFAULT_INIT,
     think,
     damage: VTable::DEFAULT_DAMAGE,

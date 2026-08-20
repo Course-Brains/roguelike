@@ -3,6 +3,7 @@ use crate::math::Vector;
 use crate::math::Zone;
 use crate::spell::Spell;
 use crate::state::State;
+use crate::upgrade::Upgrades;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::Result;
@@ -23,6 +24,7 @@ pub struct Player {
     pub heal_mult: f32,
     /// The amount of health given per energy overflow when being rewarded for killing an enemy
     pub overflow_health_per_energy: usize,
+    pub upgrades: Upgrades,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -38,7 +40,8 @@ impl ToBinary for Player {
         self.known_spells.to_binary(binary)?;
         self.unknown_spells.to_binary(binary)?;
         self.heal_mult.to_binary(binary)?;
-        self.overflow_health_per_energy.to_binary(binary)
+        self.overflow_health_per_energy.to_binary(binary)?;
+        self.upgrades.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -57,6 +60,7 @@ impl FromBinary for Player {
             unknown_spells: <Vec<Spell>>::from_binary(binary)?,
             heal_mult: f32::from_binary(binary)?,
             overflow_health_per_energy: usize::from_binary(binary)?,
+            upgrades: Upgrades::from_binary(binary)?,
         })
     }
 }
@@ -76,6 +80,7 @@ impl Player {
             unknown_spells: crate::spell::EVERY_SPELL.to_vec(),
             heal_mult: 1.0,
             overflow_health_per_energy: 5,
+            upgrades: Upgrades::new(),
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {

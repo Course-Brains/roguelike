@@ -121,6 +121,9 @@ settings!(
     ResizeTriggerMode::Manual => Some(&[ResizeTriggerMode::Manual, ResizeTriggerMode::Auto]);
 
     projectile_time = "projectile time(ms)": u64,
+    20 => None;
+
+    explosion_time = "explosion time(ms)":u64,
     100 => None
 );
 // Locked settings
@@ -137,7 +140,10 @@ settings!(
     ]);
 
     enemy_mult = "enemy mult": f32,
-    1.0 => None
+    1.0 => None;
+
+    starting_enemy_char = "starting enemy character": u8,
+    0 => Some(&[0, 1])
 );
 
 /// Settings that can only be changed in between runs and will be saved and loaded with [State].

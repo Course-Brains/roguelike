@@ -122,7 +122,7 @@ impl State {
             context_menu_inputs: false,
             feedback: String::new(),
             enemy_visuals: [None; crate::enemy::VTABLES.len()],
-            next_enemy_visual: 0,
+            next_enemy_visual: *locked.starting_enemy_char(),
             unlocked_settings: unlocked,
             locked_settings: locked,
             cheats: false,
@@ -357,10 +357,8 @@ impl State {
         // meta info
         write!(
             buffer,
-            "Selector: {}, Turn: {}, Local turn: {}",
-            self.player.selector,
-            self.total_turns,
-            self.board.get_local_turn(),
+            "Selector: {}, Turn: {}",
+            self.player.selector, self.total_turns,
         )
         .unwrap();
     }

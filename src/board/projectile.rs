@@ -92,7 +92,9 @@ impl ProjectileType {
                     if depth > deepest {
                         deepest = depth;
                         state.render();
-                        std::thread::sleep(std::time::Duration::from_millis(100))
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            *state.unlocked_settings.explosion_time(),
+                        ))
                     }
                     for dir in Direction::SET.into_iter() {
                         if state.board.is_move_on_board(current, dir)

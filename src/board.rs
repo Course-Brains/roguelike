@@ -171,9 +171,9 @@ impl Board {
     pub fn increment(state: &mut State) {
         state.board.local_turns += 1;
         Board::decriment_enemy_effects(state);
+        Board::pathfind(state);
         Board::run_thinkers(state);
         Board::update_projectiles(state);
-        Board::pathfind(state);
         state.board.update_boss_last_known_positions();
     }
     /// Update the last known good positions of bosses and spawn exits where needed

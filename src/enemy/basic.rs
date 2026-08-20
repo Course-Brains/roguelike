@@ -65,7 +65,6 @@ fn think(state: &mut State, id: super::EnemyID) {
         this.windup_time -= 1;
         // Smack o clock
         if this.windup_time == 0 {
-            this.flags.set_pathing(true);
             this.flags.set_windup(WindupState::None);
             if state.player.position.is_near(this.position, SMACK_RANGE) {
                 crate::player::Player::damage(state, (u8::random() & 0b111) as usize + 1);
@@ -79,6 +78,8 @@ fn think(state: &mut State, id: super::EnemyID) {
             this.flags.set_pathing(false);
             this.flags.set_windup(WindupState::Physical);
             this.windup_time = 2;
+        } else {
+            this.flags.set_pathing(true);
         }
     }
 }

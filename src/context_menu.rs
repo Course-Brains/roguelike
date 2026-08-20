@@ -22,6 +22,9 @@ impl ContextMenu {
             .collect()
     }
     pub fn render(state: &mut State, buffer: &mut impl Write) {
+        // The selector selects options not lines so when selecting a multi line option all lines
+        // of the option should be highlighted
+
         // Act options are purple
         // If we are using the context menu then make everything bold
         let style_base = if state.context_menu_inputs {
@@ -53,44 +56,63 @@ impl ContextMenu {
         // -2 for the title
         let available_rows = state.screen_size.y - 2;
 
-        // Then we figure out what range of options we are going to render
         let options = (state.get_context_menu().get_options)(state);
+        let lines: Vec<(usize, &[u8])> = {
+            let mut lines = Vec::with_capacity(options.len());
+            for (option, (text, _, _)) in options.iter().enumerate() {
+                for line in text.as_bytes().chunks(COLUMNS_NEEDED) {
+                    lines.push((option, line))
+                }
+            }
+            lines
+        };
+
         // Lets make sure we hae a valid option selector position
         let selector = state.get_context_menu_selector_mut();
         if *selector >= options.len() {
             *selector = options.len().saturating_sub(1);
         }
-        let width = available_rows.min(options.len());
-        let start_index = selector
+        let selector_line: usize = {
+            let mut line = 0;
+            for (option, _) in lines.iter() {
+                if option == selector {
+                    break;
+                }
+                line += 1;
+            }
+            line
+        };
+        // Then we figure out what range of options we are going to render
+        let width = available_rows.min(lines.len());
+        let start_line = selector_line
             .saturating_sub(available_rows / 2)
-            .min(options.len().saturating_sub(available_rows / 2));
+            .min(lines.len().saturating_sub(available_rows / 2));
 
         // Finally we can actually render them
         // took long enough, jeez
-        for (row, index) in (start_index..(start_index + width)).enumerate() {
+        for (row, index) in (start_line..(start_line + width)).enumerate() {
             let row = row + 3; // 1 because visuals start at 1 and 1 becausse of title
             let mut style = style_base.clone();
-            if index == *selector {
+            let option = lines[index].0;
+            let selected = *selector == option;
+            if selected {
                 style.background_red().intense(true);
             }
-            match options[index].1 {
+            match options[option].1 {
                 Choice::Act(_) => style.green(),
                 Choice::Recurse(_, _) => style.yellow(),
                 Choice::Info => &mut style,
             };
-            if let Choice::Act(_) = options[index].1 {
+            if let Choice::Act(_) = options[option].1 {
                 style.green();
             }
-            if !options[index].2 {
+            if !options[option].2 {
                 style.dim(true);
             }
 
-            write!(
-                buffer,
-                "\x1b[{row};{start_column}H{}{}\x1b[0m",
-                style, options[index].0
-            )
-            .unwrap();
+            write!(buffer, "\x1b[{row};{start_column}H{}", style).unwrap();
+            buffer.write_all(lines[index].1).unwrap();
+            write!(buffer, "\x1b[0m").unwrap();
         }
     }
 }
@@ -215,6 +237,8 @@ const SETTINGS: usize = 5;
 const SPELL_MAIN: usize = 6;
 const SPECIFIC_SPELL: usize = 7;
 const CHEAT_SPELL_LEARN: usize = 8;
+const GENERIC_INFO: usize = 9;
+const UPGRADE_CHEAT: usize = 10;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -223,6 +247,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "MAIN MENU:",
         get_options: |_| {
             vec![
+                (
+                    "Info".to_string(),
+                    Choice::Recurse(GENERIC_INFO, None),
+                    true,
+                ),
                 (
                     "Spells".to_string(),
                     Choice::Recurse(SPELL_MAIN, None),
@@ -520,6 +549,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Recurse(CHEAT_SPELL_LEARN, None),
                     true,
                 ),
+                (
+                    "Upgrades".to_string(),
+                    Choice::Recurse(UPGRADE_CHEAT, None),
+                    true,
+                ),
             ]
         },
     },
@@ -730,6 +764,89 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 ));
             }
 
+            options
+        },
+    },
+    // 9: Generic helpful info
+    // no argument
+    ContextMenu {
+        title: "Info",
+        get_options: |state| {
+            let mut info = vec![
+                (
+                    format!("Position: {}", state.player.position),
+                    Choice::Info,
+                    true,
+                ),
+                (
+                    format!("Local turn: {}", state.board.get_local_turn()),
+                    Choice::Info,
+                    true,
+                ),
+            ];
+
+            // If the play has good self awareness then they get to learn a lot of things
+            if state
+                .player
+                .upgrades
+                .has_bought(crate::upgrade::UpgradeID::SelfAwareness)
+            {
+                info.push((
+                    format!("Heal multiplier: {}", state.player.heal_mult),
+                    Choice::Info,
+                    true,
+                ));
+                info.push((
+                    format!(
+                        "Overflow health: {}",
+                        state.player.overflow_health_per_energy
+                    ),
+                    Choice::Info,
+                    true,
+                ));
+            }
+
+            if state.player.upgrades.has_bought_any() {
+                info.push(("Upgrades:".to_string(), Choice::Info, true));
+                for (upgrade, stacks) in state.player.upgrades.get_all() {
+                    if stacks == 0 {
+                        continue;
+                    }
+                    info.push((
+                        format!(
+                            "{}: {stacks}/{}",
+                            upgrade.to_upgrade().name,
+                            upgrade.to_upgrade().max_stacks
+                        ),
+                        Choice::Info,
+                        true,
+                    ))
+                }
+            }
+
+            info
+        },
+    },
+    // 10: Upgrade cheats
+    // no argument
+    ContextMenu {
+        title: "Upgrade cheats",
+        get_options: |state| {
+            let cheats = state.cheats;
+            let mut options = Vec::new();
+            for (upgrade, stacks) in state.player.upgrades.get_all() {
+                options.push((
+                    format!(
+                        "{}: {stacks}/{}",
+                        upgrade.to_upgrade().name,
+                        upgrade.to_upgrade().max_stacks
+                    ),
+                    Choice::Act(Box::new(move |state| {
+                        crate::upgrade::Upgrades::buy(state, upgrade)
+                    })),
+                    cheats && stacks < upgrade.to_upgrade().max_stacks,
+                ))
+            }
             options
         },
     },

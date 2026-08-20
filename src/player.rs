@@ -20,6 +20,9 @@ pub struct Player {
     pub flags: PlayerFlags,
     known_spells: Vec<crate::spell::Spell>,
     unknown_spells: Vec<crate::spell::Spell>,
+    pub heal_mult: f32,
+    /// The amount of health given per energy overflow when being rewarded for killing an enemy
+    pub overflow_health_per_energy: usize,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -33,7 +36,9 @@ impl ToBinary for Player {
         self.effect_tracker.to_binary(binary)?;
         self.flags.to_binary(binary)?;
         self.known_spells.to_binary(binary)?;
-        self.unknown_spells.to_binary(binary)
+        self.unknown_spells.to_binary(binary)?;
+        self.heal_mult.to_binary(binary)?;
+        self.overflow_health_per_energy.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -50,6 +55,8 @@ impl FromBinary for Player {
             flags: PlayerFlags::from_binary(binary)?,
             known_spells: <Vec<crate::spell::Spell>>::from_binary(binary)?,
             unknown_spells: <Vec<Spell>>::from_binary(binary)?,
+            heal_mult: f32::from_binary(binary)?,
+            overflow_health_per_energy: usize::from_binary(binary)?,
         })
     }
 }
@@ -67,6 +74,8 @@ impl Player {
             flags: Default::default(),
             known_spells: Vec::new(),
             unknown_spells: crate::spell::EVERY_SPELL.to_vec(),
+            heal_mult: 1.0,
+            overflow_health_per_energy: 5,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
@@ -121,7 +130,18 @@ impl Player {
         true
     }
     pub fn attack(state: &mut State, target: crate::board::EnemyID) {
-        crate::enemy::Enemy::damage(state, target, 10)
+        if let Some(energy) = crate::enemy::Enemy::damage(state, target, 10) {
+            // Some will overflow into health
+            if energy > (state.player.max_energy - state.player.energy) {
+                let overflow = energy + state.player.energy - state.player.max_energy;
+                state
+                    .player
+                    .heal(overflow * state.player.overflow_health_per_energy);
+                state.player.energy = state.player.max_energy;
+            } else {
+                state.player.energy += energy;
+            }
+        }
     }
     pub fn handle_move_selector_input(state: &mut State, direction: Direction) {
         let viewport = state
@@ -181,6 +201,11 @@ impl Player {
             state.player.flags.kill();
             crate::bell(Some(&mut std::io::stdout())).unwrap();
         }
+    }
+    pub fn heal(&mut self, health: usize) {
+        let health = (health as f32 * self.heal_mult).ceil() as usize;
+        self.health += health;
+        self.health = self.health.min(self.max_health);
     }
     pub fn health(&self) -> usize {
         self.health

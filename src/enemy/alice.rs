@@ -7,7 +7,8 @@ pub static VTABLE: VTable = VTable {
     // probably something like with the weight function
     // with if Some() = map.get_mut("Name")
     // but the "Name" being consistent is a pretty obvious failure method
-    starting_health: 10,
+    starting_health: 100,
+    kill_energy: 10,
     init: || Box::new(()),
     think: |_, _| {},
     damage: |_, _, _| todo!(),

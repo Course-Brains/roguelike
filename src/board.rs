@@ -303,12 +303,12 @@ impl Board {
     /// Zeros the cursor and draws the tiles onto the screen and clears the screen, this is the first layer of rendering.
     ///
     /// Additionally it draws the border of the viewport
-    pub fn render_tiles(&self, viewport: Zone<usize>, buffer: &mut impl Write) {
+    pub fn render_tiles(state: &State, viewport: Zone<usize>, buffer: &mut impl Write) {
         // Putting the cursor in the top corner
         write!(buffer, "\x1b[H").unwrap();
         for (position, last) in viewport.scanlines() {
-            if let Some(tile) = self[position] {
-                let (ch, style) = tile.render(self, position);
+            if let Some(tile) = state.board[position] {
+                let (ch, style) = tile.render(state, position);
                 match style {
                     Some(style) => write!(buffer, "{style}{ch}\x1b[0m").unwrap(),
                     None => write!(buffer, "{ch}").unwrap(),

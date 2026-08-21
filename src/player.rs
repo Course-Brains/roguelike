@@ -25,6 +25,7 @@ pub struct Player {
     /// The amount of health given per energy overflow when being rewarded for killing an enemy
     pub overflow_health_per_energy: usize,
     pub upgrades: Upgrades,
+    pub money: usize,
 }
 impl ToBinary for Player {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -41,7 +42,8 @@ impl ToBinary for Player {
         self.unknown_spells.to_binary(binary)?;
         self.heal_mult.to_binary(binary)?;
         self.overflow_health_per_energy.to_binary(binary)?;
-        self.upgrades.to_binary(binary)
+        self.upgrades.to_binary(binary)?;
+        self.money.to_binary(binary)
     }
 }
 impl FromBinary for Player {
@@ -61,6 +63,7 @@ impl FromBinary for Player {
             heal_mult: f32::from_binary(binary)?,
             overflow_health_per_energy: usize::from_binary(binary)?,
             upgrades: Upgrades::from_binary(binary)?,
+            money: usize::from_binary(binary)?,
         })
     }
 }
@@ -81,6 +84,7 @@ impl Player {
             heal_mult: 1.0,
             overflow_health_per_energy: 5,
             upgrades: Upgrades::new(),
+            money: 0,
         }
     }
     pub fn position_cursor(&self, viewport: Zone<usize>, buffer: &mut impl Write) {

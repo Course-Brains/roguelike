@@ -56,7 +56,7 @@ pub trait PickRandom<T> {
 }
 impl<'a, T> PickRandom<&'a T> for &'a [T] {
     fn generate(&self) -> &'a T {
-        &self[((random() - 1.0) * self.len() as f64) as usize]
+        &self[(..self.len()).generate()]
     }
 }
 impl PickRandom<usize> for std::ops::Range<usize> {
@@ -67,6 +67,11 @@ impl PickRandom<usize> for std::ops::Range<usize> {
 impl PickRandom<usize> for std::ops::RangeInclusive<usize> {
     fn generate(&self) -> usize {
         (*self.start()..*self.end() + 1).generate()
+    }
+}
+impl PickRandom<usize> for std::ops::RangeTo<usize> {
+    fn generate(&self) -> usize {
+        ((random() - 1.0) * self.end as f64) as usize
     }
 }
 impl PickRandom<Vector<usize>> for Zone<usize> {

@@ -560,6 +560,17 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Recurse(UPGRADE_CHEAT, None),
                     true,
                 ),
+                (
+                    "Set money".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        if let Some(money) = state
+                            .get_input_with_mapper("How much money? ", |string| string.parse().ok())
+                        {
+                            state.player.money = money;
+                        }
+                    })),
+                    cheats,
+                ),
             ]
         },
     },
@@ -865,9 +876,13 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             // Priority is:
             //  1: Enemy/player
             //  2: Tile
+            //  3: empty space
             // Everything else is ignored
+
+            // The player
             if state.player.selector == state.player.position {
                 vec![("Yourself".to_string(), Choice::Info, true)]
+            // Enemies
             } else if let Some(id) = state.board.get_enemy_at_position(state.player.selector) {
                 let vtable_id = state.board[id].as_ref().unwrap().get_vtable_id();
                 // If we are using canonical names
@@ -892,8 +907,13 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                         true,
                     )]
                 }
+            // Tiles
             } else if let Some(tile) = &state.board[state.player.selector] {
-                vec![(tile.get_waila().to_string(), Choice::Info, true)]
+                tile.get_waila(state)
+                    .into_iter()
+                    .map(|info| (info, Choice::Info, true))
+                    .collect()
+            // Empty space
             } else {
                 vec![("Nothing".to_string(), Choice::Info, true)]
             }

@@ -1,11 +1,14 @@
 use crate::ThreadAsync;
 use crate::board::Board;
 use crate::board::EnemyID;
+use crate::board::WalkTrigger;
 use crate::board::map_gen::MapGenSettings;
+use crate::board::tile::Tile;
 use crate::context_menu::ContextMenu;
 use crate::context_menu::ContextMenuID;
 use crate::math::*;
 use crate::player::Player;
+use crate::random::PickRandom;
 use crate::settings::LockedSettings;
 use crate::settings::UnlockedSettings;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -149,7 +152,7 @@ impl State {
         let viewport = self.board.calculate_viewport(center);
         let mut buffer = Vec::new();
 
-        self.board.render_tiles(viewport, &mut buffer);
+        Board::render_tiles(self, viewport, &mut buffer);
         Board::render_enemies(self, viewport, &mut buffer);
         self.player.render(viewport, &mut buffer);
         self.board.render_projectiles(viewport, &mut buffer);
@@ -381,8 +384,14 @@ impl State {
         // meta info
         write!(
             buffer,
-            "Selector: {}, Turn: {}",
-            self.player.selector, self.total_turns,
+            "Selector: {}, Turn: {}, money: {}",
+            self.player.selector,
+            self.total_turns,
+            if self.player.money == 0 {
+                "poor".to_string()
+            } else {
+                self.player.money.to_string()
+            }
         )
         .unwrap();
     }
@@ -489,6 +498,24 @@ impl State {
         self.board[Vector::new(axis_length.to_inner() - 2, 1)] = Some(
             crate::board::tile::Tile::WalkTrigger(crate::board::tile::WalkTrigger::Exit),
         );
+        // upgrades on the 10th row in increments of 3
+        let mut upgrade_pool = self.player.upgrades.get_all_available();
+        for x in (1..(self.board.axis_length().to_inner() - 1)).step_by(3) {
+            let pos = Vector::new(x, 10);
+            if upgrade_pool.len() == 0 {
+                break;
+            }
+            // First we get the upgrade to spawn
+            let index = (..upgrade_pool.len()).generate();
+            let upgrade = upgrade_pool[index].0;
+            upgrade_pool[index].1 -= 1;
+            if upgrade_pool[index].1 == 0 {
+                upgrade_pool.swap_remove(index);
+            }
+
+            // Now we spawn it
+            self.board[pos] = Some(Tile::WalkTrigger(WalkTrigger::Upgrade(upgrade)));
+        }
 
         // And we do some housekeeping
         self.player.position = Vector::new(1, 1);

@@ -2,6 +2,7 @@ use super::Board;
 use super::RoomID;
 pub use super::WalkTrigger;
 use crate::Vector;
+use crate::state::State;
 use abes_nice_things::PrimAs;
 use abes_nice_things::Style;
 use abes_nice_things::{FromBinary, ToBinary};
@@ -54,14 +55,15 @@ impl FromBinary for Tile {
 }
 impl Tile {
     /// Gets the character and optionally the [Style] to draw the tile with
-    pub fn render(&self, board: &Board, position: Vector<usize>) -> (char, Option<Style>) {
+    pub fn render(&self, state: &State, position: Vector<usize>) -> (char, Option<Style>) {
         match self {
-            Tile::Wall => (get_wall_char(board, position), None),
-            Tile::Door { open: false, .. } => {
-                (get_wall_char(board, position), Some(CLOSED_DOOR_STYLE))
-            }
+            Tile::Wall => (get_wall_char(&state.board, position), None),
+            Tile::Door { open: false, .. } => (
+                get_wall_char(&state.board, position),
+                Some(CLOSED_DOOR_STYLE),
+            ),
             Tile::Door { open: true, .. } => OPEN_DOOR,
-            Tile::WalkTrigger(walk_trigger) => (walk_trigger.get_char(), None),
+            Tile::WalkTrigger(walk_trigger) => walk_trigger.render(state),
         }
     }
     /// Returns if the player will collide with this tile (not be able to walk through it)
@@ -81,13 +83,16 @@ impl Tile {
     pub fn is_raycast_hittable(&self) -> bool {
         self.is_player_collidable() //for now these are aligned
     }
-    pub fn get_waila(&self) -> &'static str {
-        match self {
-            Tile::Wall => "A wall",
-            Tile::Door { open: false, .. } => "A closed door",
-            Tile::Door { open: true, .. } => "An open door",
-            Tile::WalkTrigger(trigger) => trigger.get_waila(),
-        }
+    pub fn get_waila(&self, state: &crate::state::State) -> Vec<String> {
+        vec![
+            match self {
+                Tile::Wall => "A wall",
+                Tile::Door { open: false, .. } => "A closed door",
+                Tile::Door { open: true, .. } => "An open door",
+                Tile::WalkTrigger(trigger) => return trigger.get_waila(state),
+            }
+            .to_string(),
+        ]
     }
 }
 const OPEN_DOOR: (char, Option<Style>) = (WALL_ALL_SIDES, Some(*Style::new().green()));

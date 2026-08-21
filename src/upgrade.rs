@@ -3,19 +3,25 @@ use abes_nice_things::{FromBinary, ToBinary};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 #[repr(u8)]
 pub enum UpgradeID {
-    Health = 0,
+    MaxHealth = 0,
     Heal = 1,
     OverflowHealRate = 2,
     SelfAwareness = 3,
+    MaxEnergy = 4,
 }
 
-static ROOTS: &[UpgradeID] = &[UpgradeID::Health, UpgradeID::SelfAwareness];
+static ROOTS: &[UpgradeID] = &[
+    UpgradeID::MaxHealth,
+    UpgradeID::SelfAwareness,
+    UpgradeID::MaxEnergy,
+];
 
 static UPGRADES: &[Upgrade] = &[
     Upgrade {
-        name: "Health",
+        name: "Max health",
         cost: 30,
         max_stacks: 5,
+        description: "Increases your maximum health by 20%",
         unlocks: &[UpgradeID::Heal, UpgradeID::OverflowHealRate],
         effect: |state, _| state.player.max_health += (state.player.max_health / 5).max(1),
     },
@@ -23,6 +29,7 @@ static UPGRADES: &[Upgrade] = &[
         name: "Heal",
         cost: 50,
         max_stacks: 10,
+        description: "Increases health gained from healing by 30% additively",
         unlocks: &[],
         effect: |state, _| state.player.heal_mult += 0.3,
     },
@@ -30,6 +37,7 @@ static UPGRADES: &[Upgrade] = &[
         name: "Overflow heal rate",
         cost: 100,
         max_stacks: 3,
+        description: "Increases health per energy overflow on kill by 50%",
         unlocks: &[],
         effect: |state, _| {
             state.player.overflow_health_per_energy +=
@@ -40,63 +48,26 @@ static UPGRADES: &[Upgrade] = &[
         name: "Self awareness",
         cost: 100,
         max_stacks: 1,
+        description: "Increases information about you on the Info page",
         unlocks: &[],
         effect: |_, _| {},
     },
+    Upgrade {
+        name: "Max energy",
+        cost: 30,
+        max_stacks: 5,
+        description: "Increases maximum energy by 30%",
+        unlocks: &[],
+        effect: |state, _| state.player.max_energy += (state.player.max_energy / 3).max(1),
+    },
 ];
 
-impl ToBinary for UpgradeID {
-    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> anyhow::Result<()> {
-        self.to_inner().to_binary(binary)
-    }
-}
-impl FromBinary for UpgradeID {
-    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> anyhow::Result<Self> {
-        let inner = u8::from_binary(binary)?;
-        if inner as usize >= UPGRADES.len() {
-            anyhow::bail!("Attempted to load UpgradeID with invalid discriminant: {inner}");
-        }
-        Ok(unsafe { std::mem::transmute(inner) })
-    }
-}
-
-/// Gets the id and stacks remaining
-pub fn get_all_available(tree: &Upgrades) -> Vec<(UpgradeID, u8)> {
-    let mut available = Vec::new();
-
-    fn helper(available: &mut Vec<(UpgradeID, u8)>, tree: &Upgrades, current: UpgradeID) {
-        if tree.has_completed(current) {
-            for next in current.to_upgrade().unlocks.iter() {
-                helper(available, tree, *next);
-            }
-        } else {
-            available.push((
-                current,
-                current.to_upgrade().max_stacks - tree.num_stacks(current),
-            ))
-        }
-    }
-
-    for root in ROOTS.iter() {
-        helper(&mut available, tree, *root);
-    }
-    available
-}
-impl UpgradeID {
-    fn to_inner(self) -> u8 {
-        unsafe { std::mem::transmute(self) }
-    }
-    fn to_index(self) -> usize {
-        self.to_inner() as usize
-    }
-    pub fn to_upgrade(self) -> &'static Upgrade {
-        &UPGRADES[self.to_index()]
-    }
-}
 pub struct Upgrade {
     pub name: &'static str,
     pub cost: usize,
     pub max_stacks: u8,
+    /// The description given for the WAILA page
+    pub description: &'static str,
     /// The unlocks are only unlocked when the current stacks reaches the max stacks
     unlocks: &'static [UpgradeID],
     /// state and the new number of stacks
@@ -155,5 +126,53 @@ impl Upgrades {
     pub fn buy(state: &mut crate::state::State, upgrade: UpgradeID) {
         state.player.upgrades.purchased[upgrade.to_index()] += 1;
         (upgrade.to_upgrade().effect)(state, state.player.upgrades.num_stacks(upgrade))
+    }
+    /// Gets the id and stacks remaining. What this specifically does is it gets the leaves of the tree
+    /// if we remove all but the first non-bought upgrade in each path
+    pub fn get_all_available(&self) -> Vec<(UpgradeID, u8)> {
+        let mut available = Vec::new();
+
+        fn helper(available: &mut Vec<(UpgradeID, u8)>, tree: &Upgrades, current: UpgradeID) {
+            if tree.has_completed(current) {
+                for next in current.to_upgrade().unlocks.iter() {
+                    helper(available, tree, *next);
+                }
+            } else {
+                available.push((
+                    current,
+                    current.to_upgrade().max_stacks - tree.num_stacks(current),
+                ))
+            }
+        }
+
+        for root in ROOTS.iter() {
+            helper(&mut available, self, *root);
+        }
+        available
+    }
+}
+impl ToBinary for UpgradeID {
+    fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> anyhow::Result<()> {
+        self.to_inner().to_binary(binary)
+    }
+}
+impl FromBinary for UpgradeID {
+    fn from_binary(binary: &mut dyn std::io::prelude::Read) -> anyhow::Result<Self> {
+        let inner = u8::from_binary(binary)?;
+        if inner as usize >= UPGRADES.len() {
+            anyhow::bail!("Attempted to load UpgradeID with invalid discriminant: {inner}");
+        }
+        Ok(unsafe { std::mem::transmute(inner) })
+    }
+}
+impl UpgradeID {
+    fn to_inner(self) -> u8 {
+        unsafe { std::mem::transmute(self) }
+    }
+    fn to_index(self) -> usize {
+        self.to_inner() as usize
+    }
+    pub fn to_upgrade(self) -> &'static Upgrade {
+        &UPGRADES[self.to_index()]
     }
 }

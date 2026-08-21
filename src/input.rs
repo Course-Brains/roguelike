@@ -12,6 +12,7 @@ pub enum Input {
     /// The numbers from 1 - 9
     Number(u8),
     ResetSelectorPosition,
+    ConvertToCash,
 }
 impl Input {
     pub fn get() -> Input {
@@ -39,6 +40,7 @@ impl Input {
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
                 b'r' => Input::ResetSelectorPosition,
+                b'c' => Input::ConvertToCash,
                 b'\t' => Input::SkipTurn,
                 b'+' => Input::ResizeScreen,
                 b'1' => Input::Number(1),

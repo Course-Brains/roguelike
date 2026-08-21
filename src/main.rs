@@ -82,6 +82,11 @@ fn play() {
                 false
             }
             Input::Number(number) => state.handle_number_input(number),
+            Input::ConvertToCash => {
+                state.player.money += state.player.energy;
+                state.player.energy = 0;
+                true
+            }
         } {
             state.increment();
         }

@@ -108,6 +108,9 @@ impl WalkTrigger {
                         | "give me your clothes your boots and your motorcycle"
                         | "yass"
                         | "yes daddy"
+                        | "yass queen"
+                        | "yass qween"
+                        | "shut up and take my money"
                 ) {
                     state.player.money -= upgrade.cost;
                     Upgrades::buy(state, id);

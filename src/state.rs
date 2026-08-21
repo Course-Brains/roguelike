@@ -500,7 +500,7 @@ impl State {
         );
         // upgrades on the 10th row in increments of 3
         let mut upgrade_pool = self.player.upgrades.get_all_available();
-        for x in (1..(self.board.axis_length().to_inner() - 1)).step_by(3) {
+        for x in (1..(self.board.axis_length().to_inner() - 2)).step_by(3) {
             let pos = Vector::new(x, 10);
             if upgrade_pool.len() == 0 {
                 break;

@@ -6,4 +6,5 @@ pub static VTABLE: VTable = VTable {
     think: |_, _| {},
     damage: VTable::DEFAULT_DAMAGE,
     promote_tier: None,
+    canonical_name: "Jeffery",
 };

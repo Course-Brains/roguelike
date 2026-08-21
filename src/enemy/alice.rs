@@ -13,6 +13,7 @@ pub static VTABLE: VTable = VTable {
     think: |_, _| {},
     damage: DAMAGE_FUNCTION,
     promote_tier: None, // no clue
+    canonical_name: "Alice, Fragmented Soul",
 };
 
 // assumes turn always goes up between thinks

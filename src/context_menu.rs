@@ -239,6 +239,7 @@ const SPECIFIC_SPELL: usize = 7;
 const CHEAT_SPELL_LEARN: usize = 8;
 const GENERIC_INFO: usize = 9;
 const UPGRADE_CHEAT: usize = 10;
+const WAILA: usize = 11;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -778,6 +779,7 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
         title: "Info",
         get_options: |state| {
             let mut info = vec![
+                ("WAILA".to_string(), Choice::Recurse(WAILA, None), true),
                 (
                     format!("Position: {}", state.player.position),
                     Choice::Info,
@@ -853,6 +855,48 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                 ))
             }
             options
+        },
+    },
+    // 11: WAILA
+    // no argument
+    ContextMenu {
+        title: "WAILA",
+        get_options: |state| {
+            // Priority is:
+            //  1: Enemy/player
+            //  2: Tile
+            // Everything else is ignored
+            if state.player.selector == state.player.position {
+                vec![("Yourself".to_string(), Choice::Info, true)]
+            } else if let Some(id) = state.board.get_enemy_at_position(state.player.selector) {
+                let vtable_id = state.board[id].as_ref().unwrap().get_vtable_id();
+                // If we are using canonical names
+                if *state.locked_settings().use_canonical_enemy_names() {
+                    vec![(
+                        vtable_id.get_vtable().canonical_name.to_string(),
+                        Choice::Info,
+                        true,
+                    )]
+                // If they have assigned a name
+                } else if let Some(name) = &state.enemy_assigned_names[vtable_id.to_index()] {
+                    vec![(name.clone(), Choice::Info, true)]
+                }
+                // If they have not yet assigned a name and need to
+                else {
+                    vec![(
+                        "Assign name".to_string(),
+                        Choice::Act(Box::new(move |state| {
+                            state.enemy_assigned_names[vtable_id.to_index()] =
+                                Some(state.get_input("What do you want to name it? "));
+                        })),
+                        true,
+                    )]
+                }
+            } else if let Some(tile) = &state.board[state.player.selector] {
+                vec![(tile.get_waila().to_string(), Choice::Info, true)]
+            } else {
+                vec![("Nothing".to_string(), Choice::Info, true)]
+            }
         },
     },
 ];

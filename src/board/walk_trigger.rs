@@ -21,6 +21,11 @@ impl WalkTrigger {
     pub fn get_char(&self) -> char {
         '∏'
     }
+    pub fn get_waila(&self) -> &'static str {
+        match self {
+            Self::Exit => "An exit",
+        }
+    }
     /// Handle the case of a player walking on the trigger. It returns if this should be deleted
     /// afterwards
     pub fn handle_player(self, state: &mut State) -> bool {

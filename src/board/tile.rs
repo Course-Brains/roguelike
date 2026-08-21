@@ -81,6 +81,14 @@ impl Tile {
     pub fn is_raycast_hittable(&self) -> bool {
         self.is_player_collidable() //for now these are aligned
     }
+    pub fn get_waila(&self) -> &'static str {
+        match self {
+            Tile::Wall => "A wall",
+            Tile::Door { open: false, .. } => "A closed door",
+            Tile::Door { open: true, .. } => "An open door",
+            Tile::WalkTrigger(trigger) => trigger.get_waila(),
+        }
+    }
 }
 const OPEN_DOOR: (char, Option<Style>) = (WALL_ALL_SIDES, Some(*Style::new().green()));
 const CLOSED_DOOR_STYLE: Style = *Style::new().red();

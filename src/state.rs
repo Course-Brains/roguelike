@@ -150,6 +150,8 @@ impl State {
 
         self.player.position_cursor(viewport, &mut buffer);
 
+        self.set_cursor_shape(&mut buffer);
+
         std::io::stdout().write_all(&buffer).unwrap();
         std::io::stdout().flush().unwrap();
     }
@@ -287,6 +289,19 @@ impl State {
             *self.get_context_menu_selector_mut() = number as usize - 1;
         }
         false
+    }
+    pub fn set_cursor_shape(&mut self, buffer: &mut impl Write) {
+        // Currently the only thing that would require setting the cursor to an underscore is enemy
+        // windup so we can just see if there is an enemy with a background under the cursor
+        if self
+            .board
+            .get_enemy_at_position(self.player.selector)
+            .is_some_and(|id| crate::enemy::Enemy::render(self, id).1.has_background())
+        {
+            crate::cursor_blink(Some(buffer)).unwrap();
+        } else {
+            crate::reset_cursor_shape(Some(buffer)).unwrap()
+        }
     }
     pub fn increment(&mut self) {
         // If the player is dead then changing the game state becomes illegal

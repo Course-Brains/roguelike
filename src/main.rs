@@ -39,6 +39,7 @@ fn main() {
         // Panic handling
         let _ = normalize();
         print!("\x1b(B"); // reset confusion
+        print!("\x1b[0 q"); // Reset cursor shape
         let _ = std::io::stdout().flush();
 
         std::panic::panic_any(error)
@@ -47,6 +48,7 @@ fn main() {
     else {
         normalize().unwrap();
         print!("\x1b[(B");
+        print!("\x1b[0 q");
         std::io::stdout().flush().unwrap();
     }
 }
@@ -179,6 +181,27 @@ fn bell(dest: Option<&mut dyn Write>) -> anyhow::Result<()> {
             let mut stdout = std::io::stdout();
             stdout.write_all(&[7])?;
             stdout.flush()?
+        }
+    }
+    Ok(())
+}
+/// Turns the cursor into a blinking block
+fn cursor_blink(buffer: Option<&mut impl Write>) -> anyhow::Result<()> {
+    match buffer {
+        Some(buffer) => write!(buffer, "\x1b[1 q")?,
+        None => {
+            cursor_blink(Some(&mut std::io::stdout())).unwrap();
+            std::io::stdout().flush().unwrap()
+        }
+    }
+    Ok(())
+}
+fn reset_cursor_shape(buffer: Option<&mut impl Write>) -> anyhow::Result<()> {
+    match buffer {
+        Some(buffer) => write!(buffer, "\x1b[0 q")?,
+        None => {
+            reset_cursor_shape(Some(&mut std::io::stdout())).unwrap();
+            std::io::stdout().flush().unwrap();
         }
     }
     Ok(())

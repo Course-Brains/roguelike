@@ -314,6 +314,11 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     })),
                     true,
                 ),
+                (
+                    "Log boss tracking".to_string(),
+                    Choice::Act(Box::new(|state| state.board.log_boss_tracking())),
+                    state.cheats,
+                ),
             ]
         },
     },

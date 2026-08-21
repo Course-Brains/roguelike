@@ -11,7 +11,7 @@ pub static VTABLE: VTable = VTable {
     kill_energy: 10,
     init: || Box::new(()),
     think: |_, _| {},
-    damage: |_, _, _| todo!(),
+    damage: DAMAGE_FUNCTION,
     promote_tier: None, // no clue
 };
 
@@ -92,6 +92,7 @@ fn death(state: State, id: EnemyID) {}
 static DAMAGE_FUNCTION: fn(&mut State, EnemyID, usize) -> bool = {
     |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
+        this.flags.took_damage();
         if damage >= this.health {
             if this.flags.should_general_log() {
                 this.log(format!(

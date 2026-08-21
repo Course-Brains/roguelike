@@ -56,6 +56,8 @@ fn play() {
     weirdify().unwrap();
     loop {
         state.render();
+        // Yes it does have to be done here
+        state.board.reset_took_damage_flags();
         if match Input::get() {
             Input::Walk(direction) => player::Player::handle_walk_input(&mut state, direction),
             Input::MoveSelector(direction) => state.handle_move_selector_input(direction),
@@ -65,6 +67,10 @@ fn play() {
             }
             Input::ToggleContextMenu => state.handle_toggle_context_menu_input(),
             Input::Select => state.handle_select_input(),
+            Input::ResetSelectorPosition => {
+                state.player.selector = state.player.position;
+                false
+            }
             Input::SkipTurn => true,
             Input::ResizeScreen => {
                 if state.unlocked_settings.resize_trigger_mode().is_manual() {

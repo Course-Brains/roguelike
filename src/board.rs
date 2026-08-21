@@ -25,6 +25,7 @@ use std::io::Write;
 use tile::Tile;
 mod walk_trigger;
 use crate::spell::Spell;
+use abes_nice_things::log;
 pub use projectile::Projectile;
 pub use projectile::ProjectileType;
 pub use walk_trigger::WalkTrigger;
@@ -192,6 +193,14 @@ impl Board {
             }
         }
     }
+    /// Assumes a valid enemy id, a live enemy and a valid exit spawn at enemy position
+    pub fn register_boss(&mut self, id: EnemyID) {
+        self.bosses
+            .push((id, self[id].as_ref().unwrap().get_position()))
+    }
+    pub fn log_boss_tracking(&self) {
+        log!("Boss tracking: {:?}", self.bosses)
+    }
     fn update_projectiles(state: &mut State) {
         let viewport = state.calculate_viewport();
         let mut index = 0;
@@ -228,9 +237,9 @@ impl Board {
     /// Creates a valid but empty shop without anything to buy and no exit
     pub fn create_blank_shop(desired_viewport: Vector<usize>) -> Board {
         let mut out = Board::new(AxisLength::Tiny, desired_viewport, MapType::Shop).unwrap();
-        let edge = AxisLength::Small.to_inner() - 1;
+        let edge = AxisLength::Tiny.to_inner() - 1;
 
-        for i in 0..AxisLength::Small.to_inner() {
+        for i in 0..AxisLength::Tiny.to_inner() {
             for pos in [(i, 0), (0, i), (i, edge), (edge, i)]
                 .map(|(x, y)| Vector::new(x, y))
                 .into_iter()
@@ -813,6 +822,11 @@ impl Board {
                     finished,
                 );
             }
+        }
+    }
+    pub fn reset_took_damage_flags(&mut self) {
+        for enemy in self.enemies.iter_mut().filter_map(|enemy| enemy.as_mut()) {
+            enemy.flags.reset_took_damage()
         }
     }
 }

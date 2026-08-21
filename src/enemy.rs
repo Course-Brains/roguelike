@@ -146,6 +146,9 @@ impl Enemy {
     pub fn get_vtable(&self) -> &'static VTable {
         self.vtable_id.get_vtable()
     }
+    pub fn get_vtable_id(&self) -> VTableID {
+        self.vtable_id
+    }
     pub fn intra_room_pathfind(state: &mut State, id: EnemyID) {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
         if this.logical_position.prim_as() != this.position {
@@ -357,6 +360,7 @@ pub struct VTable {
     ///
     /// Some((budget, tier, promote vtable))
     pub promote_tier: Option<(usize, usize, VTableID)>,
+    pub canonical_name: &'static str,
 }
 impl VTable {
     const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());
@@ -512,6 +516,9 @@ impl VTableID {
     }
     pub fn to_inner(self) -> u8 {
         unsafe { std::mem::transmute(self) }
+    }
+    pub fn to_index(self) -> usize {
+        self.to_inner() as usize
     }
     pub fn from_raw(raw: u8) -> Self {
         if raw >= VTABLES.len() as u8 {

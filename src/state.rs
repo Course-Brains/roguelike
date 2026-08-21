@@ -31,6 +31,7 @@ pub struct State {
     pub next_level: Option<(MapGenSettings, ThreadAsync<Board>)>,
     /// If this is true then the game will quit once we are back in the main event loop
     pub exit: bool,
+    pub enemy_assigned_names: [Option<String>; crate::enemy::VTABLES.len()],
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -57,7 +58,11 @@ impl ToBinary for State {
         self.next_level
             .as_ref()
             .map(|next| &next.0)
-            .to_binary(binary)
+            .to_binary(binary)?;
+        for name in self.enemy_assigned_names.iter() {
+            name.as_ref().to_binary(binary)?;
+        }
+        Ok(())
     }
 }
 impl FromBinary for State {
@@ -87,6 +92,9 @@ impl FromBinary for State {
             cheats: bool::from_binary(binary)?,
             next_level: None,
             exit: false,
+            enemy_assigned_names: <[Option<String>; crate::enemy::VTABLES.len()]>::from_binary(
+                binary,
+            )?,
         };
         if let Some(map_gen_settings) = <Option<MapGenSettings>>::from_binary(binary)? {
             state.next_level = Some((
@@ -129,6 +137,7 @@ impl State {
             git_hash: crate::get_git_hash(),
             next_level: None,
             exit: false,
+            enemy_assigned_names: [const { None }; crate::enemy::VTABLES.len()],
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything

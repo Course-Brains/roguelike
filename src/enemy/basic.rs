@@ -11,6 +11,7 @@ pub static VTABLE: VTable = VTable {
     think,
     damage: VTable::DEFAULT_DAMAGE,
     promote_tier: Some((1, 0, super::VTableID::AliceBoss)),
+    canonical_name: "basic enemy",
 };
 const SMACK_RANGE: usize = 1;
 fn think(state: &mut State, id: super::EnemyID) {

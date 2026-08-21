@@ -9,7 +9,7 @@ use std::io::Write;
 
 macro_rules! settings {
     // The macro call which does
-    ($setting_type:tt; $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*) => {
+    ($setting_type:tt; $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*$(;)?) => {
         settings!($setting_type | $($field = $name: $type, $default => $values);*);
         impl ToBinary for $setting_type {
             fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -26,7 +26,7 @@ macro_rules! settings {
         }
     };
     // The macro call which does not implement binary conversions
-    ($setting_type:tt | $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*) => {
+    ($setting_type:tt | $($field:ident = $name:literal: $type:ty, $default:expr => $values:expr);*$(;)?) => {
         /// Settings that can be changed at any time and do not get saved by [State]. Things like personal
         /// preferences rather than game affecting things
         #[derive(Debug)]
@@ -124,7 +124,7 @@ settings!(
     20 => None;
 
     explosion_time = "explosion time(ms)":u64,
-    100 => None
+    100 => None;
 );
 // Locked settings
 settings!(
@@ -143,7 +143,10 @@ settings!(
     1.0 => None;
 
     starting_enemy_char = "starting enemy character": u8,
-    0 => Some(&[0, 1])
+    0 => Some(&[0, 1]);
+
+    use_canonical_enemy_names = "use canonical enemy names": bool,
+    false => Some(&[false, true])
 );
 
 /// Settings that can only be changed in between runs and will be saved and loaded with [State].

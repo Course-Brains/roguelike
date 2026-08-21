@@ -133,6 +133,10 @@ impl Enemy {
             // Awake are yellow
             style.yellow();
         }
+        // If it is hurted then it go sideway
+        if this.flags.taken_damage() {
+            style.italic(true);
+        }
 
         // Background
         this.flags.get_windup().get_style(&mut style);
@@ -358,6 +362,7 @@ impl VTable {
     const DEFAULT_INIT: fn() -> Box<dyn Any + Send> = || Box::new(());
     const DEFAULT_DAMAGE: fn(&mut State, EnemyID, usize) -> bool = |state, id, damage| {
         let this = state.board.get_enemy_mut(id).as_mut().unwrap();
+        this.flags.took_damage();
         if damage >= this.health {
             if this.flags.should_general_log() {
                 this.log(format!(
@@ -392,7 +397,7 @@ pub struct Flags(u8);
 //   |||| +---- Whether or not to do pathfinding
 //   |||+------ Whether or not to do general logging
 //   ||+------- Whether or not to do inter room pathfind logging
-//   |+-------- Unassigned
+//   |+-------- Whether or not it took damage in the last turn
 //   +--------- Unassigned
 impl Flags {
     fn new() -> Flags {
@@ -441,6 +446,18 @@ impl Flags {
     }
     pub fn swap_inter_pathfind_log(&mut self) {
         self.0 ^= 0b10_0000
+    }
+    /// Sets the flag that damage was taken
+    pub fn took_damage(&mut self) {
+        self.0 |= 0b0100_0000;
+    }
+    /// Returns if damage was taken between the last turn and now
+    pub fn taken_damage(&self) -> bool {
+        (self.0 & 0b0100_0000) != 0
+    }
+    /// Unsets the flag that damage was taken
+    pub fn reset_took_damage(&mut self) {
+        self.0 &= !0b0100_0000
     }
 }
 impl ToBinary for Flags {

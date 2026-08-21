@@ -11,6 +11,7 @@ pub enum Input {
     ResizeScreen,
     /// The numbers from 1 - 9
     Number(u8),
+    ResetSelectorPosition,
 }
 impl Input {
     pub fn get() -> Input {
@@ -37,6 +38,7 @@ impl Input {
                 b' ' => Input::ToggleContextMenu,
                 b'\n' => Input::Select,
                 b't' => Input::ChangeRenderTarget,
+                b'r' => Input::ResetSelectorPosition,
                 b'\t' => Input::SkipTurn,
                 b'+' => Input::ResizeScreen,
                 b'1' => Input::Number(1),

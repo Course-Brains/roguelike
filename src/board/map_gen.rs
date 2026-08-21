@@ -526,6 +526,7 @@ fn promote_bosses(board: &mut Board) {
             // We don't need to rememoize the enemy list of the room because we don't change the
             // position and it only cares about enemy ids, which also didn't change
             *board[id].as_mut().unwrap() = Enemy::new(new_vtable, pos);
+            board.register_boss(id);
             bosses_made += 1;
 
             // Now we get a 1 in 2 chance to lower the tier assuming we aren't already at 0 so that

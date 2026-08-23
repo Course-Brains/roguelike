@@ -1,5 +1,6 @@
 use crate::board::EnemyID;
 use crate::board::MapType;
+use crate::board::Tile;
 use crate::board::boon::BoonID;
 use crate::math::*;
 use crate::state::State;
@@ -144,6 +145,9 @@ impl WalkTrigger {
             // unused
             Self::Boon(boon, false) => {
                 (boon.get_boon().effect)(state);
+                // We know that the player's position is our position
+                state.board[state.player.position] =
+                    Some(Tile::WalkTrigger(WalkTrigger::Boon(boon, true)));
                 false
             }
             // used

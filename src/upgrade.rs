@@ -5,9 +5,8 @@ use abes_nice_things::{FromBinary, ToBinary};
 pub enum UpgradeID {
     MaxHealth = 0,
     Heal = 1,
-    OverflowHealRate = 2,
-    SelfAwareness = 3,
-    MaxEnergy = 4,
+    SelfAwareness = 2,
+    MaxEnergy = 3,
 }
 
 static ROOTS: &[UpgradeID] = &[
@@ -18,15 +17,15 @@ static ROOTS: &[UpgradeID] = &[
 
 static UPGRADES: &[Upgrade] = &[
     Upgrade {
-        name: "Max health",
+        name: "Max health", // 0
         cost: 30,
         max_stacks: 5,
         description: "Increases your maximum health by 20%",
-        unlocks: &[UpgradeID::Heal, UpgradeID::OverflowHealRate],
+        unlocks: &[UpgradeID::Heal],
         effect: |state, _| state.player.max_health += (state.player.max_health / 5).max(1),
     },
     Upgrade {
-        name: "Heal",
+        name: "Heal", // 1
         cost: 50,
         max_stacks: 10,
         description: "Increases health gained from healing by 30% additively",
@@ -34,18 +33,7 @@ static UPGRADES: &[Upgrade] = &[
         effect: |state, _| state.player.heal_mult += 0.3,
     },
     Upgrade {
-        name: "Overflow heal rate",
-        cost: 100,
-        max_stacks: 3,
-        description: "Increases health per energy overflow on kill by 50%",
-        unlocks: &[],
-        effect: |state, _| {
-            state.player.overflow_health_per_energy +=
-                (state.player.overflow_health_per_energy / 2).max(1)
-        },
-    },
-    Upgrade {
-        name: "Self awareness",
+        name: "Self awareness", // 2
         cost: 100,
         max_stacks: 1,
         description: "Increases information about you on the Info page",
@@ -53,7 +41,7 @@ static UPGRADES: &[Upgrade] = &[
         effect: |_, _| {},
     },
     Upgrade {
-        name: "Max energy",
+        name: "Max energy", // 3
         cost: 30,
         max_stacks: 5,
         description: "Increases maximum energy by 30%",

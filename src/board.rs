@@ -14,7 +14,6 @@ use crate::enemy::Enemy;
 use crate::math::Direction;
 use crate::state::State;
 use abes_nice_things::MaxVec;
-use abes_nice_things::Number;
 use abes_nice_things::PrimAs;
 use abes_nice_things::{FromBinary, ToBinary};
 use anyhow::{Context, Result, bail};
@@ -25,10 +24,12 @@ use std::io::Write;
 use tile::Tile;
 mod walk_trigger;
 use crate::spell::Spell;
+use abes_nice_things::Number;
 use abes_nice_things::log;
 pub use projectile::Projectile;
 pub use projectile::ProjectileType;
 pub use walk_trigger::WalkTrigger;
+pub mod boon;
 
 /// This contains all data which is tied to the specific map, which is everything that does not
 /// carry over between maps.

@@ -1,5 +1,6 @@
 use crate::board::EnemyID;
 use crate::board::MapType;
+use crate::board::boon::BoonID;
 use crate::math::*;
 use crate::state::State;
 use crate::upgrade::UpgradeID;
@@ -11,23 +12,34 @@ use abes_nice_things::{FromBinary, ToBinary};
 pub enum WalkTrigger {
     Exit,
     Upgrade(UpgradeID),
+    /// The boon id and whether or not it has been used
+    Boon(BoonID, bool),
 }
 impl ToBinary for WalkTrigger {
     fn to_binary(&self, binary: &mut dyn std::io::prelude::Write) -> anyhow::Result<()> {
         match self {
-            Self::Exit => false.to_binary(binary),
+            Self::Exit => 0_u8.to_binary(binary),
             Self::Upgrade(upgrade) => {
-                true.to_binary(binary)?;
+                1_u8.to_binary(binary)?;
                 upgrade.to_binary(binary)
+            }
+            Self::Boon(boon, used) => {
+                2_u8.to_binary(binary)?;
+                boon.to_binary(binary)?;
+                used.to_binary(binary)
             }
         }
     }
 }
 impl FromBinary for WalkTrigger {
     fn from_binary(binary: &mut dyn std::io::prelude::Read) -> anyhow::Result<Self> {
-        Ok(match bool::from_binary(binary)? {
-            false => Self::Exit,
-            true => Self::Upgrade(UpgradeID::from_binary(binary)?),
+        Ok(match u8::from_binary(binary)? {
+            0 => Self::Exit,
+            1 => Self::Upgrade(UpgradeID::from_binary(binary)?),
+            2 => Self::Boon(BoonID::from_binary(binary)?, bool::from_binary(binary)?),
+            invalid => {
+                anyhow::bail!("Attempted to load WalkTrigger with invalid discriminant {invalid}")
+            }
         })
     }
 }
@@ -42,6 +54,9 @@ impl WalkTrigger {
                     false => *Style::new().red(),
                 }),
             ),
+            // unused
+            Self::Boon(boon, false) => boon.get_boon().unused_render,
+            Self::Boon(boon, true) => boon.get_boon().used_render,
         }
     }
     pub fn get_waila(&self, state: &State) -> Vec<String> {
@@ -59,6 +74,12 @@ impl WalkTrigger {
                         upgrade.max_stacks,
                     ),
                     upgrade.description.to_string(),
+                ]
+            }
+            Self::Boon(boon, _) => {
+                vec![
+                    boon.get_boon().name.to_string(),
+                    boon.get_boon().waila.to_string(),
                 ]
             }
         }
@@ -119,6 +140,14 @@ impl WalkTrigger {
                     false
                 }
             }
+            // Boons do not get deleted
+            // unused
+            Self::Boon(boon, false) => {
+                (boon.get_boon().effect)(state);
+                false
+            }
+            // used
+            Self::Boon(_, true) => false,
         }
     }
     /// Handle the case of an enemy walking on the trigger, returns if this should be deleted

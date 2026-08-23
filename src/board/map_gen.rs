@@ -89,6 +89,7 @@ pub fn generate(settings: MapGenSettings) -> Result<Board> {
     Room::create_counterparts(&mut rooms, 0, &mut board);
     Room::fill_counterpart_adjacencies(&mut board);
     Room::set_room_map(&mut board);
+    place_boons(&mut rooms, &mut board);
     let spawn_budget = Room::remove_budget_of_spawn(&mut rooms, 0);
     Room::reallocate_spawn_budget(&mut rooms, 0, spawn_budget);
     log!("Placing enemies");
@@ -417,7 +418,7 @@ impl Room {
             // We will attempt 10 times per center
             for _ in 0..10 {
                 let position = room_bounds.generate();
-                if board.is_enemy_at_position(position) {
+                if board.is_enemy_at_position(position) || board[position].is_some() {
                     continue;
                 }
                 if let Some(vtable) = Enemy::pick_vtable_from_budget(&mut budget, None) {
@@ -474,6 +475,37 @@ impl Room {
                 // If we reach this then we can't place enemies and I give up
                 return;
             }
+        }
+    }
+}
+/// For each boon to place go randomly down the tree and pick the leaf we end at and place the boon
+/// and increase the budget
+fn place_boons(rooms: &mut Vec<Room>, board: &mut Board) {
+    // First we figure out how many boons to place
+    let num_boons = board.axis_length().area() / 1000;
+
+    for _ in 0..num_boons {
+        // Then we traverse down to a random leaf
+        let mut room = 0;
+        while let Some(children) = rooms[room].children {
+            room = children[(u8::random() & 1) as usize];
+        }
+
+        // And we place the boon
+        // We don't need to worry about enemies being in the way because they haven't spawned yet
+        let boon = crate::board::boon::BoonID::random();
+        let interior_bounds = rooms[room].bounds.shrink_by(1).unwrap();
+        for _ in 0..5 {
+            let pos = interior_bounds.generate();
+            // If we somehow are trying to spawn over an existing boon
+            if board[pos].is_some() {
+                continue;
+            }
+
+            // Now we get to actually place it
+            board[pos] = Some(boon.to_tile());
+            rooms[room].budget += boon.get_boon().budget;
+            break;
         }
     }
 }

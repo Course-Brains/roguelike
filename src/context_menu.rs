@@ -814,14 +814,6 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Info,
                     true,
                 ));
-                info.push((
-                    format!(
-                        "Overflow health: {}",
-                        state.player.overflow_health_per_energy
-                    ),
-                    Choice::Info,
-                    true,
-                ));
             }
 
             if state.player.upgrades.has_bought_any() {

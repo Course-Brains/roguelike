@@ -190,12 +190,18 @@ fn bell(dest: Option<&mut dyn Write>) -> anyhow::Result<()> {
     }
     Ok(())
 }
-/// Turns the cursor into a blinking block
-fn cursor_blink(buffer: Option<&mut impl Write>) -> anyhow::Result<()> {
+/// Turns the cursor into a blinking block or an underscore depending on settings
+fn covering_cursor(
+    unlocked_settings: &settings::UnlockedSettings,
+    buffer: Option<&mut impl Write>,
+) -> anyhow::Result<()> {
     match buffer {
-        Some(buffer) => write!(buffer, "\x1b[1 q")?,
+        Some(buffer) => match unlocked_settings.covering_cursor_mode() {
+            settings::CoveringCursorMode::Blink => write!(buffer, "\x1b[1 q")?,
+            settings::CoveringCursorMode::Underscore => write!(buffer, "\x1b[4 q")?,
+        },
         None => {
-            cursor_blink(Some(&mut std::io::stdout())).unwrap();
+            covering_cursor(unlocked_settings, Some(&mut std::io::stdout())).unwrap();
             std::io::stdout().flush().unwrap()
         }
     }

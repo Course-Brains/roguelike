@@ -459,7 +459,7 @@ impl Room {
                 // usual 20 attempts max
                 for _ in 0..20 {
                     let position = spawn_bounds.generate();
-                    if board.is_enemy_at_position(position) {
+                    if board.is_enemy_at_position(position) || board[position].is_some() {
                         continue;
                     }
                     if let Some(vtable) =

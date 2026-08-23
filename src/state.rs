@@ -310,7 +310,7 @@ impl State {
             .get_enemy_at_position(self.player.selector)
             .is_some_and(|id| crate::enemy::Enemy::render(self, id).1.has_background())
         {
-            crate::cursor_blink(Some(buffer)).unwrap();
+            crate::covering_cursor(&self.unlocked_settings, Some(buffer)).unwrap();
         } else {
             crate::reset_cursor_shape(Some(buffer)).unwrap()
         }

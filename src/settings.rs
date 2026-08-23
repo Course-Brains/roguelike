@@ -125,6 +125,9 @@ settings!(
 
     explosion_time = "explosion time(ms)":u64,
     100 => None;
+
+    covering_cursor_mode = "covering cursor": CoveringCursorMode,
+    CoveringCursorMode::Blink => Some(&[CoveringCursorMode::Blink, CoveringCursorMode::Underscore]);
 );
 // Locked settings
 settings!(
@@ -153,7 +156,7 @@ settings!(
 /// This is for things which affect game logic like difficulty
 
 #[derive(Debug)]
-struct Setting<T: std::fmt::Display + std::str::FromStr + PartialEq + Clone + 'static> {
+struct Setting<T: 'static> {
     /// The name to be shown in the setting picker and used in the file, it MUST not contain any
     /// spaces
     name: &'static str,
@@ -165,7 +168,7 @@ struct Setting<T: std::fmt::Display + std::str::FromStr + PartialEq + Clone + 's
     /// type in the value instead
     values: Option<&'static [T]>,
 }
-impl<T: std::fmt::Display + std::str::FromStr + PartialEq + Clone + 'static> Setting<T> {
+impl<T: 'static> Setting<T> {
     fn new(name: &'static str, default: T, values: Option<&'static [T]>) -> Setting<T> {
         Setting {
             name,
@@ -321,6 +324,7 @@ pub fn settings_editor() {
     save_to_file(&unlocked, &locked);
 }
 
+/// How should it handle checking for a resized terminal?
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ResizeTriggerMode {
     Auto,
@@ -350,5 +354,29 @@ impl ResizeTriggerMode {
     }
     pub fn is_manual(&self) -> bool {
         matches!(self, Self::Manual)
+    }
+}
+/// How should the cursor change when covering something with a background?
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum CoveringCursorMode {
+    Blink,
+    Underscore,
+}
+impl std::fmt::Display for CoveringCursorMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Blink => write!(f, "blink"),
+            Self::Underscore => write!(f, "score"),
+        }
+    }
+}
+impl std::str::FromStr for CoveringCursorMode {
+    type Err = ();
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        match s.trim() {
+            "blink" => Ok(Self::Blink),
+            "score" => Ok(Self::Underscore),
+            _ => Err(()),
+        }
     }
 }

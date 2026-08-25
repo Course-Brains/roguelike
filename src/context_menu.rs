@@ -240,6 +240,7 @@ const CHEAT_SPELL_LEARN: usize = 8;
 const GENERIC_INFO: usize = 9;
 const UPGRADE_CHEAT: usize = 10;
 const WAILA: usize = 11;
+const ROLLBACK_BUFFER_CONTROLLER: usize = 12;
 
 static CONTEXT_MENUS: &[ContextMenu] = &[
     // 0: Main menu
@@ -319,6 +320,46 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     "Log boss tracking".to_string(),
                     Choice::Act(Box::new(|state| state.board.log_boss_tracking())),
                     state.cheats,
+                ),
+                (
+                    "Benchmark state clone".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        if let Some(sample_size) = state
+                            .get_input_with_mapper("What sample size? ", |string| {
+                                string.parse().ok()
+                            })
+                        {
+                            let start = std::time::Instant::now();
+                            let mut buf = Vec::new();
+                            for _ in 0..sample_size {
+                                std::hint::black_box(|state: &mut State| {
+                                    buf = Vec::new();
+                                    state.to_binary(&mut buf).unwrap();
+                                })(state);
+                            }
+                            let allocate_elapsed = start.elapsed();
+
+                            let start = std::time::Instant::now();
+                            for _ in 0..sample_size {
+                                std::hint::black_box(|state: &mut State| {
+                                    buf.truncate(0);
+                                    state.to_binary(&mut buf).unwrap();
+                                })(state);
+                            }
+                            let pre_allocated_elapsed = start.elapsed();
+                            state.feedback = format!(
+                                "w/ allocate: {}ms, w/o allocate: {}ms",
+                                allocate_elapsed.as_millis() / sample_size,
+                                pre_allocated_elapsed.as_millis() / sample_size
+                            )
+                        }
+                    })),
+                    true,
+                ),
+                (
+                    "Rollback buffer".to_string(),
+                    Choice::Recurse(ROLLBACK_BUFFER_CONTROLLER, None),
+                    true,
                 ),
             ]
         },
@@ -911,4 +952,103 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
             }
         },
     },
+    // 12: Rollback buffer
+    // no argument
+    ContextMenu {
+        title: "Rollback Buffer",
+        get_options: |state| {
+            let mut buffer = ROLLBACK_BUFFER.lock().unwrap();
+            let mut options = vec![
+                match buffer.is_some() {
+                    true => (
+                        "Disable rollback".to_string(),
+                        Choice::Act(Box::new(|_| *ROLLBACK_BUFFER.lock().unwrap() = None)),
+                        buffer.is_some(),
+                    ),
+                    false => (
+                        "Enable rollback".to_string(),
+                        Choice::Act(Box::new(|state| {
+                            if let Some(buffer_size) = state
+                                .get_input_with_mapper("How big of a buffer? ", |string| {
+                                    string.parse().ok()
+                                })
+                            {
+                                *ROLLBACK_BUFFER.lock().unwrap() =
+                                    Some(RollbackBuffer::new(buffer_size));
+                            }
+                        })),
+                        buffer.is_none(),
+                    ),
+                },
+                (
+                    "Load".to_string(),
+                    Choice::Act(Box::new(|state| {
+                        ROLLBACK_BUFFER
+                            .lock()
+                            .unwrap()
+                            .as_mut()
+                            .unwrap()
+                            .load(state)
+                    })),
+                    state.cheats && buffer.is_some() && buffer.as_mut().unwrap().inner.len() > 0,
+                ),
+            ];
+            if let Some(buffer) = buffer.as_ref() {
+                options.push(if buffer.inner.len() > 0 {
+                    (
+                        format!(
+                            "Available: {}-{}",
+                            buffer.inner.back().unwrap().0,
+                            buffer.inner.front().unwrap().0
+                        ),
+                        Choice::Info,
+                        true,
+                    )
+                } else {
+                    ("No turns saved yet".to_string(), Choice::Info, true)
+                })
+            }
+            options
+        },
+    },
 ];
+
+pub static ROLLBACK_BUFFER: std::sync::Mutex<Option<RollbackBuffer>> = std::sync::Mutex::new(None);
+
+pub struct RollbackBuffer {
+    max_size: std::num::NonZeroUsize,
+    inner: VecDeque<(usize, Vec<u8>)>,
+    //               ^^^^^ Turn of snapshot
+    //                      ^^^^^^^ data of snapshot
+}
+impl RollbackBuffer {
+    fn new(max_size: std::num::NonZeroUsize) -> RollbackBuffer {
+        Self {
+            max_size,
+            inner: VecDeque::new(),
+        }
+    }
+    pub fn push(&mut self, state: &State) {
+        // If we can reuse the previously allocated vec then I see no reason not to
+        let mut buf = if self.inner.len() >= self.max_size.get() {
+            let mut out = self.inner.pop_back().unwrap().1;
+            out.truncate(0);
+            out
+        } else {
+            Vec::new()
+        };
+        state.to_binary(&mut buf).unwrap();
+        self.inner.push_front((state.total_turns, buf));
+    }
+    /// Load the most recent backup
+    fn load(&mut self, state: &mut State) {
+        let stack = state.context_menu_stack.drain(..).collect();
+        *state =
+            State::from_binary(&mut VecDeque::from(self.inner.pop_front().unwrap().1)).unwrap();
+        // For convinience
+        state.context_menu_stack = stack;
+        // We have to set cheats to true because this is a cheat operation which can unset the
+        // cheat flag
+        state.cheats = true;
+    }
+}

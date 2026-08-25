@@ -20,7 +20,7 @@ pub struct State {
     pub player: Player,
     pub total_turns: usize,
     pub screen_size: Vector<usize>,
-    context_menu_stack: crate::context_menu::Stack,
+    pub context_menu_stack: crate::context_menu::Stack,
     /// Whether or not the player is controlling th context menu
     pub context_menu_inputs: bool,
     /// Textual feedback to the player
@@ -323,6 +323,13 @@ impl State {
         self.total_turns += 1;
         Board::increment(self);
         Player::increment(self);
+        self.update_rollback_buffer();
+    }
+    fn update_rollback_buffer(&self) {
+        let mut buffer = crate::context_menu::ROLLBACK_BUFFER.lock().unwrap();
+        if let Some(buffer) = buffer.as_mut() {
+            buffer.push(self);
+        }
     }
     pub fn get_context_menu(&self) -> &'static crate::context_menu::ContextMenu {
         self.context_menu_stack.last().unwrap().2.get_context_menu()
@@ -426,7 +433,7 @@ impl State {
             let input = self.get_input(prompt);
             if matches!(
                 input.to_lowercase().as_str(),
-                "quit" | "stop" | "back" | "lemme out" | "nuh uh"
+                "quit" | "stop" | "back" | "lemme out" | "nuh uh" | "cancel"
             ) {
                 return None;
             }

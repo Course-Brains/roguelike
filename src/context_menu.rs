@@ -247,8 +247,8 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
     // no argument
     ContextMenu {
         title: "MAIN MENU:",
-        get_options: |_| {
-            vec![
+        get_options: |state| {
+            let mut options = vec![
                 (
                     "Info".to_string(),
                     Choice::Recurse(GENERIC_INFO, None),
@@ -264,13 +264,16 @@ static CONTEXT_MENUS: &[ContextMenu] = &[
                     Choice::Recurse(SETTINGS, None),
                     true,
                 ),
-                ("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, None), true),
-                (
+            ];
+            if state.debug_mode {
+                options.push(("Debug".to_string(), Choice::Recurse(DEBUG_MAIN, None), true));
+                options.push((
                     "Cheats".to_string(),
                     Choice::Recurse(CHEAT_MAIN, None),
                     true,
-                ),
-            ]
+                ));
+            }
+            options
         },
     },
     // 1: main debug menu

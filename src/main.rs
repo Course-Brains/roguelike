@@ -87,6 +87,10 @@ fn play() {
                 state.player.energy = 0;
                 true
             }
+            Input::ToggleDebugMode => {
+                state.debug_mode ^= true;
+                false
+            }
         } {
             state.increment();
         }

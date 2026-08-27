@@ -13,6 +13,7 @@ pub enum Input {
     Number(u8),
     ResetSelectorPosition,
     ConvertToCash,
+    ToggleDebugMode,
 }
 impl Input {
     pub fn get() -> Input {
@@ -52,6 +53,7 @@ impl Input {
                 b'7' => Input::Number(7),
                 b'8' => Input::Number(8),
                 b'9' => Input::Number(9),
+                b'?' => Input::ToggleDebugMode,
                 _ => continue,
             };
         }

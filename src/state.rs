@@ -35,6 +35,8 @@ pub struct State {
     /// If this is true then the game will quit once we are back in the main event loop
     pub exit: bool,
     pub enemy_assigned_names: [Option<String>; crate::enemy::VTABLES.len()],
+    /// Whether or not to show the debug and cheat context menus
+    pub debug_mode: bool,
 }
 impl ToBinary for State {
     fn to_binary(&self, binary: &mut dyn Write) -> Result<()> {
@@ -65,7 +67,7 @@ impl ToBinary for State {
         for name in self.enemy_assigned_names.iter() {
             name.as_ref().to_binary(binary)?;
         }
-        Ok(())
+        self.debug_mode.to_binary(binary)
     }
 }
 impl FromBinary for State {
@@ -98,6 +100,7 @@ impl FromBinary for State {
             enemy_assigned_names: <[Option<String>; crate::enemy::VTABLES.len()]>::from_binary(
                 binary,
             )?,
+            debug_mode: bool::from_binary(binary)?,
         };
         if let Some(map_gen_settings) = <Option<MapGenSettings>>::from_binary(binary)? {
             state.next_level = Some((
@@ -141,6 +144,7 @@ impl State {
             next_level: None,
             exit: false,
             enemy_assigned_names: [const { None }; crate::enemy::VTABLES.len()],
+            debug_mode: false,
         }
     }
     /// Clear the screen and draw the board, the player, enemies, everything

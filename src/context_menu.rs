@@ -1047,6 +1047,7 @@ impl RollbackBuffer {
             State::from_binary(&mut VecDeque::from(self.inner.pop_front().unwrap().1)).unwrap();
         // For convinience
         state.context_menu_stack = stack;
+        state.context_menu_inputs = true;
         // We have to set cheats to true because this is a cheat operation which can unset the
         // cheat flag
         state.cheats = true;

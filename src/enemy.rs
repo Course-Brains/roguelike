@@ -140,6 +140,9 @@ impl Enemy {
 
         // Background
         this.flags.get_windup().get_style(&mut style);
+        if this.windup_time == 1 {
+            style.intense_background(true);
+        }
 
         (state.get_enemy_char(this.vtable_id), style)
     }
